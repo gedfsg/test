@@ -1,52 +1,60 @@
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 public class Bullet : MonoBehaviour
 {
-    public float speed = 50f;
-    public float damage = 20f;
     public string shooterTag;
-    private Rigidbody rb;
+    public float damage;
+    public float speed = 20f; 
+    public float effectiveRange = 10f; 
+
+    private Vector3 startPosition;
+    private float currentDamage;
 
     void Start()
     {
-        rb = GetComponent<Rigidbody>();
+        // 발사된 초기 위치와 초기 데미지를 저장함.
+        startPosition = transform.position;
+        currentDamage = damage;
+    }
 
-        rb.linearVelocity = transform.forward * speed;
+    void Update()
+    {
+        // 매 프레임마다 지정된 속도로 투사체를 전진시킴.
+        transform.Translate(Vector3.forward * speed * Time.deltaTime);
 
-        Destroy(gameObject, 0.5f);
+        // 시작 위치로부터 이동한 누적 거리를 계산함.
+        float distanceTraveled = Vector3.Distance(startPosition, transform.position);
+
+        // 누적 거리가 유효 사거리의 절반을 초과했을 경우 데미지를 50%로 감소시킴.
+        if (distanceTraveled > effectiveRange / 2f)
+        {
+            currentDamage = damage / 2f;
+        }
+
+        // 누적 거리가 유효 사거리를 초과했을 경우 투사체 객체를 파괴함.
+        if (distanceTraveled > effectiveRange)
+        {
+            Destroy(gameObject);
+        }
     }
 
     void OnTriggerEnter(Collider other)
     {
-        // 발사자 객체와의 충돌을 무시하고 함수를 종료함.
-        if (other.CompareTag(shooterTag))
-        {
-            return;
-        }
+        if (other.CompareTag(shooterTag)) return;
 
-        // 높은 장애물 객체와 충돌 시 총알 객체를 파괴하고 함수를 종료함.
-        if (other.CompareTag("HighObstacle"))
-        {
-            Destroy(gameObject);
-            return;
-        }
-
-        // 낮은 장애물 객체와 충돌 시 데미지를 전달하지 않음.
-        // 총알 객체를 파괴하지 않고 관통 처리함.
-        if (other.CompareTag("LowObstacle"))
-        {
-            return; 
-        }
-
-        // 대상 객체의 Health 컴포넌트를 확인하여 데미지를 전달함.
         Health targetHealth = other.GetComponent<Health>();
         if (targetHealth != null)
         {
-            targetHealth.TakeDamage(damage);
+            // 계산된 현재 데미지를 대상에게 전달함.
+            targetHealth.TakeDamage(currentDamage); 
         }
-        
-        // 대상이 발사자나 낮은 장애물이 아닌 경우 총알 객체를 파괴함.
+
+        DestructibleObstacle obstacle = other.GetComponent<DestructibleObstacle>();
+        if (obstacle != null)
+        {
+            obstacle.TakeDamage(currentDamage);
+        }
+
         Destroy(gameObject);
     }
 }

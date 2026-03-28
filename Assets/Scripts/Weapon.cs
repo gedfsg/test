@@ -56,16 +56,29 @@ public class Weapon : MonoBehaviour
     void Shoot()
     {
         currentAmmo--;
-        GameObject bulletObj = Instantiate(bulletPrefab, firePoint.position, transform.rotation);
+
+        // 무기 데이터에서 반동 값을 참조함. 데이터가 없을 경우 0으로 처리함.
+        float currentRecoil = (weaponData != null) ? weaponData.recoil : 0f;
+
+        // Y축을 기준으로 지정된 반동 범위 내에서 무작위 회전값을 생성함.
+        Quaternion randomRecoilRotation = Quaternion.Euler(0, Random.Range(-currentRecoil, currentRecoil), 0);
+        
+        // 발사 지점의 기본 방향에 무작위 회전값을 적용하여 최종 발사 각도를 산출함.
+        Quaternion finalFireRotation = firePoint.rotation * randomRecoilRotation;
+
+        GameObject bulletObj = Instantiate(bulletPrefab, firePoint.position, finalFireRotation);
         Bullet bullet = bulletObj.GetComponent<Bullet>();
+        
         if(bullet != null)
         {
             bullet.shooterTag = shooterTag;
             
-            // 무기 데이터의 공격력을 생성된 총알 객체에 전달함.
+            // 생성된 총알 객체에 무기 데이터의 수치들을 전달함.
             if (weaponData != null)
             {
                 bullet.damage = weaponData.damage;
+                bullet.speed = weaponData.bulletSpeed;
+                bullet.effectiveRange = weaponData.effectiveRange;
             }
         }
     }

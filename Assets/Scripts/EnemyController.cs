@@ -210,16 +210,20 @@ public class EnemyController : MonoBehaviour
         isFireingBurst = true;
         int burstCount = Random.Range(minBurstCount, maxBurstCount + 1);
 
+        // WeaponData 할당 여부를 확인하여 연사 속도를 결정함.
+        float currentFireRate = (myWeapon.weaponData != null) ? myWeapon.weaponData.attackRate : 0.2f;
+
         for (int i = 0; i < burstCount; i++)
         {
             myWeapon.TryFire();
-            yield return new WaitForSeconds(myWeapon.fireRate); // 각 발사 사이 간격
+            
+            // 산출된 연사 속도를 대기 시간으로 사용함.
+            yield return new WaitForSeconds(currentFireRate); 
         }
 
-        yield return new WaitForSeconds(timeBetweenBursts); // 버스트 사이 간격
+        yield return new WaitForSeconds(timeBetweenBursts); 
         isFireingBurst = false;
     }
-
     public void OnAttacked()
     {
         if(player == null)

@@ -14,6 +14,12 @@ public class WeaponData : ScriptableObject
     public float attackRate;
     public int maxAmmo;
     public float reloadTime;
+
+    // 신규 추가된 투사체 관련 데이터임.
+    [Header("Projectile Stats")]
+    public float bulletSpeed; 
+    public float recoil; 
+    public float effectiveRange; 
 }
 
 public enum WeaponType

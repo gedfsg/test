@@ -262,6 +262,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DestructibleObstacle
   maxHealth: 100
+  damageTextPrefab: {fileID: 7267503375520356018, guid: 42cf94d8cfb66fd469143863a639bda9, type: 3}
 --- !u!1 &38074105
 GameObject:
   m_ObjectHideFlags: 0
@@ -737,6 +738,7 @@ MonoBehaviour:
           m_StringArgument: 
           m_BoolArgument: 0
         m_CallState: 2
+  damageTextPrefab: {fileID: 7267503375520356018, guid: 42cf94d8cfb66fd469143863a639bda9, type: 3}
 --- !u!114 &362600119
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -752,9 +754,7 @@ MonoBehaviour:
   bulletPrefab: {fileID: 6443241378349817058, guid: 7d7b66fec3c81384fb8d3d08e852d774, type: 3}
   firePoint: {fileID: 1848243109}
   shooterTag: 
-  fireRate: 0.2
-  maxAmmo: 30
-  reloadTime: 2
+  weaponData: {fileID: 0}
   onReloadStart:
     m_PersistentCalls:
       m_Calls: []
@@ -1669,9 +1669,7 @@ MonoBehaviour:
   bulletPrefab: {fileID: 6443241378349817058, guid: 7d7b66fec3c81384fb8d3d08e852d774, type: 3}
   firePoint: {fileID: 1031370464}
   shooterTag: 
-  fireRate: 0.2
-  maxAmmo: 30
-  reloadTime: 2
+  weaponData: {fileID: 11400000, guid: f9cb5805e771d3e4e95e85bbccc4c5c8, type: 2}
   onReloadStart:
     m_PersistentCalls:
       m_Calls:
@@ -1839,10 +1837,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MeleeWeapon
   attackPoint: {fileID: 1762984612}
   attackRange: 2
-  meleeDamage: 50
-  attackRate: 0.5
   shooterTag: 
   slashPivot: {fileID: 1487247777}
+  weaponData: {fileID: 0}
 --- !u!1 &1339607678
 GameObject:
   m_ObjectHideFlags: 0
@@ -2516,6 +2513,7 @@ MonoBehaviour:
           m_StringArgument: 
           m_BoolArgument: 0
         m_CallState: 2
+  damageTextPrefab: {fileID: 7267503375520356018, guid: 42cf94d8cfb66fd469143863a639bda9, type: 3}
 --- !u!114 &1755295980
 MonoBehaviour:
   m_ObjectHideFlags: 0

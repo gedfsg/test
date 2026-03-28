@@ -19,3 +19,6 @@ MonoBehaviour:
   attackRate: 0.2
   maxAmmo: 30
   reloadTime: 2
+  bulletSpeed: 100
+  recoil: 3
+  effectiveRange: 20
