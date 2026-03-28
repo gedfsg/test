@@ -6,18 +6,21 @@ public class MeleeWeapon : MonoBehaviour
     [Header("Melee Settings")]
     public Transform attackPoint;
     public float attackRange = 1.5f;
-    public float meleeDamage = 50f;
-    public float attackRate = 0.5f;
     public string shooterTag;
-
-    // 시각 효과를 위해 회전시킬 중심축 오브젝트임.
     public Transform slashPivot;
+
+    // 추가된 데이터 연동 변수임.
+    [Header("Weapon Data")]
+    public WeaponData weaponData;
 
     private float lastAttackTime;
 
     public void TryAttack()
     {
-        if (Time.time >= lastAttackTime + attackRate)
+        // 무기 데이터의 공격 주기를 참조함.
+        float currentAttackRate = (weaponData != null) ? weaponData.attackRate : 0.5f;
+
+        if (Time.time >= lastAttackTime + currentAttackRate)
         {
             Attack();
             lastAttackTime = Time.time;
@@ -26,13 +29,15 @@ public class MeleeWeapon : MonoBehaviour
 
     private void Attack()
     {
-        // 시각 효과를 위한 코루틴을 실행함.
         if (slashPivot != null)
         {
             StartCoroutine(SwingEffect());
         }
 
         Collider[] hitColliders = Physics.OverlapSphere(attackPoint.position, attackRange);
+        
+        // 무기 데이터의 타격 데미지를 참조함.
+        float currentDamage = (weaponData != null) ? weaponData.damage : 50f;
 
         foreach (Collider hit in hitColliders)
         {
@@ -47,10 +52,10 @@ public class MeleeWeapon : MonoBehaviour
             if (Vector3.Angle(forwardDirection, directionToTarget) > 90f) continue;
 
             Health targetHealth = hit.GetComponent<Health>();
-            if (targetHealth != null) targetHealth.TakeDamage(meleeDamage);
+            if (targetHealth != null) targetHealth.TakeDamage(currentDamage);
 
             DestructibleObstacle obstacle = hit.GetComponent<DestructibleObstacle>();
-            if (obstacle != null) obstacle.TakeDamage(meleeDamage);
+            if (obstacle != null) obstacle.TakeDamage(currentDamage);
         }
     }
 
@@ -60,20 +65,18 @@ public class MeleeWeapon : MonoBehaviour
         TrailRenderer trail = slashPivot.GetComponentInChildren<TrailRenderer>();
         if (trail != null)
         {
-            trail.Clear(); // 이전 궤적 데이터를 삭제함.
-            trail.emitting = true; // 궤적 생성을 활성화함.
+            trail.Clear(); 
+            trail.emitting = true; 
         }
 
         float duration = 0.15f;
         float elapsed = 0f;
         
-        // Y축 기준 -90도에서 90도로 회전하도록 목표 각도를 설정함.
         Quaternion startRotation = Quaternion.Euler(0, -90f, 0);
         Quaternion endRotation = Quaternion.Euler(0, 90f, 0);
 
         slashPivot.localRotation = startRotation;
 
-        // 지정된 시간(duration) 동안 두 각도 사이를 보간(Slerp)하여 회전시킴.
         while (elapsed < duration)
         {
             elapsed += Time.deltaTime;
@@ -82,12 +85,11 @@ public class MeleeWeapon : MonoBehaviour
             yield return null;
         }
 
-        // 회전 완료 후 중심축의 각도를 기본값으로 초기화함.
         slashPivot.localRotation = Quaternion.identity;
 
         if (trail != null)
         {
-            trail.emitting = false; // 궤적 생성을 비활성화함.
+            trail.emitting = false; 
         }
     }
 
