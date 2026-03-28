@@ -136,6 +136,24 @@ public partial class @PlayerInputActions: IInputActionCollection2, IDisposable
                     ""processors"": """",
                     ""interactions"": """",
                     ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""EquipRanged"",
+                    ""type"": ""Button"",
+                    ""id"": ""cd51f46e-b99b-4f53-9e23-6d800fb41d26"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""EquipMelee"",
+                    ""type"": ""Button"",
+                    ""id"": ""24d493fe-24e7-463c-84b4-67f8963c2fc7"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
                 }
             ],
             ""bindings"": [
@@ -248,6 +266,28 @@ public partial class @PlayerInputActions: IInputActionCollection2, IDisposable
                     ""action"": ""Roll"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""cbbad16a-b055-4ab6-9e71-9916d730404f"",
+                    ""path"": ""<Keyboard>/1"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""EquipRanged"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""d4bcf26f-0f8e-4b90-9ff6-cd53275952a7"",
+                    ""path"": ""<Keyboard>/v"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""EquipMelee"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
                 }
             ]
         }
@@ -261,6 +301,8 @@ public partial class @PlayerInputActions: IInputActionCollection2, IDisposable
         m_Player_Reload = m_Player.FindAction("Reload", throwIfNotFound: true);
         m_Player_Sprint = m_Player.FindAction("Sprint", throwIfNotFound: true);
         m_Player_Roll = m_Player.FindAction("Roll", throwIfNotFound: true);
+        m_Player_EquipRanged = m_Player.FindAction("EquipRanged", throwIfNotFound: true);
+        m_Player_EquipMelee = m_Player.FindAction("EquipMelee", throwIfNotFound: true);
     }
 
     ~@PlayerInputActions()
@@ -346,6 +388,8 @@ public partial class @PlayerInputActions: IInputActionCollection2, IDisposable
     private readonly InputAction m_Player_Reload;
     private readonly InputAction m_Player_Sprint;
     private readonly InputAction m_Player_Roll;
+    private readonly InputAction m_Player_EquipRanged;
+    private readonly InputAction m_Player_EquipMelee;
     /// <summary>
     /// Provides access to input actions defined in input action map "Player".
     /// </summary>
@@ -377,6 +421,14 @@ public partial class @PlayerInputActions: IInputActionCollection2, IDisposable
         /// Provides access to the underlying input action "Player/Roll".
         /// </summary>
         public InputAction @Roll => m_Wrapper.m_Player_Roll;
+        /// <summary>
+        /// Provides access to the underlying input action "Player/EquipRanged".
+        /// </summary>
+        public InputAction @EquipRanged => m_Wrapper.m_Player_EquipRanged;
+        /// <summary>
+        /// Provides access to the underlying input action "Player/EquipMelee".
+        /// </summary>
+        public InputAction @EquipMelee => m_Wrapper.m_Player_EquipMelee;
         /// <summary>
         /// Provides access to the underlying input action map instance.
         /// </summary>
@@ -418,6 +470,12 @@ public partial class @PlayerInputActions: IInputActionCollection2, IDisposable
             @Roll.started += instance.OnRoll;
             @Roll.performed += instance.OnRoll;
             @Roll.canceled += instance.OnRoll;
+            @EquipRanged.started += instance.OnEquipRanged;
+            @EquipRanged.performed += instance.OnEquipRanged;
+            @EquipRanged.canceled += instance.OnEquipRanged;
+            @EquipMelee.started += instance.OnEquipMelee;
+            @EquipMelee.performed += instance.OnEquipMelee;
+            @EquipMelee.canceled += instance.OnEquipMelee;
         }
 
         /// <summary>
@@ -444,6 +502,12 @@ public partial class @PlayerInputActions: IInputActionCollection2, IDisposable
             @Roll.started -= instance.OnRoll;
             @Roll.performed -= instance.OnRoll;
             @Roll.canceled -= instance.OnRoll;
+            @EquipRanged.started -= instance.OnEquipRanged;
+            @EquipRanged.performed -= instance.OnEquipRanged;
+            @EquipRanged.canceled -= instance.OnEquipRanged;
+            @EquipMelee.started -= instance.OnEquipMelee;
+            @EquipMelee.performed -= instance.OnEquipMelee;
+            @EquipMelee.canceled -= instance.OnEquipMelee;
         }
 
         /// <summary>
@@ -519,5 +583,19 @@ public partial class @PlayerInputActions: IInputActionCollection2, IDisposable
         /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
         void OnRoll(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "EquipRanged" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnEquipRanged(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "EquipMelee" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnEquipMelee(InputAction.CallbackContext context);
     }
 }

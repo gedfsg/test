@@ -80,20 +80,20 @@ public class PlayerController : MonoBehaviour
     } 
 
     void AimAtMouse()
+{
+    if (Mouse.current == null) return;
+
+    Vector2 mousePosition = Mouse.current.position.ReadValue();
+    Ray ray = mainCamera.ScreenPointToRay(mousePosition);
+
+    Plane aimPlane = new Plane(Vector3.up, transform.position); 
+    float rayDistance;
+
+    if (aimPlane.Raycast(ray, out rayDistance))
     {
-        if (Mouse.current == null) return;
-
-        Vector2 mousePosition = Mouse.current.position.ReadValue();
-        Ray ray = mainCamera.ScreenPointToRay(mousePosition);
-
-        Plane groundPlane = new Plane(Vector3.up, Vector3.zero);
-        float rayDistance;
-
-        if (groundPlane.Raycast(ray, out rayDistance))
-        {
-            Vector3 point = ray.GetPoint(rayDistance);
-            Vector3 lookPoint = new Vector3(point.x, transform.position.y, point.z);
-            transform.LookAt(lookPoint);
-        }
+        Vector3 point = ray.GetPoint(rayDistance);
+        
+        transform.LookAt(point); 
     }
+}
 }
