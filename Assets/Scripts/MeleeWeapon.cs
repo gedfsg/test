@@ -1,14 +1,17 @@
 using UnityEngine;
+using System.Collections;
 
 public class MeleeWeapon : MonoBehaviour
 {
-    [Header("Weapon Settings")]
+    [Header("Melee Settings")]
     public Transform attackPoint;
     public float attackRange = 1.5f;
     public float meleeDamage = 50f;
     public float attackRate = 0.5f;
     public string shooterTag;
-    public ParticleSystem slashEffect;
+
+    // 시각 효과를 위해 회전시킬 중심축 오브젝트임.
+    public Transform slashPivot;
 
     private float lastAttackTime;
 
@@ -19,62 +22,78 @@ public class MeleeWeapon : MonoBehaviour
             Attack();
             lastAttackTime = Time.time;
         }
-    }   
+    }
 
     private void Attack()
     {
-        if (slashEffect != null)
+        // 시각 효과를 위한 코루틴을 실행함.
+        if (slashPivot != null)
         {
-            slashEffect.Play();
+            StartCoroutine(SwingEffect());
         }
 
-        // attackPoint 위치를 중심으로 반경 내의 모든 콜라이더를 1차적으로 탐색함.
         Collider[] hitColliders = Physics.OverlapSphere(attackPoint.position, attackRange);
 
         foreach (Collider hit in hitColliders)
         {
-            // 공격 주체(나)와 동일한 태그를 가진 오브젝트는 충돌 처리에서 제외함.
-            if (hit.CompareTag(shooterTag)) 
-            {
-                continue;
-            }
+            if (hit.CompareTag(shooterTag)) continue;
 
-            // 타겟을 향하는 방향 벡터를 계산함. (평면 기준 판정을 위해 Y축 값을 0으로 일치시킴)
             Vector3 directionToTarget = (hit.transform.position - attackPoint.position).normalized;
             directionToTarget.y = 0f;
-            
-            // 무기(캐릭터)의 정면 방향 벡터를 가져옴.
+
             Vector3 forwardDirection = attackPoint.forward;
             forwardDirection.y = 0f;
 
-            // 정면 방향과 타겟 방향 사이의 절대 각도를 계산함.
-            // 계산된 각도가 90도를 초과할 경우(정면 180도 밖일 경우) 타격 판정을 무시함.
-            if (Vector3.Angle(forwardDirection, directionToTarget) > 90f)
-            {
-                continue;
-            }
+            if (Vector3.Angle(forwardDirection, directionToTarget) > 90f) continue;
 
-            // 적중한 오브젝트의 Health 컴포넌트를 탐색하여 데미지를 전달함.
             Health targetHealth = hit.GetComponent<Health>();
-            if (targetHealth != null)
-            {
-                targetHealth.TakeDamage(meleeDamage);
-            }
+            if (targetHealth != null) targetHealth.TakeDamage(meleeDamage);
 
-            // 적중한 오브젝트의 파괴 가능 장애물 컴포넌트를 탐색하여 데미지를 전달함.
             DestructibleObstacle obstacle = hit.GetComponent<DestructibleObstacle>();
-            if (obstacle != null)
-            {
-                obstacle.TakeDamage(meleeDamage);
-            }
+            if (obstacle != null) obstacle.TakeDamage(meleeDamage);
+        }
+    }
+
+    // 중심축을 180도 회전시켜 트레일 렌더러의 궤적을 생성하는 코루틴임.
+    private IEnumerator SwingEffect()
+    {
+        TrailRenderer trail = slashPivot.GetComponentInChildren<TrailRenderer>();
+        if (trail != null)
+        {
+            trail.Clear(); // 이전 궤적 데이터를 삭제함.
+            trail.emitting = true; // 궤적 생성을 활성화함.
+        }
+
+        float duration = 0.15f;
+        float elapsed = 0f;
+        
+        // Y축 기준 -90도에서 90도로 회전하도록 목표 각도를 설정함.
+        Quaternion startRotation = Quaternion.Euler(0, -90f, 0);
+        Quaternion endRotation = Quaternion.Euler(0, 90f, 0);
+
+        slashPivot.localRotation = startRotation;
+
+        // 지정된 시간(duration) 동안 두 각도 사이를 보간(Slerp)하여 회전시킴.
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / duration;
+            slashPivot.localRotation = Quaternion.Slerp(startRotation, endRotation, t);
+            yield return null;
+        }
+
+        // 회전 완료 후 중심축의 각도를 기본값으로 초기화함.
+        slashPivot.localRotation = Quaternion.identity;
+
+        if (trail != null)
+        {
+            trail.emitting = false; // 궤적 생성을 비활성화함.
         }
     }
 
     void OnDrawGizmosSelected()
     {
-        if (attackPoint == null)
-            return;
-
+        if (attackPoint == null) return;
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(attackPoint.position, attackRange);
     }

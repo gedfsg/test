@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 public class PlayerController : MonoBehaviour
 {
@@ -43,6 +44,9 @@ public class PlayerController : MonoBehaviour
         // 무기 교체 입력 이벤트를 구독함.
         inputActions.Player.EquipRanged.performed += _ => EquipWeapon(WeaponMode.Ranged);
         inputActions.Player.EquipMelee.performed += _ => EquipWeapon(WeaponMode.Melee);
+
+        // 재시작 입력 이벤트를 구독함.
+        inputActions.Player.Restart.performed += OnRestartPerformed;
     }
 
     void OnDisable()
@@ -58,6 +62,8 @@ public class PlayerController : MonoBehaviour
         
         inputActions.Player.EquipRanged.performed -= _ => EquipWeapon(WeaponMode.Ranged);
         inputActions.Player.EquipMelee.performed -= _ => EquipWeapon(WeaponMode.Melee);
+
+        inputActions.Player.Restart.performed -= OnRestartPerformed;
     }
 
     private void OnFireStarted(InputAction.CallbackContext context) => isFireButtonPressed = true;
@@ -146,5 +152,11 @@ public class PlayerController : MonoBehaviour
             Vector3 point = ray.GetPoint(rayDistance);
             transform.LookAt(point); 
         }
+    }
+
+    private void OnRestartPerformed(InputAction.CallbackContext context)
+    {
+        // 현재 활성화된 씬의 이름을 가져와 해당 씬을 다시 로드함.
+        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
     }
 }
