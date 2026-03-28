@@ -11,6 +11,7 @@ GameObject:
   - component: {fileID: 3679221878976857141}
   - component: {fileID: 322321241363462413}
   - component: {fileID: 6740686233628098178}
+  - component: {fileID: -5055077465233130719}
   m_Layer: 0
   m_Name: DamageTextPrefab
   m_TagString: Untagged
@@ -181,3 +182,18 @@ MonoBehaviour:
   m_hasFontAssetChanged: 0
   m_renderer: {fileID: 322321241363462413}
   m_maskType: 0
+--- !u!114 &-5055077465233130719
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7267503375520356018}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0e4c88cf26308ca4283fdf02d75c9444, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DamageText
+  fadeTime: 1
+  bounceForce: 3
+  gravity: 5
