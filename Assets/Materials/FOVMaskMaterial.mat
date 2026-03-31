@@ -8,7 +8,7 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: FOVMaskMaterial
-  m_Shader: {fileID: 4800000, guid: 645ea5416ae42aa41a23ebeb5fe38c2b, type: 3}
+  m_Shader: {fileID: 4800000, guid: 266b4f011d65b754b86700daf569810d, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []
