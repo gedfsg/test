@@ -99,4 +99,11 @@ public class MeleeWeapon : MonoBehaviour
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(attackPoint.position, attackRange);
     }
+
+    // 외부에서 새로운 무기 데이터를 덮어씌울 때 호출하는 함수
+    public void ChangeWeaponData(WeaponData newData)
+    {
+        weaponData = newData;
+        Debug.Log("근접 무기가 [" + newData.itemName + "]으로 교체됨!");
+    }
 }

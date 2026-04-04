@@ -1,13 +1,11 @@
 using UnityEngine;
 
 [CreateAssetMenu(fileName = "NewWeaponData", menuName = "Inventory/Weapon Data")]
-public class WeaponData : ScriptableObject
+public class WeaponData : ItemData
 {
     [Header("Weapon Info")]
-    public string weaponName;
     public GameObject weaponPrefab;
-
-    public WeaponType type;
+    public WeaponType type; // 기존의 Melee/Ranged 구분용
 
     [Header("Weapon Stats")]
     public float damage;
@@ -15,11 +13,10 @@ public class WeaponData : ScriptableObject
     public int maxAmmo;
     public float reloadTime;
 
-    // 신규 추가된 투사체 관련 데이터임.
     [Header("Projectile Stats")]
     public float bulletSpeed; 
     public float recoil; 
-    public float effectiveRange; 
+    public float effectiveRange;
 }
 
 public enum WeaponType

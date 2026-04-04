@@ -23,6 +23,8 @@ public class PlayerController : MonoBehaviour
     private enum WeaponMode { Ranged, Melee }
     private WeaponMode currentMode = WeaponMode.Ranged;
 
+    private PickupItem nearbyItem = null;
+
     void Awake()
     {
         inputActions = new PlayerInputActions();
@@ -47,6 +49,9 @@ public class PlayerController : MonoBehaviour
 
         // 재시작 입력 이벤트를 구독함.
         inputActions.Player.Restart.performed += OnRestartPerformed;
+
+        // 상호작용 입력 이벤트를 구독함.
+        inputActions.Player.Interact.performed += OnInteractPerformed;
     }
 
     void OnDisable()
@@ -64,6 +69,8 @@ public class PlayerController : MonoBehaviour
         inputActions.Player.EquipMelee.performed -= _ => EquipWeapon(WeaponMode.Melee);
 
         inputActions.Player.Restart.performed -= OnRestartPerformed;
+
+        inputActions.Player.Interact.performed -= OnInteractPerformed;
     }
 
     private void OnFireStarted(InputAction.CallbackContext context) => isFireButtonPressed = true;
@@ -153,6 +160,53 @@ public class PlayerController : MonoBehaviour
             transform.LookAt(point); 
         }
     }
+
+    // 상호작용(F) 키 입력 시 호출되는 함수임.
+    private void OnInteractPerformed(InputAction.CallbackContext context)
+    {
+        if (nearbyItem != null && nearbyItem.itemData != null)
+        {
+            // 1. 플레이어 자신의 InventoryManager 컴포넌트를 가져옴.
+            InventoryManager inventory = GetComponent<InventoryManager>();
+            
+            if (inventory != null)
+            {
+                // 2. 가방에 아이템 추가를 시도함.
+                bool isAdded = inventory.AddItem(nearbyItem.itemData, nearbyItem.amount);
+                
+                // 3. 가방에 무사히 들어갔다면(가방이 꽉 차지 않았다면) 바닥의 아이템을 파괴함.
+                if (isAdded)
+                {
+                    Destroy(nearbyItem.gameObject);
+                    nearbyItem = null;
+                }
+            }
+        }
+    }
+
+    public void SetNearbyItem(PickupItem item) => nearbyItem = item;
+    
+    public void ClearNearbyItem(PickupItem item)
+    {
+        if (nearbyItem == item) nearbyItem = null;
+    }
+
+    // 데이터 타입(Ranged/Melee)을 구분하여 해당 무기에 데이터를 덮어씌움.
+    public void SwapWeaponData(WeaponData newData)
+    {
+        if (newData == null) return;
+
+        if (newData.type == WeaponType.Ranged)
+        {
+            if (rangedWeapon != null) rangedWeapon.ChangeWeaponData(newData);
+        }
+        else if (newData.type == WeaponType.Melee)
+        {
+            if (meleeWeapon != null) meleeWeapon.ChangeWeaponData(newData);
+        }
+    }
+
+
 
     private void OnRestartPerformed(InputAction.CallbackContext context)
     {

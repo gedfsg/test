@@ -10,18 +10,18 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 3eb99a6aa2adbac41a16f2ce1a62f261, type: 3}
-  m_Name: Gun1
+  m_Name: Gun2
   m_EditorClassIdentifier: Assembly-CSharp::WeaponData
-  itemName: Rifle1
+  itemName: Cheat Rifle
   icon: {fileID: 0}
   itemType: 0
   isStackable: 0
   maxStackSize: 1
   weaponPrefab: {fileID: 0}
   type: 1
-  damage: 20
-  attackRate: 0.2
-  maxAmmo: 30
+  damage: 40
+  attackRate: 0.1
+  maxAmmo: 60
   reloadTime: 2
   bulletSpeed: 100
   recoil: 3

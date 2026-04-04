@@ -120,4 +120,13 @@ public class Weapon : MonoBehaviour
     {
         return (weaponData != null) ? weaponData.maxAmmo : 30;
     }
+
+    // 외부에서 새로운 무기 데이터를 덮어씌울 때 호출하는 함수
+    public void ChangeWeaponData(WeaponData newData)
+    {
+        weaponData = newData;
+        // 새 데이터의 최대 탄약수로 즉시 장전
+        currentAmmo = (weaponData != null) ? weaponData.maxAmmo : 30;
+        Debug.Log("원거리 무기가 [" + newData.itemName + "]으로 교체됨!");
+    }
 }

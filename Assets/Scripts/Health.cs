@@ -52,6 +52,16 @@ public class Health : MonoBehaviour
         }
     }
 
+    public void Heal(float amount)
+    {
+        currentHealth += amount;
+        if (currentHealth > maxHealth)
+        {
+            currentHealth = maxHealth;
+        }
+        Debug.Log("회복량: " + amount + ", 현재 체력: " + currentHealth);
+    }
+
     void Die()
     {
         onDeath?.Invoke();
