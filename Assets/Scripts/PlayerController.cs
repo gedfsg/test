@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
@@ -23,7 +24,7 @@ public class PlayerController : MonoBehaviour
     private enum WeaponMode { Ranged, Melee }
     private WeaponMode currentMode = WeaponMode.Ranged;
 
-    private PickupItem nearbyItem = null;
+    private List<PickupItem> nearbyItems = new List<PickupItem>();
 
     void Awake()
     {
@@ -164,34 +165,39 @@ public class PlayerController : MonoBehaviour
     // 상호작용(F) 키 입력 시 호출되는 함수임.
     private void OnInteractPerformed(InputAction.CallbackContext context)
     {
-        if (nearbyItem != null && nearbyItem.itemData != null)
+        // 파괴된 오브젝트 먼저 정리
+        nearbyItems.RemoveAll(item => item == null);
+    
+        if (nearbyItems.Count == 0) return;
+
+        PickupItem target = nearbyItems[0];
+    
+        InventoryManager inventory = GetComponent<InventoryManager>();
+        if (inventory != null)
         {
-            // 1. 플레이어 자신의 InventoryManager 컴포넌트를 가져옴.
-            InventoryManager inventory = GetComponent<InventoryManager>();
-            
-            if (inventory != null)
+            bool isAdded = inventory.AddItem(target.itemData, target.amount);
+            if (isAdded)
             {
-                // 2. 가방에 아이템 추가를 시도함.
-                bool isAdded = inventory.AddItem(nearbyItem.itemData, nearbyItem.amount);
-                
-                // 3. 가방에 무사히 들어갔다면(가방이 꽉 차지 않았다면) 바닥의 아이템을 파괴함.
-                if (isAdded)
-                {
-                    Destroy(nearbyItem.gameObject);
-                    nearbyItem = null;
-                }
+                nearbyItems.Remove(target);
+                Destroy(target.gameObject);
             }
         }
     }
 
-    public void SetNearbyItem(PickupItem item) => nearbyItem = item;
     
-    public void ClearNearbyItem(PickupItem item)
+    public void SetNearbyItem(PickupItem item)
     {
-        if (nearbyItem == item) nearbyItem = null;
+        if (!nearbyItems.Contains(item))
+        {
+            nearbyItems.Add(item);
+        }
     }
 
-    // 데이터 타입(Ranged/Melee)을 구분하여 해당 무기에 데이터를 덮어씌움.
+    public void ClearNearbyItem(PickupItem item)
+    {
+        nearbyItems.Remove(item);
+    }
+        // 데이터 타입(Ranged/Melee)을 구분하여 해당 무기에 데이터를 덮어씌움.
     public void SwapWeaponData(WeaponData newData)
     {
         if (newData == null) return;

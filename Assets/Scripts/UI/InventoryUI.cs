@@ -11,7 +11,7 @@ public class InventoryUI : MonoBehaviour
     public Transform slotGrid;
     public GameObject slotPrefab;
 
-    private bool isInventoryOpen = false;
+    public bool isInventoryOpen = false;
     
     private PlayerInputActions inputActions;
 
@@ -52,24 +52,35 @@ public class InventoryUI : MonoBehaviour
     }
 
     public void UpdateUI()
-    {
-        foreach (Transform child in slotGrid)
-        {
-            Destroy(child.gameObject);
-        }
+{
+    foreach (Transform child in slotGrid)
+        Destroy(child.gameObject);
 
-        for (int i = 0; i < inventoryManager.inventory.Count; i++)
+    // 빈 슬롯도 maxCapacity만큼 전부 생성
+    for (int i = 0; i < inventoryManager.maxCapacity; i++)
+    {
+        GameObject newSlot = Instantiate(slotPrefab, slotGrid);
+
+        // 슬롯 배경색 — 다크 톤
+        Image slotBg = newSlot.GetComponent<Image>();
+        if (slotBg != null)
+            slotBg.color = new Color(0.12f, 0.14f, 0.17f, 1f);
+
+        Image icon = newSlot.transform.Find("Icon").GetComponent<Image>();
+        TextMeshProUGUI amountText = newSlot.transform.Find("AmountText").GetComponent<TextMeshProUGUI>();
+
+        if (i < inventoryManager.inventory.Count)
         {
             InventorySlot slotData = inventoryManager.inventory[i];
-            
-            GameObject newSlot = Instantiate(slotPrefab, slotGrid);
 
-            Image icon = newSlot.transform.Find("Icon").GetComponent<Image>();
-            TextMeshProUGUI amountText = newSlot.transform.Find("AmountText").GetComponent<TextMeshProUGUI>();
+            // 아이템 있는 슬롯은 살짝 밝게
+            if (slotBg != null)
+                slotBg.color = new Color(0.18f, 0.22f, 0.27f, 1f);
 
             if (slotData.item.icon != null)
             {
                 icon.sprite = slotData.item.icon;
+                icon.color = Color.white;
                 icon.enabled = true;
             }
             else
@@ -77,14 +88,15 @@ public class InventoryUI : MonoBehaviour
                 icon.enabled = false;
             }
 
-            if (slotData.amount > 1)
-            {
-                amountText.text = slotData.amount.ToString();
-            }
-            else
-            {
-                amountText.text = "";
-            }
+            amountText.text = slotData.amount > 1 ? slotData.amount.ToString() : "";
+            amountText.color = new Color(0.89f, 0.73f, 0.43f, 1f); // 황금색
+        }
+        else
+        {
+            // 빈 슬롯
+            icon.enabled = false;
+            amountText.text = "";
         }
     }
+}
 }

@@ -8,6 +8,7 @@ public class PickupItem : MonoBehaviour
 
     void OnTriggerEnter(Collider other)
     {
+        Debug.Log("트리거 감지: " + other.name); // 이거 추가
         if (other.CompareTag("Player"))
         {
             PlayerController player = other.GetComponent<PlayerController>();
@@ -29,6 +30,18 @@ public class PickupItem : MonoBehaviour
             {
                 player.ClearNearbyItem(this);
             }
+        }
+    }
+
+    void Start()
+    {
+    // 플레이어 콜라이더 찾아서 Box Collider랑 충돌 무시
+        Collider playerCollider = GameObject.FindGameObjectWithTag("Player").GetComponent<Collider>();
+        Collider boxCollider = GetComponent<BoxCollider>();
+    
+        if (playerCollider != null && boxCollider != null)
+        {
+            Physics.IgnoreCollision(playerCollider, boxCollider);
         }
     }
 }
