@@ -1108,6 +1108,7 @@ GameObject:
   m_Component:
   - component: {fileID: 705507995}
   - component: {fileID: 705507994}
+  - component: {fileID: 705507996}
   m_Layer: 0
   m_Name: Directional Light
   m_TagString: Untagged
@@ -1195,6 +1196,24 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 50, y: -30, z: 0}
+--- !u!114 &705507996
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 705507993}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7e6289c423a093d4183e9e8fe7e6a60d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DayNightCycle
+  dayDuration: 240
+  nightDuration: 300
+  totalDays: 7
+  directionalLight: {fileID: 705507994}
+  spotLight: {fileID: 0}
+  dayText: {fileID: 0}
 --- !u!1 &759768682
 GameObject:
   m_ObjectHideFlags: 0
@@ -3656,6 +3675,7 @@ GameObject:
   - component: {fileID: 2056773028}
   - component: {fileID: 2056773027}
   - component: {fileID: 2056773026}
+  - component: {fileID: 2056773029}
   m_Layer: 5
   m_Name: InventoryWindow
   m_TagString: Untagged
@@ -3744,6 +3764,23 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2056773024}
   m_CullTransparentMesh: 1
+--- !u!114 &2056773029
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2056773024}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e595c04133e66a04abdd5a76586cc58f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::InventoryUI
+  inventoryManager: {fileID: 0}
+  inventoryWindow: {fileID: 0}
+  slotGrid: {fileID: 0}
+  slotPrefab: {fileID: 0}
+  isInventoryOpen: 0
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
