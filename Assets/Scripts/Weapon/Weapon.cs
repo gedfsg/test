@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections;
 using UnityEngine.Events;
+using UnityEngine.InputSystem;
 
 public class Weapon : MonoBehaviour
 {
@@ -54,34 +55,45 @@ public class Weapon : MonoBehaviour
     }
 
     void Shoot()
+{
+    currentAmmo--;
+
+    float currentRecoil = (weaponData != null) ? weaponData.recoil : 0f;
+
+    // 마우스 월드 좌표 구하기
+    Ray ray = Camera.main.ScreenPointToRay(Mouse.current.position.ReadValue());
+    Plane plane = new Plane(Vector3.up, firePoint.position);
+    float dist;
+    Vector3 mouseWorldPos = firePoint.position; // 기본값
+
+    if (plane.Raycast(ray, out dist))
     {
-        currentAmmo--;
+        mouseWorldPos = ray.GetPoint(dist);
+    }
 
-        // 무기 데이터에서 반동 값을 참조함. 데이터가 없을 경우 0으로 처리함.
-        float currentRecoil = (weaponData != null) ? weaponData.recoil : 0f;
+    // 마우스 방향으로 발사 방향 계산
+    Vector3 direction = (mouseWorldPos - firePoint.position).normalized;
+    direction.y = 0;
+    Quaternion baseRotation = Quaternion.LookRotation(direction);
 
-        // Y축을 기준으로 지정된 반동 범위 내에서 무작위 회전값을 생성함.
-        Quaternion randomRecoilRotation = Quaternion.Euler(0, Random.Range(-currentRecoil, currentRecoil), 0);
-        
-        // 발사 지점의 기본 방향에 무작위 회전값을 적용하여 최종 발사 각도를 산출함.
-        Quaternion finalFireRotation = firePoint.rotation * randomRecoilRotation;
+    // 반동 적용
+    Quaternion randomRecoilRotation = Quaternion.Euler(0, Random.Range(-currentRecoil, currentRecoil), 0);
+    Quaternion finalFireRotation = baseRotation * randomRecoilRotation;
 
-        GameObject bulletObj = Instantiate(bulletPrefab, firePoint.position, finalFireRotation);
-        Bullet bullet = bulletObj.GetComponent<Bullet>();
-        
-        if(bullet != null)
+    GameObject bulletObj = Instantiate(bulletPrefab, firePoint.position, finalFireRotation);
+    Bullet bullet = bulletObj.GetComponent<Bullet>();
+
+    if (bullet != null)
+    {
+        bullet.shooterTag = shooterTag;
+        if (weaponData != null)
         {
-            bullet.shooterTag = shooterTag;
-            
-            // 생성된 총알 객체에 무기 데이터의 수치들을 전달함.
-            if (weaponData != null)
-            {
-                bullet.damage = weaponData.damage;
-                bullet.speed = weaponData.bulletSpeed;
-                bullet.effectiveRange = weaponData.effectiveRange;
-            }
+            bullet.damage = weaponData.damage;
+            bullet.speed = weaponData.bulletSpeed;
+            bullet.effectiveRange = weaponData.effectiveRange;
         }
     }
+}
 
     public IEnumerator Reload()
     {
