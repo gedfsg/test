@@ -64,25 +64,9 @@ public class DayNightCycle : MonoBehaviour
         }
 
         float ratio = currentTime / phaseDuration;
-        UpdateLighting(ratio);
         UpdateUI();
     }
 
-    void UpdateLighting(float ratio)
-    {
-        if (isDay)
-        {
-            // 낮: 밝음
-            directionalLight.intensity = Mathf.Lerp(0.2f, 1.5f, ratio < 0.5f ? ratio * 2 : (1 - ratio) * 2);
-            directionalLight.color = Color.Lerp(Color.white, new Color(1f, 0.5f, 0f), ratio > 0.8f ? (ratio - 0.8f) * 5 : 0);
-        }
-        else
-        {
-            // 밤: 어두움
-            directionalLight.intensity = 0.05f;
-            directionalLight.color = new Color(0.2f, 0.2f, 0.4f);
-        }
-    }
 
     void UpdateUI()
     {

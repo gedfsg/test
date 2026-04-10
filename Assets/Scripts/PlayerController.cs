@@ -20,6 +20,8 @@ public class PlayerController : MonoBehaviour
     private Weapon rangedWeapon;
     private MeleeWeapon meleeWeapon;
 
+    public float rotationSpeed = 15f;
+
     // 현재 무기 상태를 저장하는 열거형임.
     private enum WeaponMode { Ranged, Melee }
     private WeaponMode currentMode = WeaponMode.Ranged;
@@ -147,18 +149,30 @@ public class PlayerController : MonoBehaviour
 
     void AimAtMouse()
     {
-        if (Mouse.current == null) return;
+    if (Mouse.current == null) return;
 
-        Vector2 mousePosition = Mouse.current.position.ReadValue();
-        Ray ray = mainCamera.ScreenPointToRay(mousePosition);
+    Vector2 mousePosition = Mouse.current.position.ReadValue();
+    Ray ray = mainCamera.ScreenPointToRay(mousePosition);
 
-        Plane aimPlane = new Plane(Vector3.up, transform.position); 
-        float rayDistance;
+    Plane aimPlane = new Plane(Vector3.up, transform.position); 
+    float rayDistance;
 
-        if (aimPlane.Raycast(ray, out rayDistance))
+    if (aimPlane.Raycast(ray, out rayDistance))
+    {
+        Vector3 point = ray.GetPoint(rayDistance);
+        
+        // 1. 가야 할 방향 벡터를 구해 (Y값은 고정해서 바닥과 평행하게)
+        Vector3 lookDirection = (point - transform.position).normalized;
+        lookDirection.y = 0;
+
+        if (lookDirection != Vector3.zero)
         {
-            Vector3 point = ray.GetPoint(rayDistance);
-            transform.LookAt(point); 
+            // 2. 목표 회전값(Quaternion)을 계산해
+                Quaternion targetRotation = Quaternion.LookRotation(lookDirection);
+            
+                // 3. Slerp를 사용해 현재 회전에서 목표 회전까지 부드럽게 회전시켜!
+                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
+            }
         }
     }
 
