@@ -226,7 +226,13 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-
+    public WeaponData GetCurrentWeaponData(WeaponType type)
+    {
+        if (type == WeaponType.Ranged)
+            return rangedWeapon != null ? rangedWeapon.weaponData : null;
+        else
+            return meleeWeapon != null ? meleeWeapon.weaponData : null;
+    }
 
     private void OnRestartPerformed(InputAction.CallbackContext context)
     {

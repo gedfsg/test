@@ -126,4 +126,21 @@ public class InventoryManager : MonoBehaviour
         }
         Debug.LogWarning("가방에 먹을 수 있는 소비품이 없어!");
     }
+
+    public void RemoveItem(ItemData itemToRemove)
+    {
+        for (int i = 0; i < inventory.Count; i++)
+        {
+            if (inventory[i].item == itemToRemove)
+            {
+                inventory[i].amount--;
+                if (inventory[i].amount <= 0)
+                    inventory.RemoveAt(i);
+
+                RefreshUI();
+                return;
+            }
+        }
+    }
+
 }

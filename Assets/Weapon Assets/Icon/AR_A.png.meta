@@ -1,12 +1,5 @@
 fileFormatVersion: 2
-guid: f5fd73c56d491ba4888ab5092d890fc6
-AssetOrigin:
-  serializedVersion: 1
-  productId: 322992
-  packageName: Low Poly Pistol Weapon Pack 3
-  packageVersion: 1.0
-  assetPath: Assets/Low Poly Pistol Weapon Pack 3/UI/Weapons/Pistol_K_1K_2.png
-  uploadId: 774705
+guid: 17e7d80fef04f31458d23860f889d689
 TextureImporter:
   internalIDToNameTable: []
   externalObjects: {}
