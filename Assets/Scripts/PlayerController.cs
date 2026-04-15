@@ -149,30 +149,30 @@ public class PlayerController : MonoBehaviour
 
     void AimAtMouse()
     {
-    if (Mouse.current == null) return;
+        if (Mouse.current == null) return;
 
-    Vector2 mousePosition = Mouse.current.position.ReadValue();
-    Ray ray = mainCamera.ScreenPointToRay(mousePosition);
+        // 마우스 스크린 좌표와 캐릭터 스크린 좌표를 2D로 비교
+        Vector2 mouseScreenPos = Mouse.current.position.ReadValue();
+        Vector3 charScreenPos = mainCamera.WorldToScreenPoint(transform.position);
+        Vector2 delta = mouseScreenPos - new Vector2(charScreenPos.x, charScreenPos.y);
 
-    Plane aimPlane = new Plane(Vector3.up, transform.position); 
-    float rayDistance;
+        // 마우스가 캐릭터와 거의 같은 픽셀에 있으면 회전하지 않음
+        if (delta.sqrMagnitude < 0.01f) return;
 
-    if (aimPlane.Raycast(ray, out rayDistance))
-    {
-        Vector3 point = ray.GetPoint(rayDistance);
-        
-        // 1. 가야 할 방향 벡터를 구해 (Y값은 고정해서 바닥과 평행하게)
-        Vector3 lookDirection = (point - transform.position).normalized;
-        lookDirection.y = 0;
+        // 카메라의 오른쪽/위쪽 축을 XZ 평면에 투영해 스크린 2D → 월드 3D 방향으로 변환
+        Vector3 camRight = mainCamera.transform.right;
+        Vector3 camUp    = mainCamera.transform.up;
+        camRight.y = 0f;
+        camUp.y    = 0f;
+        camRight.Normalize();
+        camUp.Normalize();
+
+        Vector3 lookDirection = (delta.x * camRight + delta.y * camUp).normalized;
 
         if (lookDirection != Vector3.zero)
         {
-            // 2. 목표 회전값(Quaternion)을 계산해
-                Quaternion targetRotation = Quaternion.LookRotation(lookDirection);
-            
-                // 3. Slerp를 사용해 현재 회전에서 목표 회전까지 부드럽게 회전시켜!
-                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
-            }
+            Quaternion targetRotation = Quaternion.LookRotation(lookDirection);
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
         }
     }
 

@@ -755,6 +755,9 @@ MonoBehaviour:
   firePoint: {fileID: 1848243109}
   shooterTag: 
   weaponData: {fileID: 0}
+  muzzleFlashLight: {fileID: 0}
+  muzzleFlashDuration: 0.05
+  muzzleFlashPrefab: {fileID: 0}
   onReloadStart:
     m_PersistentCalls:
       m_Calls: []
@@ -2081,6 +2084,9 @@ MonoBehaviour:
   firePoint: {fileID: 1305275201}
   shooterTag: 
   weaponData: {fileID: 11400000, guid: f9cb5805e771d3e4e95e85bbccc4c5c8, type: 2}
+  muzzleFlashLight: {fileID: 0}
+  muzzleFlashDuration: 0.05
+  muzzleFlashPrefab: {fileID: 6980259576133684760, guid: 1f58a1dea6bbd9347843e4935585e6a2, type: 3}
   onReloadStart:
     m_PersistentCalls:
       m_Calls:

@@ -1,7 +1,6 @@
 using UnityEngine;
 using System.Collections;
 using UnityEngine.Events;
-using UnityEngine.InputSystem;
 
 public class Weapon : MonoBehaviour
 {
@@ -13,6 +12,11 @@ public class Weapon : MonoBehaviour
     // 추가된 데이터 연동 변수임.
     [Header("Weapon Data")]
     public WeaponData weaponData;
+
+    [Header("Muzzle Flash")]
+    public Light muzzleFlashLight;
+    public float muzzleFlashDuration = 0.05f;
+    public GameObject muzzleFlashPrefab;
 
     [Header("UI Events")]
     public UnityEvent<float> onReloadStart;
@@ -31,8 +35,11 @@ public class Weapon : MonoBehaviour
         }
         else
         {
-            currentAmmo = 30; 
+            currentAmmo = 30;
         }
+
+        if (muzzleFlashLight != null)
+            muzzleFlashLight.enabled = false;
     }
 
     public void TryFire()
@@ -58,22 +65,18 @@ public class Weapon : MonoBehaviour
 {
     currentAmmo--;
 
-    float currentRecoil = (weaponData != null) ? weaponData.recoil : 0f;
+    if (muzzleFlashLight != null)
+        StartCoroutine(MuzzleFlash());
 
-    // 마우스 월드 좌표 구하기
-    Ray ray = Camera.main.ScreenPointToRay(Mouse.current.position.ReadValue());
-    Plane plane = new Plane(Vector3.up, firePoint.position);
-    float dist;
-    Vector3 mouseWorldPos = firePoint.position; // 기본값
-
-    if (plane.Raycast(ray, out dist))
+    if (muzzleFlashPrefab != null)
     {
-        mouseWorldPos = ray.GetPoint(dist);
+        GameObject flash = Instantiate(muzzleFlashPrefab, firePoint.position, firePoint.rotation);
+        Destroy(flash, 0.1f);
     }
 
-    // 마우스 방향으로 발사 방향 계산
-    Vector3 direction = (mouseWorldPos - firePoint.position).normalized;
-    direction.y = 0;
+    float currentRecoil = (weaponData != null) ? weaponData.recoil : 0f;
+
+    Vector3 direction = firePoint.forward;
     Quaternion baseRotation = Quaternion.LookRotation(direction);
 
     // 반동 적용
@@ -94,6 +97,13 @@ public class Weapon : MonoBehaviour
         }
     }
 }
+
+    private IEnumerator MuzzleFlash()
+    {
+        muzzleFlashLight.enabled = true;
+        yield return new WaitForSeconds(muzzleFlashDuration);
+        muzzleFlashLight.enabled = false;
+    }
 
     public IEnumerator Reload()
     {
