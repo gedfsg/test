@@ -145,34 +145,26 @@ public class PlayerController : MonoBehaviour
     void FixedUpdate()
     {
         locomotion.Move(moveInput);
-    } 
+    }
 
     void AimAtMouse()
     {
-        if (Mouse.current == null) return;
+        if (Mouse.current == null || mainCamera == null) return;
 
-        // 마우스 스크린 좌표와 캐릭터 스크린 좌표를 2D로 비교
-        Vector2 mouseScreenPos = Mouse.current.position.ReadValue();
-        Vector3 charScreenPos = mainCamera.WorldToScreenPoint(transform.position);
-        Vector2 delta = mouseScreenPos - new Vector2(charScreenPos.x, charScreenPos.y);
+        // firePoint 높이 평면과 교차점 구하기
+        float aimY = rangedWeapon != null
+            ? rangedWeapon.firePoint.position.y
+            : transform.position.y;
 
-        // 마우스가 캐릭터와 거의 같은 픽셀에 있으면 회전하지 않음
-        if (delta.sqrMagnitude < 0.01f) return;
-
-        // 카메라의 오른쪽/위쪽 축을 XZ 평면에 투영해 스크린 2D → 월드 3D 방향으로 변환
-        Vector3 camRight = mainCamera.transform.right;
-        Vector3 camUp    = mainCamera.transform.up;
-        camRight.y = 0f;
-        camUp.y    = 0f;
-        camRight.Normalize();
-        camUp.Normalize();
-
-        Vector3 lookDirection = (delta.x * camRight + delta.y * camUp).normalized;
-
-        if (lookDirection != Vector3.zero)
+        if (GameUtils.GetMouseWorldPosition(mainCamera, aimY, out Vector3 targetPoint))
         {
+            Vector3 lookDirection = targetPoint - transform.position;
+            lookDirection.y = 0f;
+            if (lookDirection.sqrMagnitude < 0.01f) return;
+
             Quaternion targetRotation = Quaternion.LookRotation(lookDirection);
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
+            transform.rotation = Quaternion.Slerp(
+                transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
         }
     }
 

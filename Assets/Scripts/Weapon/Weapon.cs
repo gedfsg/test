@@ -44,8 +44,8 @@ public class Weapon : MonoBehaviour
 
     public void TryFire()
     {
-        if(isReloading) return;
-        if(currentAmmo <= 0)
+        if (isReloading) return;
+        if (currentAmmo <= 0)
         {
             StartCoroutine(Reload());
             return;
@@ -54,7 +54,7 @@ public class Weapon : MonoBehaviour
         // 무기 데이터의 연사 속도를 참조함.
         float currentFireRate = (weaponData != null) ? weaponData.attackRate : 0.2f;
 
-        if(Time.time >= lastFireTime + currentFireRate)
+        if (Time.time >= lastFireTime + currentFireRate)
         {
             Shoot();
             lastFireTime = Time.time;
@@ -62,41 +62,57 @@ public class Weapon : MonoBehaviour
     }
 
     void Shoot()
-{
-    currentAmmo--;
-
-    if (muzzleFlashLight != null)
-        StartCoroutine(MuzzleFlash());
-
-    if (muzzleFlashPrefab != null)
     {
-        GameObject flash = Instantiate(muzzleFlashPrefab, firePoint.position, firePoint.rotation);
-        Destroy(flash, 0.1f);
-    }
+        currentAmmo--;
 
-    float currentRecoil = (weaponData != null) ? weaponData.recoil : 0f;
+        if (muzzleFlashLight != null)
+            StartCoroutine(MuzzleFlash());
 
-    Vector3 direction = firePoint.forward;
-    Quaternion baseRotation = Quaternion.LookRotation(direction);
-
-    // 반동 적용
-    Quaternion randomRecoilRotation = Quaternion.Euler(0, Random.Range(-currentRecoil, currentRecoil), 0);
-    Quaternion finalFireRotation = baseRotation * randomRecoilRotation;
-
-    GameObject bulletObj = Instantiate(bulletPrefab, firePoint.position, finalFireRotation);
-    Bullet bullet = bulletObj.GetComponent<Bullet>();
-
-    if (bullet != null)
-    {
-        bullet.shooterTag = shooterTag;
-        if (weaponData != null)
+        if (muzzleFlashPrefab != null)
         {
-            bullet.damage = weaponData.damage;
-            bullet.speed = weaponData.bulletSpeed;
-            bullet.effectiveRange = weaponData.effectiveRange;
+            GameObject flash = Instantiate(muzzleFlashPrefab, firePoint.position, firePoint.rotation);
+            Destroy(flash, 0.1f);
+        }
+
+        // 마우스 위치로 Ray를 쏴서 바닥의 목표 지점을 구함.
+        Ray ray = Camera.main.ScreenPointToRay(
+            UnityEngine.InputSystem.Mouse.current.position.ReadValue());
+        RaycastHit hit;
+
+        Vector3 direction;
+
+        if (GameUtils.GetMouseWorldPosition(Camera.main, firePoint.position.y, out Vector3 targetPoint))
+        {
+            direction = (targetPoint - firePoint.position).normalized;
+        }
+        else
+        {
+            direction = firePoint.forward;
+        }
+
+        float currentRecoil = (weaponData != null) ? weaponData.recoil : 0f;
+
+        Quaternion baseRotation = Quaternion.LookRotation(direction);
+
+        // 반동 적용
+        Quaternion randomRecoilRotation = Quaternion.Euler(
+            0, Random.Range(-currentRecoil, currentRecoil), 0);
+        Quaternion finalFireRotation = baseRotation * randomRecoilRotation;
+
+        GameObject bulletObj = Instantiate(bulletPrefab, firePoint.position, finalFireRotation);
+        Bullet bullet = bulletObj.GetComponent<Bullet>();
+
+        if (bullet != null)
+        {
+            bullet.shooterTag = shooterTag;
+            if (weaponData != null)
+            {
+                bullet.damage = weaponData.damage;
+                bullet.speed = weaponData.bulletSpeed;
+                bullet.effectiveRange = weaponData.effectiveRange;
+            }
         }
     }
-}
 
     private IEnumerator MuzzleFlash()
     {
@@ -107,10 +123,10 @@ public class Weapon : MonoBehaviour
 
     public IEnumerator Reload()
     {
-        if(isReloading) yield break;
+        if (isReloading) yield break;
 
         isReloading = true;
-        
+
         // 무기 데이터의 장전 소요 시간을 참조함.
         float currentReloadTime = (weaponData != null) ? weaponData.reloadTime : 2.0f;
 
@@ -127,7 +143,7 @@ public class Weapon : MonoBehaviour
     public void TryReload()
     {
         int max = (weaponData != null) ? weaponData.maxAmmo : 30;
-        if(!isReloading && currentAmmo < max)
+        if (!isReloading && currentAmmo < max)
         {
             StartCoroutine(Reload());
         }

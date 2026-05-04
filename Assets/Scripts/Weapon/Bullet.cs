@@ -10,12 +10,15 @@ public class Bullet : MonoBehaviour
     private Vector3 startPosition;
     private float currentDamage;
     private TrailRenderer trail;
+    private Vector3 moveDirection;
 
     void Start()
     {
         // 발사된 초기 위치와 초기 데미지를 저장함.
         startPosition = transform.position;
         currentDamage = damage;
+
+        moveDirection = transform.forward;
 
         SetupTrail();
     }
@@ -53,7 +56,7 @@ public class Bullet : MonoBehaviour
     void Update()
     {
         // 매 프레임마다 지정된 속도로 투사체를 전진시킴.
-        transform.Translate(Vector3.forward * speed * Time.deltaTime);
+        transform.position += moveDirection * speed * Time.deltaTime;
 
         // 시작 위치로부터 이동한 누적 거리를 계산함.
         float distanceTraveled = Vector3.Distance(startPosition, transform.position);
