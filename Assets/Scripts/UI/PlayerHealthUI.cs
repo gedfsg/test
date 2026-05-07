@@ -10,11 +10,9 @@ public class PlayerHealthUI : MonoBehaviour
     {
         if(playerHealth != null && hpSlider != null)
         {
-            hpSlider.maxValue = playerHealth.GetMaxHealth();
-        
-            hpSlider.value = playerHealth.GetCurrentHealth();
-        
-            Debug.Log("체력 바 초기화 완료: " + hpSlider.value);
+            hpSlider.minValue = 0f;
+            hpSlider.maxValue = 1f;
+            hpSlider.value = 1f;
         }
     }
 
@@ -22,7 +20,7 @@ public class PlayerHealthUI : MonoBehaviour
     {
         if(playerHealth != null && hpSlider != null)
         {
-            hpSlider.value = playerHealth.GetCurrentHealth();
+            hpSlider.value = playerHealth.GetCurrentHealth() / playerHealth.GetMaxHealth();
         }
     }
 }
