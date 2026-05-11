@@ -26,3 +26,7 @@ MonoBehaviour:
   bulletSpeed: 80
   recoil: 3
   effectiveRange: 10
+  pelletCount: 8
+  spreadAngle: 15
+  penetrating: 0
+  autoFire: 1

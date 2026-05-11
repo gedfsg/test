@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 
 public class PlayerController : MonoBehaviour
@@ -11,6 +12,11 @@ public class PlayerController : MonoBehaviour
 
     private PlayerInputActions inputActions;
     private Locomotion locomotion;
+    private InventoryUI inventoryUI;
+
+    private EquipmentManager equipmentManager;
+
+
     private bool isFireButtonPressed = false;
 
     [Header("Weapons")]
@@ -22,11 +28,15 @@ public class PlayerController : MonoBehaviour
 
     public float rotationSpeed = 15f;
 
-    // 현재 무기 상태를 저장하는 열거형임.
     private enum WeaponMode { Ranged, Melee }
     private WeaponMode currentMode = WeaponMode.Ranged;
 
+    private bool firePressed = false; // 이번 프레임에 클릭했는지
+
     private List<PickupItem> nearbyItems = new List<PickupItem>();
+
+    [Header("Animation Rigging")]
+    public Transform aimTarget; // Inspector에서 AimTarget 연결
 
     void Awake()
     {
@@ -34,10 +44,25 @@ public class PlayerController : MonoBehaviour
         locomotion = GetComponent<Locomotion>();
     }
 
+    void Start()
+    {
+        rb = GetComponent<Rigidbody>();
+        mainCamera = Camera.main;
+
+        if (rangedWeaponObject != null) rangedWeapon = rangedWeaponObject.GetComponent<Weapon>();
+        if (meleeWeaponObject != null) meleeWeapon = meleeWeaponObject.GetComponent<MeleeWeapon>();
+
+        if (rangedWeapon != null) rangedWeapon.shooterTag = "Player";
+        if (meleeWeapon != null) meleeWeapon.shooterTag = "Player";
+
+        EquipWeapon(WeaponMode.Ranged);
+    }
+
+
     void OnEnable()
     {
         inputActions.Enable();
-        
+
         inputActions.Player.Fire.started += OnFireStarted;
         inputActions.Player.Fire.canceled += OnFireCanceled;
         inputActions.Player.Reload.performed += OnReloadPerformed;
@@ -46,69 +71,119 @@ public class PlayerController : MonoBehaviour
         inputActions.Player.Sprint.canceled += _ => locomotion.SetSprinting(false);
         inputActions.Player.Roll.performed += _ => locomotion.TryRoll(moveInput);
 
-        // 무기 교체 입력 이벤트를 구독함.
         inputActions.Player.EquipRanged.performed += _ => EquipWeapon(WeaponMode.Ranged);
         inputActions.Player.EquipMelee.performed += _ => EquipWeapon(WeaponMode.Melee);
 
-        // 재시작 입력 이벤트를 구독함.
         inputActions.Player.Restart.performed += OnRestartPerformed;
-
-        // 상호작용 입력 이벤트를 구독함.
         inputActions.Player.Interact.performed += OnInteractPerformed;
     }
 
     void OnDisable()
     {
         inputActions.Disable();
-        
+
         inputActions.Player.Fire.started -= OnFireStarted;
         inputActions.Player.Fire.canceled -= OnFireCanceled;
         inputActions.Player.Reload.performed -= OnReloadPerformed;
-        
+
         inputActions.Player.Sprint.started -= _ => locomotion.SetSprinting(true);
         inputActions.Player.Sprint.canceled -= _ => locomotion.SetSprinting(false);
-        
+
         inputActions.Player.EquipRanged.performed -= _ => EquipWeapon(WeaponMode.Ranged);
         inputActions.Player.EquipMelee.performed -= _ => EquipWeapon(WeaponMode.Melee);
 
         inputActions.Player.Restart.performed -= OnRestartPerformed;
-
         inputActions.Player.Interact.performed -= OnInteractPerformed;
     }
 
-    private void OnFireStarted(InputAction.CallbackContext context) => isFireButtonPressed = true;
-    private void OnFireCanceled(InputAction.CallbackContext context) => isFireButtonPressed = false;
-    
+    // 마우스 포인터가 UI 위에 있는지 체크
+    // Update()에서 호출하므로 IsPointerOverGameObject() 정상 작동
+    private bool IsPointerOverUI()
+    {
+        return EventSystem.current != null &&
+               EventSystem.current.IsPointerOverGameObject();
+    }
+
+    private void OnFireStarted(InputAction.CallbackContext context)
+    {
+        isFireButtonPressed = true;
+        firePressed = true; // 누른 순간만 true
+    }
+
+    private void OnFireCanceled(InputAction.CallbackContext context)
+    {
+        isFireButtonPressed = false;
+    }
     private void OnReloadPerformed(InputAction.CallbackContext context)
     {
-        // 원거리 무기 모드일 경우에만 장전을 수행함.
+        if (currentMode == WeaponMode.Ranged && rangedWeapon != null)
+            rangedWeapon.TryReload();
+    }
+
+    void Update()
+    {
+        Vector2 inputVector = inputActions.Player.Move.ReadValue<Vector2>();
+        moveInput = new Vector3(inputVector.x, 0f, inputVector.y).normalized;
+
+        AimAtMouse();
+        HandleFire();
+    }
+
+    void FixedUpdate()
+    {
+        locomotion.Move(moveInput);
+    }
+
+    private void HandleFire()
+    {
+        if (IsPointerOverUI()) { firePressed = false; return; }
+
         if (currentMode == WeaponMode.Ranged && rangedWeapon != null)
         {
-            rangedWeapon.TryReload();
+            bool auto = rangedWeapon.weaponData != null && rangedWeapon.weaponData.autoFire;
+
+            if (auto && isFireButtonPressed)
+                rangedWeapon.TryFire();
+            else if (!auto && firePressed) // 누른 순간 딱 1번만
+                rangedWeapon.TryFireSingle();
+        }
+        else if (currentMode == WeaponMode.Melee && meleeWeapon != null && isFireButtonPressed)
+        {
+            meleeWeapon.TryAttack();
+        }
+
+        firePressed = false; // 매 프레임 끝에 초기화
+    }
+
+    void AimAtMouse()
+    {
+        if (Mouse.current == null || mainCamera == null) return;
+
+        float aimY = rangedWeapon != null
+            ? rangedWeapon.firePoint.position.y
+            : transform.position.y;
+
+        if (GameUtils.GetMouseWorldPosition(mainCamera, aimY, out Vector3 targetPoint))
+        {
+            // 기존 플레이어 회전
+            Vector3 lookDirection = targetPoint - transform.position;
+            lookDirection.y = 0f;
+            if (lookDirection.sqrMagnitude < 0.01f) return;
+
+            Quaternion targetRotation = Quaternion.LookRotation(lookDirection);
+            transform.rotation = Quaternion.Slerp(
+                transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
+
+            // AimTarget을 마우스 위치로 이동
+            if (aimTarget != null)
+                aimTarget.position = targetPoint;
         }
     }
 
-    void Start()
-    {
-        rb = GetComponent<Rigidbody>();
-        mainCamera = Camera.main;
-
-        // 할당된 오브젝트에서 컴포넌트를 가져와 초기화함.
-        if (rangedWeaponObject != null) rangedWeapon = rangedWeaponObject.GetComponent<Weapon>();
-        if (meleeWeaponObject != null) meleeWeapon = meleeWeaponObject.GetComponent<MeleeWeapon>();
-
-        if (rangedWeapon != null) rangedWeapon.shooterTag = "Player";
-        if (meleeWeapon != null) meleeWeapon.shooterTag = "Player";
-
-        // 게임 시작 시 기본 무기를 원거리 무기로 설정함.
-        EquipWeapon(WeaponMode.Ranged);
-    }
-
-    // 무기 교체 로직을 수행하는 함수임.
     private void EquipWeapon(WeaponMode newMode)
     {
         currentMode = newMode;
-        
+
         if (currentMode == WeaponMode.Ranged)
         {
             if (rangedWeaponObject != null) rangedWeaponObject.SetActive(true);
@@ -121,63 +196,12 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    void Update()
-    {
-        Vector2 inputVector = inputActions.Player.Move.ReadValue<Vector2>();
-        moveInput = new Vector3(inputVector.x, 0f, inputVector.y).normalized;
-
-        AimAtMouse();
-
-        if (isFireButtonPressed)
-        {
-            // 현재 무기 모드에 따라 적절한 공격 함수를 호출함.
-            if (currentMode == WeaponMode.Ranged && rangedWeapon != null)
-            {
-                rangedWeapon.TryFire();
-            }
-            else if (currentMode == WeaponMode.Melee && meleeWeapon != null)
-            {
-                meleeWeapon.TryAttack();
-            }
-        }
-    }
-
-    void FixedUpdate()
-    {
-        locomotion.Move(moveInput);
-    }
-
-    void AimAtMouse()
-    {
-        if (Mouse.current == null || mainCamera == null) return;
-
-        // firePoint 높이 평면과 교차점 구하기
-        float aimY = rangedWeapon != null
-            ? rangedWeapon.firePoint.position.y
-            : transform.position.y;
-
-        if (GameUtils.GetMouseWorldPosition(mainCamera, aimY, out Vector3 targetPoint))
-        {
-            Vector3 lookDirection = targetPoint - transform.position;
-            lookDirection.y = 0f;
-            if (lookDirection.sqrMagnitude < 0.01f) return;
-
-            Quaternion targetRotation = Quaternion.LookRotation(lookDirection);
-            transform.rotation = Quaternion.Slerp(
-                transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
-        }
-    }
-
-    // 상호작용(F) 키 입력 시 호출되는 함수임.
     private void OnInteractPerformed(InputAction.CallbackContext context)
     {
-        // 파괴된 오브젝트 먼저 정리
         nearbyItems.RemoveAll(item => item == null);
-    
         if (nearbyItems.Count == 0) return;
 
         PickupItem target = nearbyItems[0];
-    
         InventoryManager inventory = GetComponent<InventoryManager>();
         if (inventory != null)
         {
@@ -190,20 +214,17 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    
     public void SetNearbyItem(PickupItem item)
     {
         if (!nearbyItems.Contains(item))
-        {
             nearbyItems.Add(item);
-        }
     }
 
     public void ClearNearbyItem(PickupItem item)
     {
         nearbyItems.Remove(item);
     }
-        // 데이터 타입(Ranged/Melee)을 구분하여 해당 무기에 데이터를 덮어씌움.
+
     public void SwapWeaponData(WeaponData newData)
     {
         if (newData == null) return;
@@ -218,17 +239,21 @@ public class PlayerController : MonoBehaviour
         }
     }
 
+    public int GetCurrentAmmo()
+    {
+        return rangedWeapon != null ? rangedWeapon.GetCurrentAmmo() : 0;
+    }
+
     public WeaponData GetCurrentWeaponData(WeaponType type)
     {
-        if (type == WeaponType.Ranged)
-            return rangedWeapon != null ? rangedWeapon.weaponData : null;
-        else
+        if (type == WeaponType.Melee)
             return meleeWeapon != null ? meleeWeapon.weaponData : null;
+        else
+            return rangedWeapon != null ? rangedWeapon.weaponData : null;
     }
 
     private void OnRestartPerformed(InputAction.CallbackContext context)
     {
-        // 현재 활성화된 씬의 이름을 가져와 해당 씬을 다시 로드함.
         SceneManager.LoadScene(SceneManager.GetActiveScene().name);
     }
 }

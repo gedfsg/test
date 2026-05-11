@@ -42,7 +42,6 @@ public class WeaponHandAttacher : MonoBehaviour
         Debug.Log($"[WeaponHandAttacher] {rangedWeapon.name} → {handBone.name} 부착 완료!");
     }
 
-    /// <summary>에디터 도구(WeaponOffsetTuner)에서 실시간 반영용으로 호출</summary>
     public void ApplyOffset()
     {
         Transform handBone = FindDeep(transform, RIGHT_HAND_BONE);
@@ -66,7 +65,6 @@ public class WeaponHandAttacher : MonoBehaviour
     }
 
 #if UNITY_EDITOR
-    // 플레이 중 Inspector 값 바꾸면 실시간 반영
     void OnValidate()
     {
         if (!Application.isPlaying) return;

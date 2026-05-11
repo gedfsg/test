@@ -12,17 +12,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3eb99a6aa2adbac41a16f2ce1a62f261, type: 3}
   m_Name: Shotgun
   m_EditorClassIdentifier: Assembly-CSharp::WeaponData
-  itemName: Shotgun
-  icon: {fileID: 0}
+  itemName: ShotGun_A
+  icon: {fileID: 21300000, guid: 8c32d47f7c001a744a93eac72d858658, type: 3}
   itemType: 0
   isStackable: 0
   maxStackSize: 1
-  weaponPrefab: {fileID: 0}
-  type: 1
-  damage: 60
-  attackRate: 0.8
-  maxAmmo: 12
-  reloadTime: 1.5
-  bulletSpeed: 60
+  weaponPrefab: {fileID: 919132149155446097, guid: 46305668260df154d97fe5c16d7ff541, type: 3}
+  type: 3
+  damage: 20
+  attackRate: 0.5
+  maxAmmo: 8
+  reloadTime: 2.5
+  bulletSpeed: 100
   recoil: 3
-  effectiveRange: 5
+  effectiveRange: 20
+  pelletCount: 8
+  spreadAngle: 15
+  penetrating: 0
+  autoFire: 1

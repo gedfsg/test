@@ -12,17 +12,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3eb99a6aa2adbac41a16f2ce1a62f261, type: 3}
   m_Name: Sniper
   m_EditorClassIdentifier: Assembly-CSharp::WeaponData
-  itemName: Sniper
+  itemName: Sniper_Test
   icon: {fileID: 0}
   itemType: 0
   isStackable: 0
   maxStackSize: 1
   weaponPrefab: {fileID: 0}
-  type: 1
-  damage: 80
-  attackRate: 2
-  maxAmmo: 8
+  type: 4
+  damage: 150
+  attackRate: 1.5
+  maxAmmo: 10
   reloadTime: 3
-  bulletSpeed: 200
-  recoil: 3
-  effectiveRange: 60
+  bulletSpeed: 240
+  recoil: 0
+  effectiveRange: 150
+  pelletCount: 8
+  spreadAngle: 15
+  penetrating: 0
+  autoFire: 0

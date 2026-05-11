@@ -18,11 +18,15 @@ MonoBehaviour:
   isStackable: 0
   maxStackSize: 1
   weaponPrefab: {fileID: 0}
-  type: 1
-  damage: 20
-  attackRate: 0.2
+  type: 2
+  damage: 15
+  attackRate: 0.1
   maxAmmo: 30
-  reloadTime: 2
-  bulletSpeed: 100
+  reloadTime: 1.5
+  bulletSpeed: 150
   recoil: 3
-  effectiveRange: 20
+  effectiveRange: 40
+  pelletCount: 8
+  spreadAngle: 15
+  penetrating: 0
+  autoFire: 0

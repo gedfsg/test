@@ -7,6 +7,8 @@ public class Bullet : MonoBehaviour
     public float speed = 20f; 
     public float effectiveRange = 50f;
 
+    public bool penetrating = false;
+
     private Vector3 startPosition;
     private float currentDamage;
     private TrailRenderer trail;
@@ -78,19 +80,27 @@ public class Bullet : MonoBehaviour
     {
         if (other.CompareTag(shooterTag)) return;
 
+        if (other.GetComponent<Bullet>() != null) return;
+
+        if (other.GetComponent<PickupItem>() != null) return;
+
+        bool hitSomething = false;
+
         Health targetHealth = other.GetComponent<Health>();
         if (targetHealth != null)
         {
-            // 계산된 현재 데미지를 대상에게 전달함.
-            targetHealth.TakeDamage(currentDamage); 
+            targetHealth.TakeDamage(currentDamage);
+            hitSomething = true;
         }
 
         DestructibleObstacle obstacle = other.GetComponent<DestructibleObstacle>();
         if (obstacle != null)
         {
             obstacle.TakeDamage(currentDamage);
+            hitSomething = true;
         }
 
-        Destroy(gameObject);
+        if (hitSomething && !penetrating) Destroy(gameObject);
+        if (!hitSomething) Destroy(gameObject);
     }
 }

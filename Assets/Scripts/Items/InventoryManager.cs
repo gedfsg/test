@@ -4,11 +4,14 @@ using UnityEngine;
 [System.Serializable]
 public class InventorySlot
 {
+    public string slotId;
     public ItemData item;
     public int amount;
+    public int currentAmmo = -1;
 
     public InventorySlot(ItemData item, int amount)
     {
+        this.slotId = System.Guid.NewGuid().ToString();
         this.item = item;
         this.amount = amount;
     }
@@ -80,6 +83,36 @@ public class InventoryManager : MonoBehaviour
         return true;
     }
 
+    // 탄수를 지정해서 아이템 추가
+    public bool AddItemWithAmmo(ItemData itemToAdd, int amountToAdd, int ammo)
+    {
+        bool result = AddItem(itemToAdd, amountToAdd);
+        // 방금 추가된 슬롯(마지막 슬롯)에 탄수 저장
+        if (result)
+        {
+            InventorySlot slot = inventory[inventory.Count - 1];
+            slot.currentAmmo = ammo;
+        }
+        return result;
+    }
+
+    // ID로 슬롯 반환
+    public InventorySlot GetSlotById(string id)
+    {
+        return inventory.Find(s => s.slotId == id);
+    }
+
+    // ID로 아이템 제거
+    public void RemoveItemById(string id)
+    {
+        InventorySlot slot = GetSlotById(id);
+        if (slot == null) return;
+        slot.amount--;
+        if (slot.amount <= 0)
+            inventory.Remove(slot);
+        RefreshUI();
+    }
+
     public void IncreaseCapacity(int extraSlots)
     {
         maxCapacity += extraSlots;
@@ -89,9 +122,7 @@ public class InventoryManager : MonoBehaviour
     void Update()
     {
         if (UnityEngine.InputSystem.Keyboard.current.hKey.wasPressedThisFrame)
-        {
             UseConsumable();
-        }
     }
 
     public void UseConsumable()
@@ -107,17 +138,13 @@ public class InventoryManager : MonoBehaviour
                 {
                     Health playerHealth = GetComponent<Health>();
                     if (playerHealth != null)
-                    {
                         playerHealth.Heal(potion.healAmount);
-                    }
 
                     slot.amount--;
                     Debug.Log(potion.itemName + " 사용! (남은 개수: " + slot.amount + ")");
 
                     if (slot.amount <= 0)
-                    {
                         inventory.RemoveAt(i);
-                    }
 
                     RefreshUI();
                     return;
@@ -136,11 +163,9 @@ public class InventoryManager : MonoBehaviour
                 inventory[i].amount--;
                 if (inventory[i].amount <= 0)
                     inventory.RemoveAt(i);
-
                 RefreshUI();
                 return;
             }
         }
     }
-
 }

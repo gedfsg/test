@@ -17,10 +17,24 @@ public class WeaponData : ItemData
     public float bulletSpeed; 
     public float recoil; 
     public float effectiveRange;
+
+    [Header("Shotgun Only")]
+    public int pelletCount = 8;      // 산탄 수
+    public float spreadAngle = 15f;  // 퍼짐 각도(도)
+
+    [Header("Sniper Only")]
+    public bool penetrating = false; // 관통탄 여부
+
+    [Header("Fire Mode")]
+    public bool autoFire = false;  // true면 자동연사, false면 반자동(1클릭 1발)
+
 }
 
 public enum WeaponType
 {
     Melee,
-    Ranged
+    Ranged,
+    AR,
+    Shotgun,
+    Sniper
 }

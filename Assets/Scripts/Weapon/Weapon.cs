@@ -9,7 +9,6 @@ public class Weapon : MonoBehaviour
     public Transform firePoint;
     public string shooterTag;
 
-    // 추가된 데이터 연동 변수임.
     [Header("Weapon Data")]
     public WeaponData weaponData;
 
@@ -26,17 +25,13 @@ public class Weapon : MonoBehaviour
     private float lastFireTime;
     private bool isReloading = false;
 
+
     void Start()
     {
-        // 데이터 파일이 할당되어 있다면 해당 데이터의 탄약 수치로 초기화함.
         if (weaponData != null)
-        {
             currentAmmo = weaponData.maxAmmo;
-        }
         else
-        {
             currentAmmo = 30;
-        }
 
         if (muzzleFlashLight != null)
             muzzleFlashLight.enabled = false;
@@ -45,15 +40,25 @@ public class Weapon : MonoBehaviour
     public void TryFire()
     {
         if (isReloading) return;
-        if (currentAmmo <= 0)
-        {
-            StartCoroutine(Reload());
-            return;
-        }
+        if (currentAmmo <= 0) { StartCoroutine(Reload()); return; }
 
-        // 무기 데이터의 연사 속도를 참조함.
+        bool auto = (weaponData != null) && weaponData.autoFire;
+        if (!auto) return;
+
         float currentFireRate = (weaponData != null) ? weaponData.attackRate : 0.2f;
+        if (Time.time >= lastFireTime + currentFireRate)
+        {
+            Shoot();
+            lastFireTime = Time.time;
+        }
+    }
 
+    public void TryFireSingle()
+    {
+        if (isReloading) return;
+        if (currentAmmo <= 0) { StartCoroutine(Reload()); return; }
+
+        float currentFireRate = (weaponData != null) ? weaponData.attackRate : 0.5f;
         if (Time.time >= lastFireTime + currentFireRate)
         {
             Shoot();
@@ -74,32 +79,33 @@ public class Weapon : MonoBehaviour
             Destroy(flash, 0.1f);
         }
 
-        // 마우스 위치로 Ray를 쏴서 바닥의 목표 지점을 구함.
-        Ray ray = Camera.main.ScreenPointToRay(
-            UnityEngine.InputSystem.Mouse.current.position.ReadValue());
-        RaycastHit hit;
+        Vector3 targetPoint;
+        bool hasTarget = GameUtils.GetMouseWorldPosition(Camera.main, firePoint.position.y, out targetPoint);
+        Vector3 baseDirection = hasTarget
+            ? (targetPoint - firePoint.position).normalized
+            : firePoint.forward;
 
-        Vector3 direction;
+        WeaponType wType = (weaponData != null) ? weaponData.type : WeaponType.Ranged;
 
-        if (GameUtils.GetMouseWorldPosition(Camera.main, firePoint.position.y, out Vector3 targetPoint))
+        if (wType == WeaponType.Shotgun)
         {
-            direction = (targetPoint - firePoint.position).normalized;
+            int pellets = (weaponData != null) ? weaponData.pelletCount : 8;
+            float spread = (weaponData != null) ? weaponData.spreadAngle : 15f;
+
+            for (int i = 0; i < pellets; i++)
+                SpawnBullet(ApplySpread(baseDirection, spread));
         }
         else
         {
-            direction = firePoint.forward;
+            float recoil = (weaponData != null) ? weaponData.recoil : 0f;
+            SpawnBullet(ApplySpread(baseDirection, recoil));
         }
+    }
 
-        float currentRecoil = (weaponData != null) ? weaponData.recoil : 0f;
-
-        Quaternion baseRotation = Quaternion.LookRotation(direction);
-
-        // 반동 적용
-        Quaternion randomRecoilRotation = Quaternion.Euler(
-            0, Random.Range(-currentRecoil, currentRecoil), 0);
-        Quaternion finalFireRotation = baseRotation * randomRecoilRotation;
-
-        GameObject bulletObj = Instantiate(bulletPrefab, firePoint.position, finalFireRotation);
+    void SpawnBullet(Vector3 direction)
+    {
+        Quaternion rotation = Quaternion.LookRotation(direction);
+        GameObject bulletObj = Instantiate(bulletPrefab, firePoint.position, rotation);
         Bullet bullet = bulletObj.GetComponent<Bullet>();
 
         if (bullet != null)
@@ -110,8 +116,17 @@ public class Weapon : MonoBehaviour
                 bullet.damage = weaponData.damage;
                 bullet.speed = weaponData.bulletSpeed;
                 bullet.effectiveRange = weaponData.effectiveRange;
+                bullet.penetrating = (weaponData.type == WeaponType.Sniper) && weaponData.penetrating;
             }
         }
+    }
+
+    Vector3 ApplySpread(Vector3 baseDir, float maxAngle)
+    {
+        if (maxAngle <= 0f) return baseDir;
+        float yaw = Random.Range(-maxAngle, maxAngle);
+        float pitch = Random.Range(-maxAngle, maxAngle);
+        return Quaternion.Euler(pitch, yaw, 0f) * baseDir;
     }
 
     private IEnumerator MuzzleFlash()
@@ -126,8 +141,6 @@ public class Weapon : MonoBehaviour
         if (isReloading) yield break;
 
         isReloading = true;
-
-        // 무기 데이터의 장전 소요 시간을 참조함.
         float currentReloadTime = (weaponData != null) ? weaponData.reloadTime : 2.0f;
 
         onReloadStart?.Invoke(currentReloadTime);
@@ -144,26 +157,17 @@ public class Weapon : MonoBehaviour
     {
         int max = (weaponData != null) ? weaponData.maxAmmo : 30;
         if (!isReloading && currentAmmo < max)
-        {
             StartCoroutine(Reload());
-        }
     }
 
-    public int GetCurrentAmmo()
-    {
-        return currentAmmo;
-    }
+    public int GetCurrentAmmo() => currentAmmo;
+    public int GetMaxAmmo() => (weaponData != null) ? weaponData.maxAmmo : 30;
 
-    public int GetMaxAmmo()
-    {
-        return (weaponData != null) ? weaponData.maxAmmo : 30;
-    }
-
-    // 외부에서 새로운 무기 데이터를 덮어씌울 때 호출하는 함수
+    // savedAmmo가 -1이면 처음 줍는 무기 → maxAmmo로 초기화
+    // savedAmmo가 0 이상이면 저장된 탄수 복원
     public void ChangeWeaponData(WeaponData newData)
     {
         weaponData = newData;
-        // 새 데이터의 최대 탄약수로 즉시 장전
         currentAmmo = (weaponData != null) ? weaponData.maxAmmo : 30;
         Debug.Log("원거리 무기가 [" + newData.itemName + "]으로 교체됨!");
     }
