@@ -14,7 +14,6 @@ public class PlayerController : MonoBehaviour
     private Locomotion locomotion;
     private InventoryUI inventoryUI;
 
-    private EquipmentManager equipmentManager;
 
 
     private bool isFireButtonPressed = false;
@@ -225,17 +224,23 @@ public class PlayerController : MonoBehaviour
         nearbyItems.Remove(item);
     }
 
-    public void SwapWeaponData(WeaponData newData)
+    public void SwapWeaponData(WeaponData newData, int savedAmmo = -1)
     {
         if (newData == null) return;
 
-        if (newData.type == WeaponType.Ranged)
-        {
-            if (rangedWeapon != null) rangedWeapon.ChangeWeaponData(newData);
-        }
-        else if (newData.type == WeaponType.Melee)
+        if (newData.type == WeaponType.Melee)
         {
             if (meleeWeapon != null) meleeWeapon.ChangeWeaponData(newData);
+        }
+        else
+        {
+            if (rangedWeapon != null) rangedWeapon.ChangeWeaponData(newData, savedAmmo);
+
+            // 비주얼만 교체
+            WeaponHandAttacher attacher = GetComponent<WeaponHandAttacher>();
+            Debug.Log($"attacher: {attacher}, prefab: {newData.weaponPrefab}");
+            if (attacher != null && newData.weaponPrefab != null)
+                attacher.SwapVisual(newData.weaponPrefab, newData.positionOffset, newData.rotationOffset);
         }
     }
 

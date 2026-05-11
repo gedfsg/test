@@ -12,6 +12,7 @@ public class WeaponHandAttacher : MonoBehaviour
     [Header("손 위치/회전 오프셋 (플레이 중 Inspector에서 실시간 조정 가능)")]
     public Vector3 positionOffset = new Vector3(0.04f, 0.02f, 0.08f);
     public Vector3 rotationOffset = new Vector3(-90f, 0f, 0f);
+    public Vector3 scaleOffset = Vector3.one;
 
     const string RIGHT_HAND_BONE = "hand.R";
 
@@ -45,11 +46,12 @@ public class WeaponHandAttacher : MonoBehaviour
     public void ApplyOffset()
     {
         Transform handBone = FindDeep(transform, RIGHT_HAND_BONE);
-        if (handBone != null && rangedWeapon != null &&
-            rangedWeapon.transform.parent == handBone)
+        if (handBone == null) return;
+        foreach (Transform child in handBone)
         {
-            rangedWeapon.transform.localPosition = positionOffset;
-            rangedWeapon.transform.localRotation = Quaternion.Euler(rotationOffset);
+            child.localPosition = positionOffset;
+            child.localRotation = Quaternion.Euler(rotationOffset);
+            child.localScale = scaleOffset;
         }
     }
 
@@ -62,6 +64,24 @@ public class WeaponHandAttacher : MonoBehaviour
             if (found != null) return found;
         }
         return null;
+    }
+
+    public void SwapVisual(GameObject newWeaponPrefab, Vector3 posOffset, Vector3 rotOffset)
+    {
+        Transform handBone = FindDeep(transform, RIGHT_HAND_BONE);
+        if (handBone == null) return;
+
+        foreach (Transform child in handBone)
+            Destroy(child.gameObject);
+
+        GameObject newVisual = Instantiate(newWeaponPrefab, handBone);
+        newVisual.transform.localPosition = posOffset;
+        newVisual.transform.localRotation = Quaternion.Euler(rotOffset);
+
+        // rangedWeapon 필드도 갱신
+        rangedWeapon = newVisual;
+        positionOffset = posOffset;
+        rotationOffset = rotOffset;
     }
 
 #if UNITY_EDITOR

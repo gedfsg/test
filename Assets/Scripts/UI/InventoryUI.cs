@@ -129,24 +129,28 @@ public class InventoryUI : MonoBehaviour
             return;
         }
 
-        WeaponData currentWeapon = playerController.GetCurrentWeaponData(newWeapon.type);
+        WeaponType lookupType = (newWeapon.type == WeaponType.Melee)
+            ? WeaponType.Melee
+            : WeaponType.Ranged;
 
-        // slotId로 정확한 슬롯 찾아서 저장된 탄수 가져오기
+        WeaponData currentWeapon = playerController.GetCurrentWeaponData(lookupType);
+
+        // 새 무기 슬롯의 인덱스와 탄수 저장
+        int slotIndex = inventoryManager.GetSlotIndex(slotId);
         InventorySlot newSlot = inventoryManager.GetSlotById(slotId);
         int savedAmmo = newSlot?.currentAmmo ?? -1;
 
-        // slotId로 정확하게 제거
+        // 새 무기 슬롯 제거
         inventoryManager.RemoveItemById(slotId);
 
         if (currentWeapon != null)
         {
-            // 현재 장착 무기 탄수 저장하면서 인벤토리에 반납
+            // 현재 무기를 새 무기가 있던 자리에 삽입
             int currentAmmo = playerController.GetCurrentAmmo();
-            inventoryManager.AddItemWithAmmo(currentWeapon, 1, currentAmmo);
+            inventoryManager.InsertItemAt(slotIndex, currentWeapon, 1, currentAmmo);
         }
 
-        // 저장된 탄수로 새 무기 장착
-        playerController.SwapWeaponData(newWeapon);
+        playerController.SwapWeaponData(newWeapon, savedAmmo);
 
         Debug.Log($"[인벤토리] '{newWeapon.itemName}' 장착! / '{currentWeapon?.itemName}' 인벤토리로");
         ToggleInventory();

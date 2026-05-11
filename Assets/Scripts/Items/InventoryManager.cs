@@ -168,4 +168,19 @@ public class InventoryManager : MonoBehaviour
             }
         }
     }
+
+    // 특정 슬롯 위치에 아이템 삽입 (탄수 포함)
+    public void InsertItemAt(int index, ItemData item, int amount, int ammo = -1)
+    {
+        InventorySlot slot = new InventorySlot(item, amount);
+        slot.currentAmmo = ammo;
+        inventory.Insert(index, slot);
+        RefreshUI();
+    }
+
+    // 슬롯 인덱스 반환
+    public int GetSlotIndex(string slotId)
+    {
+        return inventory.FindIndex(s => s.slotId == slotId);
+    }
 }

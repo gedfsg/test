@@ -9,10 +9,11 @@ public class WeaponOffsetTuner : EditorWindow
     private WeaponHandAttacher attacher;
     private Vector3 pos;
     private Vector3 rot;
+    private Vector3 scale;
 
     void OnGUI()
     {
-        EditorGUILayout.LabelField("🔫 총 위치/회전 실시간 조정", EditorStyles.boldLabel);
+        EditorGUILayout.LabelField("🔫 총 위치/회전/크기 실시간 조정", EditorStyles.boldLabel);
         EditorGUILayout.HelpBox("플레이 중에 사용하세요. Apply 누르면 즉시 반영됩니다.", MessageType.Info);
 
         if (attacher == null)
@@ -30,6 +31,7 @@ public class WeaponOffsetTuner : EditorWindow
 
         pos = EditorGUILayout.Vector3Field("Position Offset", attacher.positionOffset);
         rot = EditorGUILayout.Vector3Field("Rotation Offset", attacher.rotationOffset);
+        scale = EditorGUILayout.Vector3Field("Scale", attacher.scaleOffset);
 
         EditorGUILayout.Space();
 
@@ -37,6 +39,7 @@ public class WeaponOffsetTuner : EditorWindow
         {
             attacher.positionOffset = pos;
             attacher.rotationOffset = rot;
+            attacher.scaleOffset = scale;
             attacher.ApplyOffset();
         }
 

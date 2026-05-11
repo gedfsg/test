@@ -165,10 +165,12 @@ public class Weapon : MonoBehaviour
 
     // savedAmmo가 -1이면 처음 줍는 무기 → maxAmmo로 초기화
     // savedAmmo가 0 이상이면 저장된 탄수 복원
-    public void ChangeWeaponData(WeaponData newData)
+    public void ChangeWeaponData(WeaponData newData, int savedAmmo = -1)
     {
         weaponData = newData;
-        currentAmmo = (weaponData != null) ? weaponData.maxAmmo : 30;
-        Debug.Log("원거리 무기가 [" + newData.itemName + "]으로 교체됨!");
+        // savedAmmo가 -1이면 처음 줍는 무기 → maxAmmo로 초기화
+        // 0 이상이면 저장된 탄수 복원
+        currentAmmo = (savedAmmo >= 0) ? savedAmmo : newData.maxAmmo;
+        Debug.Log($"[{newData.itemName}] 장착 — 탄약: {currentAmmo}/{newData.maxAmmo}");
     }
 }

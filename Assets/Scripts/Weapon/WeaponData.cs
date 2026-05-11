@@ -28,6 +28,10 @@ public class WeaponData : ItemData
     [Header("Fire Mode")]
     public bool autoFire = false;  // true면 자동연사, false면 반자동(1클릭 1발)
 
+    [Header("Hand Offset")]
+    public Vector3 positionOffset = new Vector3(0.01f, 0.06f, -0.2f);
+    public Vector3 rotationOffset = new Vector3(30f, 200f, -20f);
+
 }
 
 public enum WeaponType

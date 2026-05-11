@@ -17,7 +17,7 @@ MonoBehaviour:
   itemType: 0
   isStackable: 0
   maxStackSize: 1
-  weaponPrefab: {fileID: 919132149155446097, guid: 46305668260df154d97fe5c16d7ff541, type: 3}
+  weaponPrefab: {fileID: 2891434728239961834, guid: 6a911cd50bb8092409fc37566dc2333d, type: 3}
   type: 3
   damage: 20
   attackRate: 0.5
@@ -30,3 +30,5 @@ MonoBehaviour:
   spreadAngle: 15
   penetrating: 0
   autoFire: 1
+  positionOffset: {x: 0.01, y: 0.06, z: -0.2}
+  rotationOffset: {x: 30, y: 170, z: 0}
