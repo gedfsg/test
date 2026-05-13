@@ -39,6 +39,19 @@ public class InventoryManager : MonoBehaviour
 
     public bool AddItem(ItemData itemToAdd, int amountToAdd)
     {
+        // 무기 아이템은 핫바로 직접 전달
+        if (itemToAdd.itemType == ItemType.Weapon)
+        {
+            WeaponData wd = itemToAdd as WeaponData;
+            if (wd != null && WeaponHotbarUI.Instance != null)
+            {
+                bool added = WeaponHotbarUI.Instance.AddWeapon(wd);
+                if (!added)
+                    Debug.LogWarning("무기 핫바가 가득 찼습니다! (최대 5개)");
+                return added;
+            }
+        }
+
         if (itemToAdd.isStackable)
         {
             foreach (InventorySlot slot in inventory)

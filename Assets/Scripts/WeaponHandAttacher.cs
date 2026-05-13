@@ -39,8 +39,6 @@ public class WeaponHandAttacher : MonoBehaviour
         rangedWeapon.transform.SetParent(handBone);
         rangedWeapon.transform.localPosition = positionOffset;
         rangedWeapon.transform.localRotation = Quaternion.Euler(rotationOffset);
-
-        Debug.Log($"[WeaponHandAttacher] {rangedWeapon.name} → {handBone.name} 부착 완료!");
     }
 
     public void ApplyOffset()
@@ -71,15 +69,18 @@ public class WeaponHandAttacher : MonoBehaviour
         Transform handBone = FindDeep(transform, RIGHT_HAND_BONE);
         if (handBone == null) return;
 
+        // Weapon 스크립트가 없는 순수 비주얼 오브젝트만 삭제
         foreach (Transform child in handBone)
-            Destroy(child.gameObject);
+        {
+            if (child.GetComponentInChildren<Weapon>() == null)
+                Destroy(child.gameObject);
+        }
 
+        // 새 비주얼 생성
         GameObject newVisual = Instantiate(newWeaponPrefab, handBone);
         newVisual.transform.localPosition = posOffset;
         newVisual.transform.localRotation = Quaternion.Euler(rotOffset);
 
-        // rangedWeapon 필드도 갱신
-        rangedWeapon = newVisual;
         positionOffset = posOffset;
         rotationOffset = rotOffset;
     }

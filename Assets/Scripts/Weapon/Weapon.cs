@@ -144,13 +144,11 @@ public class Weapon : MonoBehaviour
         float currentReloadTime = (weaponData != null) ? weaponData.reloadTime : 2.0f;
 
         onReloadStart?.Invoke(currentReloadTime);
-        Debug.Log(shooterTag + " 장전 중...");
         yield return new WaitForSeconds(currentReloadTime);
 
         currentAmmo = (weaponData != null) ? weaponData.maxAmmo : 30;
         isReloading = false;
         onReloadComplete?.Invoke();
-        Debug.Log(shooterTag + " 장전 완료!");
     }
 
     public void TryReload()
@@ -167,10 +165,14 @@ public class Weapon : MonoBehaviour
     // savedAmmo가 0 이상이면 저장된 탄수 복원
     public void ChangeWeaponData(WeaponData newData, int savedAmmo = -1)
     {
-        weaponData = newData;
-        // savedAmmo가 -1이면 처음 줍는 무기 → maxAmmo로 초기화
-        // 0 이상이면 저장된 탄수 복원
+        // 장전 중이면 취소
+        if (isReloading)
+        {
+            StopAllCoroutines();
+            isReloading = false;
+        }
+
+        weaponData  = newData;
         currentAmmo = (savedAmmo >= 0) ? savedAmmo : newData.maxAmmo;
-        Debug.Log($"[{newData.itemName}] 장착 — 탄약: {currentAmmo}/{newData.maxAmmo}");
     }
 }

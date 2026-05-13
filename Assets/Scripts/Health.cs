@@ -56,15 +56,16 @@ public class Health : MonoBehaviour
     {
         currentHealth += amount;
         if (currentHealth > maxHealth)
-        {
             currentHealth = maxHealth;
-        }
-        Debug.Log("회복량: " + amount + ", 현재 체력: " + currentHealth);
     }
 
     void Die()
     {
         onDeath?.Invoke();
+
+        // 플레이어가 죽으면 게임 정지
+        if (CompareTag("Player"))
+            Time.timeScale = 0f;
     }
 
     public void SelfDestroy()

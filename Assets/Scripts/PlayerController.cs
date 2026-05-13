@@ -37,6 +37,8 @@ public class PlayerController : MonoBehaviour
     [Header("Animation Rigging")]
     public Transform aimTarget; // Inspector에서 AimTarget 연결
 
+    private WeaponHandAttacher weaponHandAttacher;
+
     void Awake()
     {
         inputActions = new PlayerInputActions();
@@ -53,6 +55,15 @@ public class PlayerController : MonoBehaviour
 
         if (rangedWeapon != null) rangedWeapon.shooterTag = "Player";
         if (meleeWeapon != null) meleeWeapon.shooterTag = "Player";
+
+        // WeaponHandAttacher 캐싱
+        weaponHandAttacher = FindAnyObjectByType<WeaponHandAttacher>();
+
+        // 기본 무기를 핫바 1번 슬롯에 등록
+        if (rangedWeapon != null && rangedWeapon.weaponData != null)
+        {
+            WeaponHotbarUI.Instance?.AddWeapon(rangedWeapon.weaponData, rangedWeapon.GetCurrentAmmo());
+        }
 
         EquipWeapon(WeaponMode.Ranged);
     }
@@ -135,7 +146,11 @@ public class PlayerController : MonoBehaviour
 
     private void HandleFire()
     {
-        if (IsPointerOverUI()) { firePressed = false; return; }
+        // 인벤토리가 열려있어도 사격 허용
+        // 단, UI 버튼 위에 있을 때는 제외 (아이템 클릭 오작동 방지)
+        InventoryUI invUI = FindAnyObjectByType<InventoryUI>();
+        bool inventoryOpen = invUI != null && invUI.isInventoryOpen;
+        if (!inventoryOpen && IsPointerOverUI()) { firePressed = false; return; }
 
         if (currentMode == WeaponMode.Ranged && rangedWeapon != null)
         {
@@ -237,10 +252,8 @@ public class PlayerController : MonoBehaviour
             if (rangedWeapon != null) rangedWeapon.ChangeWeaponData(newData, savedAmmo);
 
             // 비주얼만 교체
-            WeaponHandAttacher attacher = GetComponent<WeaponHandAttacher>();
-            Debug.Log($"attacher: {attacher}, prefab: {newData.weaponPrefab}");
-            if (attacher != null && newData.weaponPrefab != null)
-                attacher.SwapVisual(newData.weaponPrefab, newData.positionOffset, newData.rotationOffset);
+            if (weaponHandAttacher != null && newData.weaponPrefab != null)
+                weaponHandAttacher.SwapVisual(newData.weaponPrefab, newData.positionOffset, newData.rotationOffset);
         }
     }
 
