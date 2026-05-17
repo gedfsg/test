@@ -39,19 +39,6 @@ public class InventoryManager : MonoBehaviour
 
     public bool AddItem(ItemData itemToAdd, int amountToAdd)
     {
-        // 무기 아이템은 핫바로 직접 전달
-        if (itemToAdd.itemType == ItemType.Weapon)
-        {
-            WeaponData wd = itemToAdd as WeaponData;
-            if (wd != null && WeaponHotbarUI.Instance != null)
-            {
-                bool added = WeaponHotbarUI.Instance.AddWeapon(wd);
-                if (!added)
-                    Debug.LogWarning("무기 핫바가 가득 찼습니다! (최대 5개)");
-                return added;
-            }
-        }
-
         if (itemToAdd.isStackable)
         {
             foreach (InventorySlot slot in inventory)
@@ -59,11 +46,10 @@ public class InventoryManager : MonoBehaviour
                 if (slot.item == itemToAdd && slot.amount < itemToAdd.maxStackSize)
                 {
                     int spaceLeft = itemToAdd.maxStackSize - slot.amount;
-
                     if (spaceLeft >= amountToAdd)
                     {
                         slot.amount += amountToAdd;
-                        Debug.Log(itemToAdd.itemName + " " + amountToAdd + "개 획득 (누적: " + slot.amount + ")");
+                        Debug.Log(itemToAdd.itemName + " " + amountToAdd + "개 획득");
                         RefreshUI();
                         return true;
                     }
@@ -88,7 +74,6 @@ public class InventoryManager : MonoBehaviour
             int amountForNewSlot = Mathf.Min(amountToAdd, itemToAdd.maxStackSize);
             inventory.Add(new InventorySlot(itemToAdd, amountForNewSlot));
             Debug.Log(itemToAdd.itemName + " " + amountForNewSlot + "개 새 슬롯에 추가됨.");
-
             amountToAdd -= amountForNewSlot;
         }
 
@@ -96,12 +81,10 @@ public class InventoryManager : MonoBehaviour
         return true;
     }
 
-    // 탄수를 지정해서 아이템 추가
     public bool AddItemWithAmmo(ItemData itemToAdd, int amountToAdd, int ammo)
     {
         bool result = AddItem(itemToAdd, amountToAdd);
-        // 방금 추가된 슬롯(마지막 슬롯)에 탄수 저장
-        if (result)
+        if (result && inventory.Count > 0)
         {
             InventorySlot slot = inventory[inventory.Count - 1];
             slot.currentAmmo = ammo;
@@ -109,62 +92,53 @@ public class InventoryManager : MonoBehaviour
         return result;
     }
 
-    // ID로 슬롯 반환
     public InventorySlot GetSlotById(string id)
-    {
-        return inventory.Find(s => s.slotId == id);
-    }
+        => inventory.Find(s => s.slotId == id);
 
-    // ID로 아이템 제거
     public void RemoveItemById(string id)
     {
         InventorySlot slot = GetSlotById(id);
         if (slot == null) return;
         slot.amount--;
-        if (slot.amount <= 0)
-            inventory.Remove(slot);
+        if (slot.amount <= 0) inventory.Remove(slot);
         RefreshUI();
+    }
+
+    // 슬롯을 직접 지정해서 사용 (InventoryUI에서 호출)
+    public void UseConsumable(InventorySlot slot)
+    {
+        ConsumableData potion = slot.item as ConsumableData;
+        if (potion == null) return;
+
+        PlayerBuffManager buffMgr = GetComponent<PlayerBuffManager>();
+        Health health = GetComponent<Health>();
+
+        if (buffMgr != null && health != null)
+            buffMgr.ApplyConsumable(potion, health);
+        else if (health != null)
+            health.Heal(potion.healAmount);
+
+        slot.amount--;
+        Debug.Log($"{potion.itemName} 사용! (남은 개수: {slot.amount})");
+        if (slot.amount <= 0) inventory.Remove(slot);
+
+        RefreshUI();
+    }
+
+    // H키용 — 인벤토리에서 첫 번째 소모품 자동 사용 (기존 호환)
+    public void UseConsumable()
+    {
+        InventorySlot slot = inventory.Find(s =>
+            s.item.itemType == ItemType.Consumable && s.amount > 0);
+
+        if (slot != null) UseConsumable(slot);
+        else Debug.LogWarning("가방에 먹을 수 있는 소비품이 없어!");
     }
 
     public void IncreaseCapacity(int extraSlots)
     {
         maxCapacity += extraSlots;
         Debug.Log("가방 용량이 " + maxCapacity + "칸으로 늘어났어!");
-    }
-
-    void Update()
-    {
-        if (UnityEngine.InputSystem.Keyboard.current.hKey.wasPressedThisFrame)
-            UseConsumable();
-    }
-
-    public void UseConsumable()
-    {
-        for (int i = 0; i < inventory.Count; i++)
-        {
-            InventorySlot slot = inventory[i];
-
-            if (slot.item.itemType == ItemType.Consumable && slot.amount > 0)
-            {
-                ConsumableData potion = slot.item as ConsumableData;
-                if (potion != null)
-                {
-                    Health playerHealth = GetComponent<Health>();
-                    if (playerHealth != null)
-                        playerHealth.Heal(potion.healAmount);
-
-                    slot.amount--;
-                    Debug.Log(potion.itemName + " 사용! (남은 개수: " + slot.amount + ")");
-
-                    if (slot.amount <= 0)
-                        inventory.RemoveAt(i);
-
-                    RefreshUI();
-                    return;
-                }
-            }
-        }
-        Debug.LogWarning("가방에 먹을 수 있는 소비품이 없어!");
     }
 
     public void RemoveItem(ItemData itemToRemove)
@@ -174,15 +148,13 @@ public class InventoryManager : MonoBehaviour
             if (inventory[i].item == itemToRemove)
             {
                 inventory[i].amount--;
-                if (inventory[i].amount <= 0)
-                    inventory.RemoveAt(i);
+                if (inventory[i].amount <= 0) inventory.RemoveAt(i);
                 RefreshUI();
                 return;
             }
         }
     }
 
-    // 특정 슬롯 위치에 아이템 삽입 (탄수 포함)
     public void InsertItemAt(int index, ItemData item, int amount, int ammo = -1)
     {
         InventorySlot slot = new InventorySlot(item, amount);
@@ -191,9 +163,6 @@ public class InventoryManager : MonoBehaviour
         RefreshUI();
     }
 
-    // 슬롯 인덱스 반환
     public int GetSlotIndex(string slotId)
-    {
-        return inventory.FindIndex(s => s.slotId == slotId);
-    }
+        => inventory.FindIndex(s => s.slotId == slotId);
 }

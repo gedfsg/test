@@ -1,0 +1,11 @@
+Model Information:
+* title:	Medikit
+* source:	https://sketchfab.com/3d-models/medikit-11672af57b8c4aaf9f49193a6134dc52
+* author:	KaitlinKelly (https://sketchfab.com/KaitlinK2000)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Medikit" (https://sketchfab.com/3d-models/medikit-11672af57b8c4aaf9f49193a6134dc52) by KaitlinKelly (https://sketchfab.com/KaitlinK2000) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

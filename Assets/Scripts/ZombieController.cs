@@ -33,6 +33,11 @@ public class ZombieController : MonoBehaviour
     public float wanderSpeed = 0.8f;            // 배회 속도 (Mixamo Zombie Walk 기준)
     public float chaseSpeed = 2.5f;             // 추적 속도 (Mixamo Zombie Run 기준)
 
+    [Header("Item Drop")]
+    public ItemData[] possibleDrops;        // Inspector에서 드롭 가능 아이템 배열
+    [Range(0f, 1f)] public float dropChance = 0.4f; // 드롭 확률
+    public GameObject pickupPrefab;         // PickupItem 프리팹
+
     // ────────────────────────────────────────────
     // 내부 상태
     // ────────────────────────────────────────────
@@ -310,6 +315,26 @@ public class ZombieController : MonoBehaviour
         timeOutOfRange = 0f;
     }
 
+    // ── 기절 (섬광탄) ────────────────────────────────
+    private Coroutine stunCoroutine;
+
+    public void Stun(float duration)
+    {
+        if (stunCoroutine != null) StopCoroutine(stunCoroutine);
+        stunCoroutine = StartCoroutine(StunRoutine(duration));
+    }
+
+    private IEnumerator StunRoutine(float duration)
+    {
+        var prevState = currentState;
+        currentState = ZombieState.Wander; // 배회 상태로 고정
+        agent.isStopped = true;
+        yield return new WaitForSeconds(duration);
+        agent.isStopped = false;
+        currentState = prevState;
+        stunCoroutine = null;
+    }
+
     /// <summary>
     /// 사망 시 Health.onDeath에서 호출.
     /// </summary>
@@ -325,6 +350,7 @@ public class ZombieController : MonoBehaviour
             animator.SetBool(AnimDead, true);
 
         StartCoroutine(DeathSequence());
+        TryDropItem();
         enabled = false;
     }
 
@@ -412,5 +438,22 @@ public class ZombieController : MonoBehaviour
         // 공격 사거리 (파랑)
         Gizmos.color = Color.blue;
         Gizmos.DrawWireSphere(transform.position, attackRange);
+    }
+
+    private void TryDropItem()
+    {
+        if (possibleDrops == null || possibleDrops.Length == 0) return;
+        if (pickupPrefab == null) return;
+        if (Random.value > dropChance) return;
+
+        ItemData toDrop = possibleDrops[Random.Range(0, possibleDrops.Length)];
+        Vector3 dropPos = transform.position + Vector3.up * 0.3f;
+        GameObject obj = Instantiate(pickupPrefab, dropPos, Quaternion.identity);
+        PickupItem pickup = obj.GetComponent<PickupItem>();
+        if (pickup != null)
+        {
+            pickup.itemData = toDrop;
+            pickup.amount = 1;
+        }
     }
 }

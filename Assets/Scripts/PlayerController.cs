@@ -12,11 +12,9 @@ public class PlayerController : MonoBehaviour
 
     private PlayerInputActions inputActions;
     private Locomotion locomotion;
-    private InventoryUI inventoryUI;
-
-
 
     private bool isFireButtonPressed = false;
+    private bool firePressed = false;
 
     [Header("Weapons")]
     public GameObject rangedWeaponObject;
@@ -30,14 +28,14 @@ public class PlayerController : MonoBehaviour
     private enum WeaponMode { Ranged, Melee }
     private WeaponMode currentMode = WeaponMode.Ranged;
 
-    private bool firePressed = false; // 이번 프레임에 클릭했는지
-
     private List<PickupItem> nearbyItems = new List<PickupItem>();
 
     [Header("Animation Rigging")]
-    public Transform aimTarget; // Inspector에서 AimTarget 연결
+    public Transform aimTarget;
 
     private WeaponHandAttacher weaponHandAttacher;
+
+    // ── Unity 생명주기 ────────────────────────────
 
     void Awake()
     {
@@ -56,18 +54,13 @@ public class PlayerController : MonoBehaviour
         if (rangedWeapon != null) rangedWeapon.shooterTag = "Player";
         if (meleeWeapon != null) meleeWeapon.shooterTag = "Player";
 
-        // WeaponHandAttacher 캐싱
         weaponHandAttacher = FindAnyObjectByType<WeaponHandAttacher>();
 
-        // 기본 무기를 핫바 1번 슬롯에 등록
         if (rangedWeapon != null && rangedWeapon.weaponData != null)
-        {
             WeaponHotbarUI.Instance?.AddWeapon(rangedWeapon.weaponData, rangedWeapon.GetCurrentAmmo());
-        }
 
         EquipWeapon(WeaponMode.Ranged);
     }
-
 
     void OnEnable()
     {
@@ -106,30 +99,6 @@ public class PlayerController : MonoBehaviour
         inputActions.Player.Interact.performed -= OnInteractPerformed;
     }
 
-    // 마우스 포인터가 UI 위에 있는지 체크
-    // Update()에서 호출하므로 IsPointerOverGameObject() 정상 작동
-    private bool IsPointerOverUI()
-    {
-        return EventSystem.current != null &&
-               EventSystem.current.IsPointerOverGameObject();
-    }
-
-    private void OnFireStarted(InputAction.CallbackContext context)
-    {
-        isFireButtonPressed = true;
-        firePressed = true; // 누른 순간만 true
-    }
-
-    private void OnFireCanceled(InputAction.CallbackContext context)
-    {
-        isFireButtonPressed = false;
-    }
-    private void OnReloadPerformed(InputAction.CallbackContext context)
-    {
-        if (currentMode == WeaponMode.Ranged && rangedWeapon != null)
-            rangedWeapon.TryReload();
-    }
-
     void Update()
     {
         Vector2 inputVector = inputActions.Player.Move.ReadValue<Vector2>();
@@ -139,60 +108,133 @@ public class PlayerController : MonoBehaviour
         HandleFire();
     }
 
-    void FixedUpdate()
+    void FixedUpdate() => locomotion.Move(moveInput);
+
+    // ── 입력 콜백 ────────────────────────────────
+
+    private void OnFireStarted(InputAction.CallbackContext context)
     {
-        locomotion.Move(moveInput);
+        isFireButtonPressed = true;
+        firePressed = true;
     }
+
+    private void OnFireCanceled(InputAction.CallbackContext context)
+        => isFireButtonPressed = false;
+
+    private void OnReloadPerformed(InputAction.CallbackContext context)
+    {
+        if (currentMode == WeaponMode.Ranged && rangedWeapon != null)
+            rangedWeapon.TryReload();
+    }
+
+    private void OnRestartPerformed(InputAction.CallbackContext context)
+        => SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+
+    private void OnInteractPerformed(InputAction.CallbackContext context)
+    {
+        nearbyItems.RemoveAll(item => item == null);
+        if (nearbyItems.Count == 0) return;
+
+        PickupItem target = nearbyItems[0];
+        InventoryManager inventory = GetComponent<InventoryManager>();
+        if (inventory == null) return;
+
+        if (inventory.AddItem(target.itemData, target.amount))
+        {
+            nearbyItems.Remove(target);
+            Destroy(target.gameObject);
+        }
+    }
+
+    // ── 발사 처리 ────────────────────────────────
+
+    private bool IsPointerOverUI()
+        => EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
 
     private void HandleFire()
     {
-        // 인벤토리가 열려있어도 사격 허용
-        // 단, UI 버튼 위에 있을 때는 제외 (아이템 클릭 오작동 방지)
-        InventoryUI invUI = FindAnyObjectByType<InventoryUI>();
-        bool inventoryOpen = invUI != null && invUI.isInventoryOpen;
-        if (!inventoryOpen && IsPointerOverUI()) { firePressed = false; return; }
+        if (IsPointerOverUI()) { firePressed = false; return; }
 
+        ItemData activeItem = WeaponHotbarUI.Instance?.GetActiveItem();
+
+        // 빈 슬롯이면 아무것도 안 함
+        if (activeItem == null) { firePressed = false; return; }
+
+        if (activeItem is ThrowableData)
+        {
+            if (firePressed) ThrowActiveItem();
+            firePressed = false;
+            return;
+        }
+
+        if (activeItem is ConsumableData)
+        {
+            if (firePressed) UseActiveConsumable();
+            firePressed = false;
+            return;
+        }
+
+        // 일반 무기
         if (currentMode == WeaponMode.Ranged && rangedWeapon != null)
         {
             bool auto = rangedWeapon.weaponData != null && rangedWeapon.weaponData.autoFire;
-
-            if (auto && isFireButtonPressed)
-                rangedWeapon.TryFire();
-            else if (!auto && firePressed) // 누른 순간 딱 1번만
-                rangedWeapon.TryFireSingle();
+            if (auto && isFireButtonPressed) rangedWeapon.TryFire();
+            else if (!auto && firePressed) rangedWeapon.TryFireSingle();
         }
         else if (currentMode == WeaponMode.Melee && meleeWeapon != null && isFireButtonPressed)
         {
             meleeWeapon.TryAttack();
         }
 
-        firePressed = false; // 매 프레임 끝에 초기화
+        firePressed = false;
     }
 
-    void AimAtMouse()
+    // ── 투척 ─────────────────────────────────────
+
+    private void ThrowActiveItem()
     {
-        if (Mouse.current == null || mainCamera == null) return;
+        var hotbar = WeaponHotbarUI.Instance;
+        if (hotbar == null) return;
 
-        float aimY = rangedWeapon != null
-            ? rangedWeapon.firePoint.position.y
-            : transform.position.y;
+        ThrowableData throwable = hotbar.GetActiveItem() as ThrowableData;
+        if (throwable == null || throwable.throwablePrefab == null) return;
 
-        if (GameUtils.GetMouseWorldPosition(mainCamera, aimY, out Vector3 targetPoint))
+        Vector3 spawnPos = transform.position + Vector3.up * 1.2f;
+        Vector3 throwDir = (transform.forward + Vector3.up * 0.35f).normalized;
+
+        GameObject obj = Instantiate(throwable.throwablePrefab, spawnPos, Quaternion.identity);
+        ThrowableItem thrownItem = obj.GetComponent<ThrowableItem>();
+        if (thrownItem != null)
         {
-            // 기존 플레이어 회전
-            Vector3 lookDirection = targetPoint - transform.position;
-            lookDirection.y = 0f;
-            if (lookDirection.sqrMagnitude < 0.01f) return;
-
-            Quaternion targetRotation = Quaternion.LookRotation(lookDirection);
-            transform.rotation = Quaternion.Slerp(
-                transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
-
-            // AimTarget을 마우스 위치로 이동
-            if (aimTarget != null)
-                aimTarget.position = targetPoint;
+            thrownItem.data = throwable;
+            thrownItem.Throw(throwDir, 12f);
         }
+
+        hotbar.ConsumeThrowable(hotbar.GetActiveSlot());
     }
+
+    // ── 소모품 ───────────────────────────────────
+
+    private void UseActiveConsumable()
+    {
+        var hotbar = WeaponHotbarUI.Instance;
+        if (hotbar == null) return;
+
+        ConsumableData consumable = hotbar.GetActiveItem() as ConsumableData;
+        if (consumable == null) return;
+
+        PlayerBuffManager buffMgr = GetComponent<PlayerBuffManager>();
+        Health health = GetComponent<Health>();
+
+        if (buffMgr != null && health != null)
+            buffMgr.ApplyConsumable(consumable, health);
+        else if (health != null)
+            health.Heal(consumable.healAmount);
+
+        hotbar.ConsumeItem(hotbar.GetActiveSlot());
+    }
+
+    // ── 무기 ─────────────────────────────────────
 
     private void EquipWeapon(WeaponMode newMode)
     {
@@ -210,35 +252,6 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    private void OnInteractPerformed(InputAction.CallbackContext context)
-    {
-        nearbyItems.RemoveAll(item => item == null);
-        if (nearbyItems.Count == 0) return;
-
-        PickupItem target = nearbyItems[0];
-        InventoryManager inventory = GetComponent<InventoryManager>();
-        if (inventory != null)
-        {
-            bool isAdded = inventory.AddItem(target.itemData, target.amount);
-            if (isAdded)
-            {
-                nearbyItems.Remove(target);
-                Destroy(target.gameObject);
-            }
-        }
-    }
-
-    public void SetNearbyItem(PickupItem item)
-    {
-        if (!nearbyItems.Contains(item))
-            nearbyItems.Add(item);
-    }
-
-    public void ClearNearbyItem(PickupItem item)
-    {
-        nearbyItems.Remove(item);
-    }
-
     public void SwapWeaponData(WeaponData newData, int savedAmmo = -1)
     {
         if (newData == null) return;
@@ -250,28 +263,50 @@ public class PlayerController : MonoBehaviour
         else
         {
             if (rangedWeapon != null) rangedWeapon.ChangeWeaponData(newData, savedAmmo);
-
-            // 비주얼만 교체
             if (weaponHandAttacher != null && newData.weaponPrefab != null)
                 weaponHandAttacher.SwapVisual(newData.weaponPrefab, newData.positionOffset, newData.rotationOffset);
         }
     }
 
-    public int GetCurrentAmmo()
+    // ── 아이템 픽업 ──────────────────────────────
+
+    public void SetNearbyItem(PickupItem item)
     {
-        return rangedWeapon != null ? rangedWeapon.GetCurrentAmmo() : 0;
+        if (!nearbyItems.Contains(item)) nearbyItems.Add(item);
     }
+
+    public void ClearNearbyItem(PickupItem item) => nearbyItems.Remove(item);
+
+    // ── 외부 조회 ────────────────────────────────
+
+    public int GetCurrentAmmo()
+        => rangedWeapon != null ? rangedWeapon.GetCurrentAmmo() : 0;
 
     public WeaponData GetCurrentWeaponData(WeaponType type)
-    {
-        if (type == WeaponType.Melee)
-            return meleeWeapon != null ? meleeWeapon.weaponData : null;
-        else
-            return rangedWeapon != null ? rangedWeapon.weaponData : null;
-    }
+        => type == WeaponType.Melee
+            ? meleeWeapon?.weaponData
+            : rangedWeapon?.weaponData;
 
-    private void OnRestartPerformed(InputAction.CallbackContext context)
+    void AimAtMouse()
     {
-        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+        if (Mouse.current == null || mainCamera == null) return;
+
+        float aimY = rangedWeapon != null
+            ? rangedWeapon.firePoint.position.y
+            : transform.position.y;
+
+        if (GameUtils.GetMouseWorldPosition(mainCamera, aimY, out Vector3 targetPoint))
+        {
+            Vector3 lookDir = (targetPoint - transform.position).normalized;
+            lookDir.y = 0f;
+            if (lookDir.sqrMagnitude < 0.01f) return;
+
+            transform.rotation = Quaternion.Slerp(
+                transform.rotation,
+                Quaternion.LookRotation(lookDir),
+                rotationSpeed * Time.deltaTime);
+
+            if (aimTarget != null) aimTarget.position = targetPoint;
+        }
     }
 }

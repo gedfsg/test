@@ -96,5 +96,6 @@ public class Locomotion : MonoBehaviour
     }
 
     public void SetSprinting(bool state) => isSprinting = state;
+    public void RecoverStamina(float amount) => currentStamina = Mathf.Min(currentStamina + amount, maxStamina);
     public float GetStaminaNormalized() => currentStamina / maxStamina;
 }

@@ -1,0 +1,11 @@
+Model Information:
+* title:	Bandage Roll
+* source:	https://sketchfab.com/3d-models/bandage-roll-dd33fad87aec468daeb0398ea4a6389f
+* author:	Tactical_Gamer (https://sketchfab.com/Tactical_Beard)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Bandage Roll" (https://sketchfab.com/3d-models/bandage-roll-dd33fad87aec468daeb0398ea4a6389f) by Tactical_Gamer (https://sketchfab.com/Tactical_Beard) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

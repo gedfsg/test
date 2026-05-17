@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 8c55f56e1a7997d42bbe813a4509b8af
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 165957
+  packageName: Painkiller (PBR)
+  packageVersion: 1.0
+  assetPath: Assets/Painkiller/Demo/LightingData.asset
+  uploadId: 400708
