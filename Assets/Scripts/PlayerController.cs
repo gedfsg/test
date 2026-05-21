@@ -139,7 +139,21 @@ public class PlayerController : MonoBehaviour
         InventoryManager inventory = GetComponent<InventoryManager>();
         if (inventory == null) return;
 
-        if (inventory.AddItem(target.itemData, target.amount))
+        bool picked = false;
+
+        // 무기는 핫바로 바로 (꽉 차면 인벤토리로)
+        if (target.itemData is WeaponData wd)
+        {
+            var hotbar = WeaponHotbarUI.Instance;
+            if (hotbar != null)
+                picked = hotbar.AddWeapon(wd);
+        }
+
+        // 핫바 실패 or 일반 아이템 → 인벤토리
+        if (!picked)
+            picked = inventory.AddItem(target.itemData, target.amount);
+
+        if (picked)
         {
             nearbyItems.Remove(target);
             Destroy(target.gameObject);

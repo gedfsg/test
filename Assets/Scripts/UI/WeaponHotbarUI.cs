@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using UnityEngine.InputSystem;
+using UnityEngine.EventSystems;
 
 public class WeaponHotbarUI : MonoBehaviour
 {
@@ -51,6 +52,9 @@ public class WeaponHotbarUI : MonoBehaviour
         else if (kb.digit3Key.wasPressedThisFrame) SelectSlot(2);
         else if (kb.digit4Key.wasPressedThisFrame) SelectSlot(3);
         else if (kb.digit5Key.wasPressedThisFrame) SelectSlot(4);
+
+        // G키로 현재 슬롯 버리기
+        if (kb.gKey.wasPressedThisFrame) DropSlot(activeSlot);
     }
 
     // ── Public API ────────────────────────────
@@ -252,6 +256,19 @@ public class WeaponHotbarUI : MonoBehaviour
         slotBgs[index] = bg;
         slotObjects[index] = slot;
 
+        // 우클릭으로 버리기
+        int capturedIndex = index;
+        EventTrigger trigger = slot.AddComponent<EventTrigger>();
+        var entry = new EventTrigger.Entry();
+        entry.eventID = EventTriggerType.PointerClick;
+        entry.callback.AddListener(data =>
+        {
+            var pd = data as PointerEventData;
+            if (pd?.button == PointerEventData.InputButton.Right)
+                DropSlot(capturedIndex);
+        });
+        trigger.triggers.Add(entry);
+
         GameObject iconObj = new GameObject("Icon");
         iconObj.transform.SetParent(slot.transform, false);
         RectTransform irt = iconObj.AddComponent<RectTransform>();
@@ -364,6 +381,34 @@ public class WeaponHotbarUI : MonoBehaviour
         RefreshAllSlots();
     }
     public int GetActiveAmmo() => activeSlot >= 0 ? ammos[activeSlot] : 0;
+
+    /// <summary>슬롯 아이템 버리기 — 월드에 스폰 후 슬롯 비움</summary>
+    public void DropSlot(int index)
+    {
+        if (index < 0 || index >= SLOT_COUNT || items[index] == null) return;
+
+        ItemData dropped = items[index];
+
+        // 플레이어 앞에 아이템 스폰
+        GameObject player = GameObject.FindWithTag("Player");
+        if (player != null)
+        {
+            Vector3 pos = player.transform.position + player.transform.forward * 1.5f;
+            GameObject obj = new GameObject(dropped.itemName + "_Drop");
+            obj.transform.position = pos;
+            PickupItem pickup = obj.AddComponent<PickupItem>();
+            pickup.itemData = dropped;
+            pickup.amount = dropped is WeaponData ? 1 : ammos[index];
+            BoxCollider col = obj.AddComponent<BoxCollider>();
+            col.isTrigger = true;
+            col.size = Vector3.one * 0.5f;
+        }
+
+        items[index] = null;
+        ammos[index] = 0;
+        RefreshAllSlots();
+        Debug.Log($"[핫바] '{dropped.itemName}' 버림");
+    }
 
     void RefreshAllSlots() { for (int i = 0; i < SLOT_COUNT; i++) RefreshSlot(i); }
 

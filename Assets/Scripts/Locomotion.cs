@@ -35,7 +35,8 @@ public class Locomotion : MonoBehaviour
 
         // 1. 실제 물리 이동 속도 계산
         float targetSpeed = (isSprinting && direction.magnitude > 0.1f && currentStamina > 0) ? sprintSpeed : walkSpeed;
-        rb.linearVelocity = direction.normalized * targetSpeed;
+        float yVel = rb.linearVelocity.y; // 중력(Y속도) 보존
+        rb.linearVelocity = direction.normalized * targetSpeed + Vector3.up * yVel;
 
         // 2. [핵심] 애니메이션 파라미터 업데이트
         if (anim != null)
