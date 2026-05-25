@@ -39,6 +39,16 @@ public class InventoryManager : MonoBehaviour
 
     public bool AddItem(ItemData itemToAdd, int amountToAdd)
     {
+        if (itemToAdd.itemType == ItemType.Ammo)
+        {
+            AmmoData ad = itemToAdd as AmmoData;
+            if (ad != null && AmmoInventory.Instance != null)
+            {
+                AmmoInventory.Instance.AddAmmo(ad.weaponType, ad.ammoAmount * amountToAdd);
+                return true;
+            }
+        }
+
         if (itemToAdd.isStackable)
         {
             foreach (InventorySlot slot in inventory)

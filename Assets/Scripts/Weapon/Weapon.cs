@@ -140,15 +140,34 @@ public class Weapon : MonoBehaviour
     {
         if (isReloading) yield break;
 
+        WeaponType wType = weaponData != null ? weaponData.type : WeaponType.Pistol;
+        int reserve = AmmoInventory.Instance != null
+            ? AmmoInventory.Instance.GetAmmo(wType)
+            : 0;
+
+        if (reserve <= 0)
+        {
+            Debug.Log("[재장전] 소지 탄약 없음!");
+            yield break;
+        }
+
         isReloading = true;
-        float currentReloadTime = (weaponData != null) ? weaponData.reloadTime : 2.0f;
+        float currentReloadTime = weaponData != null ? weaponData.reloadTime : 2.0f;
 
         onReloadStart?.Invoke(currentReloadTime);
         yield return new WaitForSeconds(currentReloadTime);
 
-        currentAmmo = (weaponData != null) ? weaponData.maxAmmo : 30;
+        int max = weaponData != null ? weaponData.maxAmmo : 30;
+        int needed = max - currentAmmo;
+        int consumed = AmmoInventory.Instance != null
+            ? AmmoInventory.Instance.ConsumeAmmo(wType, needed)
+            : needed;
+
+        currentAmmo += consumed;
         isReloading = false;
         onReloadComplete?.Invoke();
+
+        Debug.Log($"[재장전] {consumed}발 보충 → 현재 {currentAmmo}/{max}");
     }
 
     public void TryReload()

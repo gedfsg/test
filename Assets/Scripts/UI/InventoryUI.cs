@@ -126,6 +126,7 @@ public class InventoryUI : MonoBehaviour
                 amountText.text = "";
             }
         }
+        UpdateAmmoPanel();
     }
 
     // ── 컨텍스트 메뉴 ─────────────────────────────
@@ -286,5 +287,91 @@ public class InventoryUI : MonoBehaviour
                 action?.Invoke();
         });
         trigger.triggers.Add(entry);
+    }
+
+    private GameObject ammoPanel;
+
+    public void UpdateAmmoPanel()
+    {
+        if (ammoPanel != null) Destroy(ammoPanel);
+
+        ammoPanel = new GameObject("AmmoPanel");
+        ammoPanel.transform.SetParent(inventoryWindow.transform, false);
+        ammoPanel.transform.SetAsLastSibling();
+
+        LayoutElement le = ammoPanel.AddComponent<LayoutElement>();
+        le.ignoreLayout = true;
+
+        RectTransform rt = ammoPanel.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0f, 0f);
+        rt.anchorMax = new Vector2(1f, 0f);
+        rt.pivot = new Vector2(0.5f, 1f);
+        rt.anchoredPosition = new Vector2(0f, -5f);
+        rt.sizeDelta = new Vector2(0f, 36f);
+
+        Image bg = ammoPanel.AddComponent<Image>();
+        bg.color = new Color(0.06f, 0.08f, 0.11f, 0.95f);
+
+        HorizontalLayoutGroup hlg = ammoPanel.AddComponent<HorizontalLayoutGroup>();
+        hlg.padding = new RectOffset(4, 4, 6, 6);
+        hlg.spacing = 4f;
+        hlg.childAlignment = TextAnchor.MiddleLeft;
+        hlg.childControlHeight = true;
+        hlg.childControlWidth = false;
+        hlg.childForceExpandWidth = true;
+        hlg.childForceExpandHeight = true;
+        hlg.childAlignment = TextAnchor.MiddleCenter;
+
+        var ammoTypes = new (WeaponType type, string icon)[]
+        {
+        (WeaponType.Pistol,  "P"),
+        (WeaponType.AR,      "AR"),
+        (WeaponType.Shotgun, "SG"),
+        (WeaponType.Sniper,  "SR"),
+        };
+
+        foreach (var (type, icon) in ammoTypes)
+            CreateAmmoCell(ammoPanel.transform, type, icon);
+    }
+
+    private void CreateAmmoCell(Transform parent, WeaponType type, string typeLabel)
+    {
+        if (AmmoInventory.Instance == null) return;
+
+        int current = AmmoInventory.Instance.GetAmmo(type);
+        int max = AmmoInventory.Instance.GetMax(type);
+        bool hasAmmo = current > 0;
+
+        GameObject cell = new GameObject(typeLabel);
+        cell.transform.SetParent(parent, false);
+
+        HorizontalLayoutGroup hlg = cell.AddComponent<HorizontalLayoutGroup>();
+        hlg.spacing = 4f;
+        hlg.childControlHeight = true;
+        hlg.childControlWidth = true;
+        hlg.childForceExpandWidth = false;
+        hlg.childForceExpandHeight = true;
+        hlg.childAlignment = TextAnchor.MiddleCenter;
+
+        // 타입 라벨 (P / AR / SG / SR)
+        GameObject labelObj = new GameObject("Type");
+        labelObj.transform.SetParent(cell.transform, false);
+        TextMeshProUGUI labelTxt = labelObj.AddComponent<TextMeshProUGUI>();
+        labelTxt.text = typeLabel;
+        labelTxt.fontSize = 11f;
+        labelTxt.color = new Color(0.55f, 0.60f, 0.65f, 1f);
+        labelTxt.alignment = TextAlignmentOptions.MidlineLeft;
+
+        // 탄약 수치
+        GameObject countObj = new GameObject("Count");
+        countObj.transform.SetParent(cell.transform, false);
+        TextMeshProUGUI countTxt = countObj.AddComponent<TextMeshProUGUI>();
+        countTxt.text = $"{current}";
+        countTxt.fontSize = 13f;
+        countTxt.color = hasAmmo
+            ? new Color(0.95f, 0.85f, 0.40f, 1f)
+            : new Color(0.40f, 0.40f, 0.40f, 1f);
+        countTxt.alignment = TextAlignmentOptions.MidlineLeft;
+        countTxt.fontStyle = hasAmmo ? FontStyles.Bold : FontStyles.Normal;
     }
 }
