@@ -105,13 +105,7 @@ public class ThrowableItem : MonoBehaviour
 
     private void FlashbangExplode()
     {
-        Collider[] hits = Physics.OverlapSphere(transform.position, data.flashRadius);
-        foreach (var col in hits)
-        {
-            ZombieController zombie = col.GetComponent<ZombieController>()
-                                  ?? col.GetComponentInParent<ZombieController>();
-            if (zombie != null) zombie.Stun(data.stunDuration);
-        }
+        // TODO: 좀비 시스템 다시 만들면 적 기절 효과 추가
         Debug.Log($"[Flashbang] 섬광! 반경 {data.flashRadius}m, 기절 {data.stunDuration}초");
         Destroy(gameObject);
     }

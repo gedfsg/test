@@ -101,6 +101,8 @@ public class PlayerController : MonoBehaviour
 
     void Update()
     {
+        if (inputActions == null) return;   // Awake 아직 실행 전 보호
+
         Vector2 inputVector = inputActions.Player.Move.ReadValue<Vector2>();
         moveInput = new Vector3(inputVector.x, 0f, inputVector.y).normalized;
 
@@ -132,26 +134,28 @@ public class PlayerController : MonoBehaviour
 
     private void OnInteractPerformed(InputAction.CallbackContext context)
     {
-        nearbyItems.RemoveAll(item => item == null);
-        if (nearbyItems.Count == 0) return;
-
-        PickupItem target = nearbyItems[0];
+        PickupItem target = GetClosestNearbyItem();
+        if (target == null) return;
         InventoryManager inventory = GetComponent<InventoryManager>();
         if (inventory == null) return;
 
         bool picked = false;
 
-        // 무기는 핫바로 바로 (꽉 차면 인벤토리로)
+        // 무기는 핫바로만 (꽉 차면 획득 불가)
         if (target.itemData is WeaponData wd)
         {
             var hotbar = WeaponHotbarUI.Instance;
             if (hotbar != null)
+            {
+                if (hotbar.IsFull()) return; // 핫바 꽉 차면 획득 불가
                 picked = hotbar.AddWeapon(wd);
+            }
         }
-
-        // 핫바 실패 or 일반 아이템 → 인벤토리
-        if (!picked)
+        else
+        {
+            // 일반 아이템 → 인벤토리
             picked = inventory.AddItem(target.itemData, target.amount);
+        }
 
         if (picked)
         {
@@ -266,6 +270,13 @@ public class PlayerController : MonoBehaviour
         }
     }
 
+    public void HideCurrentWeapon()
+    {
+        if (rangedWeaponObject != null) rangedWeaponObject.SetActive(false);
+        if (meleeWeaponObject != null) meleeWeaponObject.SetActive(false);
+        if (weaponHandAttacher != null) weaponHandAttacher.HideVisual();
+    }
+
     public void SwapWeaponData(WeaponData newData, int savedAmmo = -1)
     {
         if (newData == null) return;
@@ -290,6 +301,22 @@ public class PlayerController : MonoBehaviour
     }
 
     public void ClearNearbyItem(PickupItem item) => nearbyItems.Remove(item);
+
+    /// <summary>현재 F키 누르면 먹게 될 가장 가까운 아이템</summary>
+    public PickupItem GetClosestNearbyItem()
+    {
+        nearbyItems.RemoveAll(i => i == null);
+        if (nearbyItems.Count == 0) return null;
+
+        PickupItem closest = nearbyItems[0];
+        float minDist = (closest.transform.position - transform.position).sqrMagnitude;
+        for (int i = 1; i < nearbyItems.Count; i++)
+        {
+            float d = (nearbyItems[i].transform.position - transform.position).sqrMagnitude;
+            if (d < minDist) { minDist = d; closest = nearbyItems[i]; }
+        }
+        return closest;
+    }
 
     // ── 외부 조회 ────────────────────────────────
 

@@ -52,9 +52,18 @@ public class MeleeWeapon : MonoBehaviour
             if (Vector3.Angle(forwardDirection, directionToTarget) > 90f) continue;
 
             Health targetHealth = hit.GetComponent<Health>();
+            if (targetHealth == null) targetHealth = hit.GetComponentInParent<Health>();
+            if (targetHealth == null) targetHealth = hit.GetComponentInChildren<Health>();
             if (targetHealth != null) targetHealth.TakeDamage(currentDamage);
+            else
+            {
+                ZombieController zc = hit.GetComponent<ZombieController>();
+                if (zc == null) zc = hit.GetComponentInParent<ZombieController>();
+                if (zc != null) zc.TakeDamage(currentDamage);
+            }
 
             DestructibleObstacle obstacle = hit.GetComponent<DestructibleObstacle>();
+            if (obstacle == null) obstacle = hit.GetComponentInParent<DestructibleObstacle>();
             if (obstacle != null) obstacle.TakeDamage(currentDamage);
         }
     }

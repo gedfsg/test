@@ -1,459 +1,472 @@
 using UnityEngine;
 using UnityEngine.AI;
-using System.Collections;
 
 /// <summary>
-/// 좀비 AI 컨트롤러
-/// 상태: Wander(배회) → Chase(추적) → Attack(공격)
+/// 좀비 AI - 추적/공격/배회 + 자가복구(NavMesh 복귀, 컴포넌트 자동추가).
 /// </summary>
 public class ZombieController : MonoBehaviour
 {
-    // ────────────────────────────────────────────
-    // Inspector 설정값
-    // ────────────────────────────────────────────
+    [Header("Stats")]
+    public float maxHealth      = 50f;
+    public float moveSpeed      = 2f;
+    public float attackRange    = 1.8f;
+    public float attackDamage   = 10f;
+    public float attackCooldown = 1.5f;
 
-    [Header("Detection Settings")]
-    public float soundDetectionRadius = 5f;     // 소리 감지 반경 (즉시 추적)
-    public float sightDetectionRadius = 20f;    // 시야 감지 거리
-    public float fieldOfView = 120f;            // 시야각
-    public float loseAggroTime = 8f;            // 추적 포기까지 대기 시간
+    [Header("AI")]
+    public float detectionRange = 30f;
+    public float retargetInterval = 1f;   // 플레이어 다시 찾기 간격
 
-    [Header("Wander Settings")]
-    public float minWanderRadius = 5f;
-    public float maxWanderRadius = 15f;
-    public float minWaitTime = 1f;
-    public float maxWaitTime = 4f;
+    [Header("랜덤 배회")]
+    public bool  enableWander       = true;
+    public float wanderRadius       = 8f;
+    public float wanderIntervalMin  = 2f;
+    public float wanderIntervalMax  = 5f;
+    public float wanderSpeedFactor  = 0.5f;
 
-    [Header("Melee Attack Settings")]
-    public float attackRange = 2.2f;            // 공격 가능 거리
-    public float attackDamage = 20f;            // 공격 데미지
-    public float attackCooldown = 1.2f;         // 공격 쿨다운 (초)
+    // ─────────────────────────────────────────────
+    private float attackTimer;
+    private bool  isDead;
+    private bool  isStunned;
+    private float stunTimer;
+    private float wanderTimer;
+    private bool  isWandering;
+    private float retargetTimer;
 
-    [Header("Movement Speed")]
-    public float wanderSpeed = 0.8f;            // 배회 속도 (Mixamo Zombie Walk 기준)
-    public float chaseSpeed = 2.5f;             // 추적 속도 (Mixamo Zombie Run 기준)
-
-    [Header("Item Drop")]
-    public ItemData[] possibleDrops;        // Inspector에서 드롭 가능 아이템 배열
-    [Range(0f, 1f)] public float dropChance = 0.4f; // 드롭 확률
-    public GameObject pickupPrefab;         // PickupItem 프리팹
-
-    // ────────────────────────────────────────────
-    // 내부 상태
-    // ────────────────────────────────────────────
-
-    private enum ZombieState { Wander, Chase, Attack }
-    private ZombieState currentState = ZombieState.Wander;
-
+    private Transform    target;
     private NavMeshAgent agent;
-    private Animator animator;
-    private Transform player;
+    private Animator     anim;
+    private Health       health;
 
-    private float timeOutOfRange = 0f;
-    private float lastAttackTime = -99f;
+    private static readonly int HashIsWalking = Animator.StringToHash("IsWalking");
+    private static readonly int HashSpeed     = Animator.StringToHash("Speed");
+    private static readonly int HashAttack    = Animator.StringToHash("Attack");
+    private static readonly int HashDie       = Animator.StringToHash("Die");
 
-    private bool isWaiting = false;
-    private float waitTimer = 0f;
-    private float currentWaitTime = 0f;
+    // ─────────────────────────────────────────────
+    void Awake()
+    {
+        // 1. NavMeshAgent 자동 추가/설정
+        agent = GetComponent<NavMeshAgent>();
+        if (agent == null) agent = gameObject.AddComponent<NavMeshAgent>();
+        agent.speed            = moveSpeed;
+        agent.angularSpeed     = 720f;
+        agent.acceleration     = 12f;
+        agent.stoppingDistance = attackRange * 0.7f;
+        agent.radius           = 0.4f;
+        agent.height           = 1.8f;
+        agent.autoBraking      = true;
 
-    // 애니메이터 파라미터 해시 (문자열 비교보다 빠름)
-    private static readonly int AnimSpeed    = Animator.StringToHash("Speed");
-    private static readonly int AnimAttack   = Animator.StringToHash("Attack");
-    private static readonly int AnimDead     = Animator.StringToHash("IsDead");
+        // 2. 콜라이더 자동 추가 (총알 맞으려면 필수)
+        CapsuleCollider col = GetComponent<CapsuleCollider>();
+        if (col == null) col = gameObject.AddComponent<CapsuleCollider>();
+        col.isTrigger = false;
+        col.height = 1.8f;
+        col.radius = 0.5f;     // 약간 크게 → 총알 맞기 쉽게
+        col.center = new Vector3(0, 0.9f, 0);
 
-    // ────────────────────────────────────────────
-    // Unity 생명주기
-    // ────────────────────────────────────────────
+        // 2-1. Rigidbody 자동 추가 (Trigger 이벤트 발동에 필수!)
+        Rigidbody rb = GetComponent<Rigidbody>();
+        if (rb == null) rb = gameObject.AddComponent<Rigidbody>();
+        rb.isKinematic = true;    // NavMeshAgent가 이동 담당이므로 물리 안 씀
+        rb.useGravity  = false;
+        rb.interpolation = RigidbodyInterpolation.None;
+        rb.collisionDetectionMode = CollisionDetectionMode.Discrete;
+
+        // 3. Animator 찾기
+        anim = GetComponent<Animator>();
+        if (anim == null) anim = GetComponentInChildren<Animator>();
+        if (anim != null)
+        {
+            anim.applyRootMotion = false;
+
+            // Avatar 진단
+            if (anim.avatar == null)
+                Debug.LogError($"[Zombie] {name}: ❌ Animator의 Avatar가 null! FBX를 Humanoid로 설정해야 함");
+            else if (!anim.avatar.isHuman)
+                Debug.LogError($"[Zombie] {name}: ❌ Avatar가 Humanoid가 아님 (Generic)");
+            else if (!anim.avatar.isValid)
+                Debug.LogError($"[Zombie] {name}: ❌ Avatar 유효하지 않음 - 본 매핑 확인 필요");
+            else
+                Debug.Log($"[Zombie] {name}: ✅ Avatar OK (Humanoid)");
+        }
+
+        // 4. Health 추가 (총알 데미지 받기)
+        health = GetComponent<Health>();
+        if (health == null) health = gameObject.AddComponent<Health>();
+        health.maxHealth = maxHealth;
+        // Health.Awake가 currentHealth=100으로 미리 설정함 → Heal(0)로 maxHealth(50)로 클램프
+        health.Heal(0f);
+        // UnityEvent가 런타임 추가 시 null일 수 있음
+        if (health.onDeath == null) health.onDeath = new UnityEngine.Events.UnityEvent();
+        if (health.onHurt  == null) health.onHurt  = new UnityEngine.Events.UnityEvent();
+        health.onDeath.RemoveListener(Die);
+        health.onDeath.AddListener(Die);
+        Debug.Log($"[Zombie] {name} Health 세팅: max={health.maxHealth}, current={health.GetCurrentHealth()}");
+
+        // 5. NavMesh 위로 워프 (스폰 직후 약간 떠 있을 수 있음)
+        TryWarpToNavMesh();
+    }
 
     void Start()
     {
-        agent    = GetComponent<NavMeshAgent>();
-        animator = GetComponentInChildren<Animator>();
-
-        // Resources 폴더에서 컨트롤러를 강제 할당
-        if (animator != null)
-        {
-            RuntimeAnimatorController ctrl =
-                Resources.Load<RuntimeAnimatorController>("ZombieAnimator");
-            if (ctrl != null)
-                animator.runtimeAnimatorController = ctrl;
-        }
-
-        GameObject playerObj = GameObject.FindGameObjectWithTag("Player");
-        if (playerObj != null)
-            player = playerObj.transform;
-
-        // Health 이벤트 연결 (사망 처리)
-        Health health = GetComponent<Health>();
-        if (health != null)
-            health.onDeath.AddListener(OnDead);
-
-        agent.speed = wanderSpeed;
-        agent.stoppingDistance = attackRange * 0.7f;
-        SetRandomDestination();
+        FindPlayer();
+        EnsureAnimatorClips();
     }
 
+    // 컨트롤러의 빈 Motion 슬롯을 자동으로 채움
+    void EnsureAnimatorClips()
+    {
+        if (anim == null || anim.runtimeAnimatorController == null) return;
+
+        var src = anim.runtimeAnimatorController.animationClips;
+        AnimationClip walkClip = null, idleClip = null, attackClip = null;
+        foreach (var c in src)
+        {
+            if (c == null) continue;
+            string n = c.name.ToLower();
+            if (walkClip   == null && (n.Contains("walk") || n.Contains("run"))) walkClip = c;
+            if (idleClip   == null && n.Contains("idle"))                         idleClip = c;
+            if (attackClip == null && n.Contains("attack"))                       attackClip = c;
+        }
+
+        Debug.Log($"[Zombie] {name}: 찾은 클립 - walk={walkClip?.name}, idle={idleClip?.name}, attack={attackClip?.name}");
+
+        if (walkClip == null && idleClip == null) return;
+
+        // AnimatorOverrideController로 슬롯 재매핑
+        var over = new AnimatorOverrideController(anim.runtimeAnimatorController);
+        var overrides = new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<AnimationClip, AnimationClip>>(over.overridesCount);
+        over.GetOverrides(overrides);
+
+        for (int i = 0; i < overrides.Count; i++)
+        {
+            var key = overrides[i].Key;
+            if (key == null) continue;
+            string kn = key.name.ToLower();
+            AnimationClip newClip = null;
+            if      (kn.Contains("walk")   && walkClip   != null) newClip = walkClip;
+            else if (kn.Contains("idle")   && idleClip   != null) newClip = idleClip;
+            else if (kn.Contains("attack") && attackClip != null) newClip = attackClip;
+            else if (kn.Contains("run")    && walkClip   != null) newClip = walkClip;
+
+            if (newClip != null)
+                overrides[i] = new System.Collections.Generic.KeyValuePair<AnimationClip, AnimationClip>(key, newClip);
+        }
+        over.ApplyOverrides(overrides);
+        anim.runtimeAnimatorController = over;
+    }
+
+    void FindPlayer()
+    {
+        GameObject p = GameObject.FindGameObjectWithTag("Player");
+        if (p != null) target = p.transform;
+    }
+
+    void TryWarpToNavMesh()
+    {
+        if (agent == null || !agent.enabled) return;
+        if (agent.isOnNavMesh) return;
+
+        if (NavMesh.SamplePosition(transform.position, out NavMeshHit hit, 10f, NavMesh.AllAreas))
+        {
+            agent.Warp(hit.position);
+        }
+    }
+
+    // ─────────────────────────────────────────────
     void Update()
     {
-        if (player == null) return;
+        if (isDead) return;
 
-        switch (currentState)
+        // 타겟 재탐색 (씬 로드 직후/플레이어 리스폰 대비)
+        retargetTimer -= Time.deltaTime;
+        if (target == null && retargetTimer <= 0f)
         {
-            case ZombieState.Wander: UpdateWander(); break;
-            case ZombieState.Chase:  UpdateChase();  break;
-            case ZombieState.Attack: UpdateAttack(); break;
+            FindPlayer();
+            retargetTimer = retargetInterval;
         }
+        if (target == null) return;
 
-        UpdateAnimator();
-    }
-
-    // ────────────────────────────────────────────
-    // 상태별 업데이트
-    // ────────────────────────────────────────────
-
-    void UpdateWander()
-    {
-        bool detected = CheckDetection();
-        if (detected)
+        // 기절 처리
+        if (isStunned)
         {
-            EnterChase();
+            stunTimer -= Time.deltaTime;
+            if (stunTimer <= 0) isStunned = false;
+            SetAnimSpeed(0f);
             return;
         }
 
-        // 목적지 도착 시 대기 후 다음 목적지 설정
-        if (!agent.pathPending && agent.remainingDistance <= agent.stoppingDistance)
-        {
-            if (!isWaiting)
-            {
-                isWaiting = true;
-                waitTimer = 0f;
-                currentWaitTime = Random.Range(minWaitTime, maxWaitTime);
-            }
-        }
+        // NavMesh 위에 없으면 복구 시도
+        bool canMove = agent != null && agent.enabled && agent.isOnNavMesh;
+        if (!canMove) TryWarpToNavMesh();
+        canMove = agent != null && agent.enabled && agent.isOnNavMesh;
 
-        if (isWaiting)
-        {
-            waitTimer += Time.deltaTime;
-            if (waitTimer >= currentWaitTime)
-            {
-                isWaiting = false;
-                SetRandomDestination();
-            }
-        }
-    }
+        float dist = Vector3.Distance(transform.position, target.position);
 
-    void UpdateChase()
-    {
-        float distToPlayer = Vector3.Distance(transform.position, player.position);
-
-        // 공격 사거리 안에 들어오면 Attack 상태 전환
-        if (distToPlayer <= attackRange)
+        // 공격 범위 내: NavMesh와 상관없이 공격
+        if (dist <= attackRange)
         {
-            EnterAttack();
-            return;
-        }
-
-        bool detected = CheckDetection();
-        if (detected)
-        {
-            timeOutOfRange = 0f;
-            agent.SetDestination(player.position);
+            if (canMove) agent.ResetPath();
             FacePlayer();
+            SetAnimSpeed(0f);
+
+            attackTimer -= Time.deltaTime;
+            if (attackTimer <= 0f)
+            {
+                DoAttack();
+                attackTimer = attackCooldown;
+            }
+            return;
         }
+
+        // NavMesh 안 되면 이동 불가, 가만히
+        if (!canMove)
+        {
+            SetAnimSpeed(0f);
+            return;
+        }
+
+        // 플레이어 감지 범위 내: 추적
+        if (dist <= detectionRange)
+        {
+            if (isWandering)
+            {
+                isWandering = false;
+                agent.speed = moveSpeed;
+            }
+            agent.SetDestination(target.position);
+            SetAnimSpeed(agent.velocity.magnitude);
+        }
+        // 범위 밖: 배회
         else
         {
-            // 감지 실패 시 포기 타이머 증가
-            timeOutOfRange += Time.deltaTime;
-            if (timeOutOfRange >= loseAggroTime)
-                EnterWander();
+            DoWander();
         }
-    }
-
-    void UpdateAttack()
-    {
-        float distToPlayer = Vector3.Distance(transform.position, player.position);
-        FacePlayer();
-        agent.SetDestination(transform.position); // 제자리 정지
-
-        // 사거리를 벗어나면 다시 추적
-        if (distToPlayer > attackRange + 0.5f)
-        {
-            EnterChase();
-            return;
-        }
-
-        // 쿨다운이 지났으면 공격
-        if (Time.time >= lastAttackTime + attackCooldown)
-        {
-            PerformAttack();
-        }
-    }
-
-    // ────────────────────────────────────────────
-    // 상태 전환
-    // ────────────────────────────────────────────
-
-    void EnterWander()
-    {
-        currentState   = ZombieState.Wander;
-        timeOutOfRange = 0f;
-        agent.speed    = wanderSpeed;
-        agent.ResetPath();
-        isWaiting      = true;
-        waitTimer      = 0f;
-        currentWaitTime = Random.Range(minWaitTime, maxWaitTime);
-    }
-
-    void EnterChase()
-    {
-        currentState          = ZombieState.Chase;
-        timeOutOfRange        = 0f;
-        isWaiting             = false;
-        agent.speed           = chaseSpeed;
-        agent.stoppingDistance = 0f;
-        agent.SetDestination(player.position);
-    }
-
-    void EnterAttack()
-    {
-        currentState = ZombieState.Attack;
-        agent.ResetPath();
-    }
-
-    // ────────────────────────────────────────────
-    // 핵심 로직
-    // ────────────────────────────────────────────
-
-    void PerformAttack()
-    {
-        lastAttackTime = Time.time;
-
-        if (animator != null)
-            animator.SetTrigger(AnimAttack);
-
-        Health playerHealth = player.GetComponent<Health>();
-        if (playerHealth != null)
-            playerHealth.TakeDamage(attackDamage);
-    }
-
-    bool CheckDetection()
-    {
-        float dist = Vector3.Distance(transform.position, player.position);
-
-        // 소리 감지: 짧은 거리는 무조건 탐지
-        if (dist <= soundDetectionRadius)
-            return true;
-
-        // 시야 감지: FOV + 레이캐스트
-        if (dist <= sightDetectionRadius)
-        {
-            Vector3 dirToPlayer = (player.position - transform.position).normalized;
-            float angle = Vector3.Angle(transform.forward, dirToPlayer);
-
-            if (angle <= fieldOfView / 2f)
-            {
-                RaycastHit hit;
-                Vector3 origin = transform.position + Vector3.up * 1f;
-                Vector3 target = player.position + Vector3.up * 1f;
-
-                if (Physics.Raycast(origin, (target - origin).normalized, out hit, sightDetectionRadius))
-                {
-                    if (hit.collider.CompareTag("Player"))
-                        return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    void SetRandomDestination()
-    {
-        float radius = Random.Range(minWanderRadius, maxWanderRadius);
-        Vector3 randomDir = Random.insideUnitSphere * radius + transform.position;
-
-        NavMeshHit hit;
-        if (NavMesh.SamplePosition(randomDir, out hit, radius, NavMesh.AllAreas))
-            agent.SetDestination(hit.position);
     }
 
     void FacePlayer()
     {
-        Vector3 dir = (player.position - transform.position).normalized;
-        dir.y = 0f;
-        if (dir.sqrMagnitude < 0.01f) return;
+        Vector3 dir = target.position - transform.position;
+        dir.y = 0;
+        if (dir.sqrMagnitude < 0.001f) return;
         transform.rotation = Quaternion.Slerp(
-            transform.rotation, Quaternion.LookRotation(dir), Time.deltaTime * 10f);
+            transform.rotation,
+            Quaternion.LookRotation(dir),
+            Time.deltaTime * 10f);
     }
 
-    void UpdateAnimator()
+    // ── 배회 ─────────────────────────────────────────
+    void DoWander()
     {
-        if (animator == null) return;
-        // desiredVelocity: 가속 딜레이 없이 목표 속도를 즉시 반영
-        float normalizedSpeed = agent.desiredVelocity.magnitude / chaseSpeed;
-        animator.SetFloat(AnimSpeed, normalizedSpeed, 0.05f, Time.deltaTime);
-    }
-
-    // ────────────────────────────────────────────
-    // 외부 호출 함수
-    // ────────────────────────────────────────────
-
-    /// <summary>
-    /// 공격을 받았을 때 Health.onHurt에서 호출. 즉시 추적 시작.
-    /// </summary>
-    public void OnAttacked()
-    {
-        if (player == null)
+        if (!enableWander)
         {
-            GameObject playerObj = GameObject.FindGameObjectWithTag("Player");
-            if (playerObj != null) player = playerObj.transform;
-        }
-
-        if (currentState == ZombieState.Wander)
-            EnterChase();
-
-        timeOutOfRange = 0f;
-    }
-
-    // ── 기절 (섬광탄) ────────────────────────────────
-    private Coroutine stunCoroutine;
-
-    public void Stun(float duration)
-    {
-        if (stunCoroutine != null) StopCoroutine(stunCoroutine);
-        stunCoroutine = StartCoroutine(StunRoutine(duration));
-    }
-
-    private IEnumerator StunRoutine(float duration)
-    {
-        var prevState = currentState;
-        currentState = ZombieState.Wander; // 배회 상태로 고정
-        agent.isStopped = true;
-        yield return new WaitForSeconds(duration);
-        agent.isStopped = false;
-        currentState = prevState;
-        stunCoroutine = null;
-    }
-
-    /// <summary>
-    /// 사망 시 Health.onDeath에서 호출.
-    /// </summary>
-    private void OnDead()
-    {
-        if (agent != null && agent.isOnNavMesh)
-        {
-            agent.isStopped = true;
             agent.ResetPath();
+            SetAnimSpeed(0f);
+            return;
         }
 
-        if (animator != null)
-            animator.SetBool(AnimDead, true);
+        if (!isWandering)
+        {
+            isWandering = true;
+            agent.speed = moveSpeed * wanderSpeedFactor;
+            wanderTimer = 0f;
+        }
 
-        StartCoroutine(DeathSequence());
-        TryDropItem();
-        enabled = false;
+        wanderTimer -= Time.deltaTime;
+        bool reached = !agent.pathPending && agent.remainingDistance < 0.7f;
+        if (wanderTimer <= 0f || reached)
+        {
+            PickNewWanderDestination();
+            wanderTimer = Random.Range(wanderIntervalMin, wanderIntervalMax);
+        }
+
+        SetAnimSpeed(agent.velocity.magnitude);
     }
 
-    private IEnumerator DeathSequence()
+    void PickNewWanderDestination()
     {
-        // 사망 애니메이션 재생 대기
-        yield return new WaitForSeconds(1.8f);
-
-        Renderer[] renderers = GetComponentsInChildren<Renderer>();
-
-        // 재질을 투명 모드로 전환
-        foreach (Renderer r in renderers)
+        for (int i = 0; i < 8; i++)
         {
-            foreach (Material m in r.materials)
+            Vector2 rnd = Random.insideUnitCircle * wanderRadius;
+            Vector3 candidate = transform.position + new Vector3(rnd.x, 0, rnd.y);
+            if (NavMesh.SamplePosition(candidate, out NavMeshHit hit, 3f, NavMesh.AllAreas))
             {
-                if (m.HasProperty("_Surface"))
-                {
-                    m.SetFloat("_Surface", 1f);
-                    m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-                    m.renderQueue = 3000;
-                }
-                else if (m.HasProperty("_Mode"))
-                {
-                    m.SetFloat("_Mode", 2f);
-                    m.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-                    m.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-                    m.SetInt("_ZWrite", 0);
-                    m.EnableKeyword("_ALPHABLEND_ON");
-                    m.renderQueue = 3000;
-                }
+                agent.SetDestination(hit.position);
+                return;
+            }
+        }
+    }
+
+    // ── 애니메이션 ────────────────────────────────────
+    void SetAnimSpeed(float speed)
+    {
+        if (anim == null || anim.runtimeAnimatorController == null) return;
+
+        bool walking = speed > 0.1f;
+        anim.SetBool(HashIsWalking, walking);
+
+        // Speed 파라미터가 있으면 추가 전달
+        foreach (var p in anim.parameters)
+        {
+            if (p.nameHash == HashSpeed)
+            {
+                anim.SetFloat(HashSpeed, speed, 0.1f, Time.deltaTime);
+                break;
             }
         }
 
-        // 1.5초에 걸쳐 서서히 투명하게 (재처럼 사라짐)
-        float duration = 1.5f;
+        // 트랜지션 안 먹어도 강제로 상태 전환 (다양한 이름 시도)
+        try
+        {
+            var info = anim.GetCurrentAnimatorStateInfo(0);
+            bool inAttack = info.IsName("Attack") || info.IsTag("Attack");
+            bool inDie    = info.IsName("Die")    || info.IsTag("Die");
+
+            if (inAttack || inDie) return;
+
+            if (walking)
+            {
+                if (!IsInState(info, "Walk", "Walking", "Run", "walk", "Move"))
+                {
+                    PlayFirstAvailable("Walk", "Walking", "Run", "walk", "Move");
+                }
+            }
+            else
+            {
+                if (!IsInState(info, "Idle", "idle", "Stand"))
+                {
+                    PlayFirstAvailable("Idle", "idle", "Stand");
+                }
+            }
+        }
+        catch { }
+    }
+
+    bool IsInState(AnimatorStateInfo info, params string[] names)
+    {
+        foreach (var n in names)
+            if (info.IsName(n)) return true;
+        return false;
+    }
+
+    void PlayFirstAvailable(params string[] names)
+    {
+        foreach (var n in names)
+        {
+            if (anim.HasState(0, Animator.StringToHash(n)))
+            {
+                anim.CrossFade(n, 0.15f);
+                return;
+            }
+        }
+    }
+
+    // 트리거 디버그 (총알 맞는지 확인용)
+    void OnTriggerEnter(Collider other)
+    {
+        if (other.GetComponent<Bullet>() != null)
+            Debug.Log($"[Zombie] 🎯 {name} 총알 트리거됨: {other.name}");
+    }
+
+    void OnCollisionEnter(Collision collision)
+    {
+        if (collision.collider.GetComponent<Bullet>() != null)
+            Debug.Log($"[Zombie] 💥 {name} 총알 충돌됨: {collision.collider.name}");
+    }
+
+    void DoAttack()
+    {
+        if (anim != null && anim.runtimeAnimatorController != null)
+            anim.SetTrigger(HashAttack);
+
+        if (target == null) return;
+        Health playerHealth = target.GetComponent<Health>();
+        if (playerHealth != null) playerHealth.TakeDamage(attackDamage);
+    }
+
+    // ── 외부 데미지 API ──────────────────────────────
+    public void TakeDamage(float damage)
+    {
+        if (isDead) return;
+        Debug.Log($"[Zombie] {name} 데미지 {damage} 받음");
+
+        if (health != null)
+        {
+            health.TakeDamage(damage);
+        }
+        else
+        {
+            // Health 없으면 자체 카운트로라도 죽이기
+            maxHealth -= damage;
+            if (maxHealth <= 0f) Die();
+        }
+    }
+
+    public void Stun(float duration)
+    {
+        if (isDead) return;
+        isStunned = true;
+        stunTimer = duration;
+        if (agent != null && agent.isOnNavMesh) agent.ResetPath();
+    }
+
+    // ── 사망 ─────────────────────────────────────────
+    void Die()
+    {
+        if (isDead) return;
+        isDead = true;
+
+        if (agent != null) agent.enabled = false;
+
+        // Animator 끄기 (가짜 죽음 애니메이션과 충돌 방지)
+        if (anim != null) anim.enabled = false;
+
+        Collider col = GetComponent<Collider>();
+        if (col != null) col.enabled = false;
+
+        Rigidbody rb = GetComponent<Rigidbody>();
+        if (rb != null) rb.isKinematic = true;
+
+        // 죽는 클립이 컨트롤러에 있으면 사용, 없으면 가짜 죽음 코루틴
+        StartCoroutine(FakeDeathRoutine());
+    }
+
+    System.Collections.IEnumerator FakeDeathRoutine()
+    {
+        // 1. 뒤로 쓰러지면서 (0.6초 동안 90도 회전)
+        float duration = 0.6f;
         float elapsed = 0f;
+        Quaternion startRot = transform.rotation;
+        Quaternion endRot   = startRot * Quaternion.Euler(-90f, 0f, 0f); // 뒤로 넘어짐
 
         while (elapsed < duration)
         {
             elapsed += Time.deltaTime;
-            float alpha = Mathf.Lerp(1f, 0f, elapsed / duration);
+            float t = elapsed / duration;
+            // 살짝 가속 곡선 (마지막에 빨라짐)
+            transform.rotation = Quaternion.Slerp(startRot, endRot, t * t);
+            // 약간 내려앉기
+            transform.position += Vector3.down * (Time.deltaTime * 0.3f);
+            yield return null;
+        }
 
-            foreach (Renderer r in renderers)
-            {
-                foreach (Material m in r.materials)
-                {
-                    if (m.HasProperty("_BaseColor"))
-                    {
-                        Color c = m.GetColor("_BaseColor");
-                        c.a = alpha;
-                        m.SetColor("_BaseColor", c);
-                    }
-                    else if (m.HasProperty("_Color"))
-                    {
-                        Color c = m.GetColor("_Color");
-                        c.a = alpha;
-                        m.SetColor("_Color", c);
-                    }
-                }
-            }
+        // 2. 1.5초 동안 누워있음
+        yield return new WaitForSeconds(1.5f);
 
+        // 3. 1초에 걸쳐 땅 밑으로 가라앉으며 사라짐
+        float sinkDuration = 1f;
+        float sinkElapsed = 0f;
+        Vector3 sinkStart = transform.position;
+        Vector3 sinkEnd   = sinkStart + Vector3.down * 1.5f;
+        while (sinkElapsed < sinkDuration)
+        {
+            sinkElapsed += Time.deltaTime;
+            float t = sinkElapsed / sinkDuration;
+            transform.position = Vector3.Lerp(sinkStart, sinkEnd, t);
             yield return null;
         }
 
         Destroy(gameObject);
-    }
-
-    // ────────────────────────────────────────────
-    // 에디터 기즈모
-    // ────────────────────────────────────────────
-
-    void OnDrawGizmosSelected()
-    {
-        // 소리 감지 반경 (빨강)
-        Gizmos.color = Color.red;
-        Gizmos.DrawWireSphere(transform.position, soundDetectionRadius);
-
-        // 시야 감지 반경 (노랑)
-        Gizmos.color = Color.yellow;
-        Vector3 left  = Quaternion.Euler(0, -fieldOfView / 2f, 0) * transform.forward;
-        Vector3 right = Quaternion.Euler(0,  fieldOfView / 2f, 0) * transform.forward;
-        Gizmos.DrawRay(transform.position, left  * sightDetectionRadius);
-        Gizmos.DrawRay(transform.position, right * sightDetectionRadius);
-
-        // 공격 사거리 (파랑)
-        Gizmos.color = Color.blue;
-        Gizmos.DrawWireSphere(transform.position, attackRange);
-    }
-
-    private void TryDropItem()
-    {
-        if (possibleDrops == null || possibleDrops.Length == 0) return;
-        if (pickupPrefab == null) return;
-        if (Random.value > dropChance) return;
-
-        ItemData toDrop = possibleDrops[Random.Range(0, possibleDrops.Length)];
-        Vector3 dropPos = transform.position + Vector3.up * 0.3f;
-        GameObject obj = Instantiate(pickupPrefab, dropPos, Quaternion.identity);
-        PickupItem pickup = obj.GetComponent<PickupItem>();
-        if (pickup != null)
-        {
-            pickup.itemData = toDrop;
-            pickup.amount = 1;
-        }
     }
 }

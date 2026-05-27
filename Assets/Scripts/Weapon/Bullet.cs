@@ -86,14 +86,27 @@ public class Bullet : MonoBehaviour
 
         bool hitSomething = false;
 
+        // Health 검색 - 자식/부모까지
         Health targetHealth = other.GetComponent<Health>();
+        if (targetHealth == null) targetHealth = other.GetComponentInParent<Health>();
+        if (targetHealth == null) targetHealth = other.GetComponentInChildren<Health>();
         if (targetHealth != null)
         {
             targetHealth.TakeDamage(currentDamage);
             hitSomething = true;
         }
 
+        // 좀비 직접 데미지 (Health 없는 경우 백업)
+        ZombieController zombie = other.GetComponent<ZombieController>();
+        if (zombie == null) zombie = other.GetComponentInParent<ZombieController>();
+        if (zombie != null && targetHealth == null)
+        {
+            zombie.TakeDamage(currentDamage);
+            hitSomething = true;
+        }
+
         DestructibleObstacle obstacle = other.GetComponent<DestructibleObstacle>();
+        if (obstacle == null) obstacle = other.GetComponentInParent<DestructibleObstacle>();
         if (obstacle != null)
         {
             obstacle.TakeDamage(currentDamage);

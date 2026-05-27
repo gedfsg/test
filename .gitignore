@@ -98,3 +98,16 @@ InitTestScene*.unity*
 # Auto-generated scenes by play mode tests
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
 Assets/Versatile Studio Assets/
+
+
+# Report 폴더 - node_modules 제외
+Report/node_modules/
+Report/package-lock.json
+
+
+.claude/
+
+
+# 50MB+ 대용량 파일 (GitHub 제한)
+Assets/Main Project/main.unity
+Assets/OlegWER/RustyCarsFree/FBX/fbx.fbx

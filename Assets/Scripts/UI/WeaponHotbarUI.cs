@@ -147,6 +147,7 @@ public class WeaponHotbarUI : MonoBehaviour
 
     public ItemData GetActiveItem() => activeSlot >= 0 ? items[activeSlot] : null;
     public int GetActiveSlot() => activeSlot;
+    public bool IsFull() { for (int i = 0; i < SLOT_COUNT; i++) if (items[i] == null) return false; return true; }
 
     public bool HasWeapon(WeaponData weapon)
     {
@@ -407,6 +408,14 @@ public class WeaponHotbarUI : MonoBehaviour
         items[index] = null;
         ammos[index] = 0;
         RefreshAllSlots();
+
+        // 버린 슬롯이 현재 활성 슬롯이고 무기였으면 무기 숨기기
+        if (index == activeSlot && dropped is WeaponData)
+        {
+            PlayerController pc = GameObject.FindWithTag("Player")?.GetComponent<PlayerController>();
+            pc?.HideCurrentWeapon();
+        }
+
         Debug.Log($"[핫바] '{dropped.itemName}' 버림");
     }
 

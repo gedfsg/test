@@ -64,6 +64,20 @@ public class WeaponHandAttacher : MonoBehaviour
         return null;
     }
 
+    public void HideVisual()
+    {
+        Transform handBone = FindDeep(transform, RIGHT_HAND_BONE);
+        if (handBone == null) return;
+
+        foreach (Transform child in handBone)
+        {
+            if (child.GetComponentInChildren<Weapon>() == null)
+                Destroy(child.gameObject);
+        }
+
+        if (rangedWeapon != null) rangedWeapon.SetActive(false);
+    }
+
     public void SwapVisual(GameObject newWeaponPrefab, Vector3 posOffset, Vector3 rotOffset)
     {
         Transform handBone = FindDeep(transform, RIGHT_HAND_BONE);
