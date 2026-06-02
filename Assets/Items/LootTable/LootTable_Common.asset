@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 232eea3291527f3409bc89f592f4628b, type: 3}
+  m_Name: LootTable_Common
+  m_EditorClassIdentifier: Assembly-CSharp::LootTable
+  minRolls: 1
+  maxRolls: 3
+  entries:
+  - item: {fileID: 11400000, guid: d7d64191447ce2049a3bbb05cb355656, type: 2}
+    weight: 10
+    minAmount: 10
+    maxAmount: 30
+  - item: {fileID: 11400000, guid: 0b1b7f57d9fbd0d4f89465ac7e6370f5, type: 2}
+    weight: 10
+    minAmount: 5
+    maxAmount: 20
+  - item: {fileID: 11400000, guid: 2f715e470170b4749a5721f9e560b24f, type: 2}
+    weight: 10
+    minAmount: 1
+    maxAmount: 3
+  - item: {fileID: 11400000, guid: b6d3c53c9b92c0a4a9f1169db35385f4, type: 2}
+    weight: 3
+    minAmount: 1
+    maxAmount: 1
+  - item: {fileID: 11400000, guid: e2c8039684602a942a07b185d6e014cb, type: 2}
+    weight: 10
+    minAmount: 1
+    maxAmount: 2

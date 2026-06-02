@@ -29,6 +29,7 @@ public class PlayerController : MonoBehaviour
     private WeaponMode currentMode = WeaponMode.Ranged;
 
     private List<PickupItem> nearbyItems = new List<PickupItem>();
+    private List<LootCrate> nearbyCrates = new List<LootCrate>();
 
     [Header("Animation Rigging")]
     public Transform aimTarget;
@@ -134,35 +135,48 @@ public class PlayerController : MonoBehaviour
 
     private void OnInteractPerformed(InputAction.CallbackContext context)
     {
-        PickupItem target = GetClosestNearbyItem();
-        if (target == null) return;
         InventoryManager inventory = GetComponent<InventoryManager>();
         if (inventory == null) return;
 
+        PickupItem nearestItem = GetClosestNearbyItem();
+        LootCrate nearestCrate = GetClosestNearbyCrate();
+
+        // 박스가 더 가까우면 박스 먼저 열기
+        if (nearestCrate != null &&
+            (nearestItem == null || SqrDistTo(nearestCrate.transform) < SqrDistTo(nearestItem.transform)))
+        {
+            nearestCrate.Open(inventory);
+            nearbyCrates.Remove(nearestCrate);
+            return;
+        }
+
+        if (nearestItem == null) return;
+
         bool picked = false;
 
-        // 무기는 핫바로만 (꽉 차면 획득 불가)
-        if (target.itemData is WeaponData wd)
+        if (nearestItem.itemData is WeaponData wd)
         {
             var hotbar = WeaponHotbarUI.Instance;
             if (hotbar != null)
             {
-                if (hotbar.IsFull()) return; // 핫바 꽉 차면 획득 불가
+                if (hotbar.IsFull()) return;
                 picked = hotbar.AddWeapon(wd);
             }
         }
         else
         {
-            // 일반 아이템 → 인벤토리
-            picked = inventory.AddItem(target.itemData, target.amount);
+            picked = inventory.AddItem(nearestItem.itemData, nearestItem.amount);
         }
 
         if (picked)
         {
-            nearbyItems.Remove(target);
-            Destroy(target.gameObject);
+            nearbyItems.Remove(nearestItem);
+            Destroy(nearestItem.gameObject);
         }
     }
+
+    private float SqrDistTo(Transform t)
+        => (t.position - transform.position).sqrMagnitude;
 
     // ── 발사 처리 ────────────────────────────────
 
@@ -314,6 +328,29 @@ public class PlayerController : MonoBehaviour
         {
             float d = (nearbyItems[i].transform.position - transform.position).sqrMagnitude;
             if (d < minDist) { minDist = d; closest = nearbyItems[i]; }
+        }
+        return closest;
+    }
+    // ── 박스(LootCrate) 픽업 ─────────────────────
+
+    public void SetNearbyCrate(LootCrate crate)
+    {
+        if (!nearbyCrates.Contains(crate)) nearbyCrates.Add(crate);
+    }
+
+    public void ClearNearbyCrate(LootCrate crate) => nearbyCrates.Remove(crate);
+
+    public LootCrate GetClosestNearbyCrate()
+    {
+        nearbyCrates.RemoveAll(c => c == null);
+        if (nearbyCrates.Count == 0) return null;
+
+        LootCrate closest = nearbyCrates[0];
+        float minDist = SqrDistTo(closest.transform);
+        for (int i = 1; i < nearbyCrates.Count; i++)
+        {
+            float d = SqrDistTo(nearbyCrates[i].transform);
+            if (d < minDist) { minDist = d; closest = nearbyCrates[i]; }
         }
         return closest;
     }
