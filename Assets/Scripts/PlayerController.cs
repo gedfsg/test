@@ -34,6 +34,9 @@ public class PlayerController : MonoBehaviour
     [Header("Animation Rigging")]
     public Transform aimTarget;
 
+    [Tooltip("조준 지점 계산 시 기준 높이 = 캐릭터 루트(transform.position.y) + 이 값. 총구 높이 정도로 맞출 것(예: 1.0~1.3). firePoint.position.y처럼 애니메이션 때문에 흔들리는 값 대신 흔들리지 않는 고정 오프셋을 쓴다.")]
+    public float aimHeightOffset = 1.2f;
+
     private WeaponHandAttacher weaponHandAttacher;
 
     // ── Unity 생명주기 ────────────────────────────
@@ -369,9 +372,11 @@ public class PlayerController : MonoBehaviour
     {
         if (Mouse.current == null || mainCamera == null) return;
 
-        float aimY = rangedWeapon != null
-            ? rangedWeapon.firePoint.position.y
-            : transform.position.y;
+        // 기준 높이는 캐릭터 루트 + 고정 오프셋(총구 높이 정도). firePoint.position.y처럼
+        // 애니메이션 때문에 흔들리는 값을 쓰면 마우스가 가만히 있어도 조준 지점이 미세하게
+        // 계속 흔들리므로(특히 캐릭터와 가까운 거리일수록 각도로 크게 증폭), 반드시
+        // 흔들리지 않는 고정값을 써야 한다.
+        float aimY = transform.position.y + aimHeightOffset;
 
         if (GameUtils.GetMouseWorldPosition(mainCamera, aimY, out Vector3 targetPoint))
         {
@@ -384,6 +389,9 @@ public class PlayerController : MonoBehaviour
                 Quaternion.LookRotation(lookDir),
                 rotationSpeed * Time.deltaTime);
 
+            // aimTarget은 실제 마우스가 가리키는 정확한 월드 좌표를 그대로 담는다.
+            // Weapon.cs를 포함해 이 값을 참조하는 모든 곳이 정확히 같은 값을 보게 되므로
+            // "캐릭터가 보는 방향과 총알 방향이 다르다"는 문제가 생기지 않는다.
             if (aimTarget != null) aimTarget.position = targetPoint;
         }
     }

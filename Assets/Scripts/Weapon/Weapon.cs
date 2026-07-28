@@ -9,6 +9,10 @@ public class Weapon : MonoBehaviour
     public Transform firePoint;
     public string shooterTag;
 
+    [Header("조준 (PlayerController와 동일한 지점 참조)")]
+    [Tooltip("PlayerController의 Aim Target과 정확히 같은 오브젝트를 연결할 것. 이 값을 그대로 참조해서 방향을 계산하므로, 캐릭터가 보는 방향과 총알이 나가는 방향이 항상 100% 일치한다.")]
+    public Transform aimTarget;
+
     [Header("Weapon Data")]
     public WeaponData weaponData;
 
@@ -79,11 +83,20 @@ public class Weapon : MonoBehaviour
             Destroy(flash, 0.1f);
         }
 
-        Vector3 targetPoint;
-        bool hasTarget = GameUtils.GetMouseWorldPosition(Camera.main, firePoint.position.y, out targetPoint);
-        Vector3 baseDirection = hasTarget
-            ? (targetPoint - firePoint.position).normalized
-            : firePoint.forward;
+        // 자체적으로 다시 계산하지 않고, PlayerController가 이미 이번 프레임에 계산해둔
+        // aimTarget(정확한 마우스 월드 좌표)을 그대로 참조한다. 계산 로직이 하나로
+        // 통일되어 있으므로, 캐릭터가 보는 방향과 총알이 나가는 방향이 절대 어긋나지 않는다.
+        Vector3 baseDirection;
+        if (aimTarget != null)
+        {
+            Vector3 toTarget = aimTarget.position - firePoint.position;
+            toTarget.y = 0f; // 총은 항상 수평으로 발사 (WeaponHandAttacher의 시각적 조준과 일치)
+            baseDirection = toTarget.sqrMagnitude > 0.0001f ? toTarget.normalized : firePoint.forward;
+        }
+        else
+        {
+            baseDirection = firePoint.forward;
+        }
 
         WeaponType wType = (weaponData != null) ? weaponData.type : WeaponType.Ranged;
 
@@ -191,7 +204,7 @@ public class Weapon : MonoBehaviour
             isReloading = false;
         }
 
-        weaponData  = newData;
+        weaponData = newData;
         currentAmmo = (savedAmmo >= 0) ? savedAmmo : newData.maxAmmo;
     }
 }
