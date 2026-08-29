@@ -28,6 +28,13 @@
 3. **건물/도로 콜라이더** — `_TempAddBlockingColliders.cs` 신규 작성. `Tools → Map → Add Blocking Colliders` 실행 필요 (건물/담장/방호벽/나무=충돌, 신호등/가로등=얇은 충돌, 도로/Zone_*=통과)
 4. **건물 완전 사라짐 → 반투명(알파 0.3)** — `BuildingInterior.cs`를 알파 블렌딩 방식으로 재작성. **모래 바닥 안 보임** — `_TempPlaceGroundZones.cs`가 Terrain 높이를 지점별로 샘플링하도록 수정 (기존엔 평평하다고 가정해서 지형에 파묻힘), Y 여유값도 0.05로. **재실행 필요**: `Tools → Map → Place Ground Zones (Sand)`
 
+### 🔧 조명/콜라이더/Hierarchy 정리 (같은 날, 추가 작업)
+1. **그림자/조명이 너무 어두움** — Directional Light(Sun) Intensity 1→1.3, Shadow Strength 1→0.6 (Soft Shadows는 이미 켜져 있었음). Environment Ambient는 Source가 이미 Color 모드였는데 색상이 검정(0,0,0)이라 어두웠던 게 원인 — RGB(100,100,110), Intensity 1.2로 변경 (main.unity 직접 수정, 실행할 도구 없음)
+2. **건물 콜라이더 부정확** — `_TempFixBuildingColliders.cs` 신규: 건물(building-/house-)의 뭉뚱그린 BoxCollider를 실제 메시 모양대로 MeshCollider(Convex=false)로 교체, 여러 파츠 있으면 파츠별로 적용. 도로/Zone_*은 콜라이더 있으면 제거. **`Tools → Map → Fix Building Colliders (Mesh)` 실행 완료됨** (main.unity에 반영됨)
+3. **Hierarchy 정리** — `_TempOrganizeHierarchy.cs` 신규: Roads/Buildings/Water/Props/Nature/Zones/SketchfabAssets 부모로 카테고리 정리 (월드 위치 유지). 기존 GroundZones는 이름만 Zones로 변경해 재사용. **`Tools → Map → Organize Hierarchy` 실행 완료됨** (main.unity에 반영됨)
+4. **Sketchfab/Poly Pizza 에셋 다운로드** — `Assets/SketchfabAssets/`에 여러 건물(학교/병원/경찰서/교회/폐가/농장 등) + **City Park at Sunset**(공원) 임포트됨. **아직 씬에 배치 안 됨.** 가장 큰 파일이 50MB에 달해 `.gitattributes`에 `Assets/SketchfabAssets/**` LFS 트래킹 추가함
+5. **Player 스폰 위치를 공원으로 이동** — 요청받았으나 공원 오브젝트가 씬에 없어서(에셋만 임포트, 미배치) 보류. `_TempMovePlayerToPark.cs`는 만들어뒀지만 **공원 좌표(-158, -220)가 씬에 배치되기 전 값이라 재확인 필요** — City Park를 배치한 뒤 그 오브젝트의 실제 좌표로 갱신해서 실행할 것
+
 ⚠️ Unity 에디터가 이미 열려있는 상태에서 외부(Claude Code)가 파일을 수정했으므로, 씬을 한 번 닫았다가 다시 열어야 최신 변경사항이 반영됨.
 
 ### 🔧 카메라 줌 범위 확장 (같은 세션, 추가 조정)
