@@ -107,14 +107,38 @@ public class PlayerController : MonoBehaviour
     {
         if (inputActions == null) return;   // Awake 아직 실행 전 보호
 
+        // === MAP DEV: 카메라 회전(Q/E) 대응 이동 로직 - 아래 CameraRelativeMove() 사용 ===
         Vector2 inputVector = inputActions.Player.Move.ReadValue<Vector2>();
-        moveInput = new Vector3(inputVector.x, 0f, inputVector.y).normalized;
+        moveInput = CameraRelativeMove(inputVector);
+        // === MAP DEV END ===
 
         AimAtMouse();
         HandleFire();
     }
 
     void FixedUpdate() => locomotion.Move(moveInput);
+
+    // === MAP DEV: 카메라 관련 - 병합 시 이 메서드 삭제/수정 전 카메라 회전 기능 영향 확인 ===
+    /// <summary>
+    /// WASD 입력을 카메라가 바라보는 방향 기준으로 변환.
+    /// Q/E로 카메라가 회전해도 W는 항상 "화면 위쪽"으로 이동하게 함.
+    /// (CameraRotate.cs와 짝을 이룸. 이 메서드 없으면 카메라 회전 시 이동 방향이 어긋남)
+    /// </summary>
+    private Vector3 CameraRelativeMove(Vector2 inputVector)
+    {
+        if (mainCamera == null) return new Vector3(inputVector.x, 0f, inputVector.y).normalized;
+
+        Vector3 camForward = mainCamera.transform.forward;
+        camForward.y = 0f;
+        camForward.Normalize();
+
+        Vector3 camRight = mainCamera.transform.right;
+        camRight.y = 0f;
+        camRight.Normalize();
+
+        return (camRight * inputVector.x + camForward * inputVector.y).normalized;
+    }
+    // === MAP DEV END ===
 
     // ── 입력 콜백 ────────────────────────────────
 
