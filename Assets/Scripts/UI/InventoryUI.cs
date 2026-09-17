@@ -1,31 +1,33 @@
-using UnityEngine;
-using UnityEngine.UI;
 using TMPro;
+using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.EventSystems;
 
+/// <summary>
+/// 인벤토리 창 UI. 슬롯은 SlotView 프리팹을 사용하며(핫바와 동일 컴포넌트),
+/// 이 스크립트는 데이터 바인딩/입력 처리만 담당한다.
+/// </summary>
 public class InventoryUI : MonoBehaviour
 {
     [Header("References")]
     public InventoryManager inventoryManager;
     public GameObject inventoryWindow;
     public Transform slotGrid;
-    public GameObject slotPrefab;
+    public SlotView slotPrefab;
+    public UITheme theme;
+
+    [Header("탄약 패널 (선택)")]
+    [Tooltip("비워두면 탄약 패널을 표시하지 않는다.")]
+    public Transform ammoPanelContainer;
+    public GameObject ammoCellPrefab; // TypeLabel(TMP) + CountLabel(TMP)를 가진 프리팹, 선택사항
 
     public bool isInventoryOpen = false;
 
     private PlayerInputActions inputActions;
     private PlayerController playerController;
 
-    void Awake()
-    {
-        inputActions = new PlayerInputActions();
-    }
+    void Awake() => inputActions = new PlayerInputActions();
 
-    void Start()
-    {
-        playerController = FindAnyObjectByType<PlayerController>();
-    }
+    void Start() => playerController = FindAnyObjectByType<PlayerController>();
 
     void OnEnable()
     {
@@ -54,79 +56,29 @@ public class InventoryUI : MonoBehaviour
 
     public void UpdateUI()
     {
-        foreach (Transform child in slotGrid)
-            Destroy(child.gameObject);
+        Debug.Log($"[InventoryUI] UpdateUI 호출, 아이템 수={inventoryManager.inventory.Count}");
+        UIUtils.ClearChildren(slotGrid);
 
         for (int i = 0; i < inventoryManager.maxCapacity; i++)
         {
-            GameObject newSlot = Instantiate(slotPrefab, slotGrid);
-
-            Image slotBg = newSlot.GetComponent<Image>();
-            Image icon = newSlot.transform.Find("Icon").GetComponent<Image>();
-            TextMeshProUGUI amountText = newSlot.transform.Find("AmountText").GetComponent<TextMeshProUGUI>();
-
-            // 기본 스타일
-            if (slotBg != null) slotBg.color = new Color(0.08f, 0.10f, 0.13f, 1f);
-
-            Outline outline = newSlot.GetComponent<Outline>() ?? newSlot.AddComponent<Outline>();
-            outline.effectColor = new Color(0.25f, 0.30f, 0.35f, 0.6f);
-            outline.effectDistance = new Vector2(1f, -1f);
-
+            SlotView slot = Instantiate(slotPrefab, slotGrid);
+            Debug.Log($"[생성] i={i}, 형제순번={slot.transform.GetSiblingIndex()}");
             if (i < inventoryManager.inventory.Count)
             {
                 InventorySlot slotData = inventoryManager.inventory[i];
+                slot.SetItem(slotData.item, slotData.amount, theme);
 
-                // 타입별 배경색
-                if (slotBg != null)
-                {
-                    switch (slotData.item.itemType)
-                    {
-                        case ItemType.Consumable:
-                            slotBg.color = new Color(0.10f, 0.20f, 0.12f, 1f);
-                            outline.effectColor = new Color(0.20f, 0.60f, 0.25f, 0.7f);
-                            break;
-                        case ItemType.Weapon:
-                            slotBg.color = new Color(0.20f, 0.12f, 0.10f, 1f);
-                            outline.effectColor = new Color(0.70f, 0.25f, 0.20f, 0.7f);
-                            break;
-                        case ItemType.Material:
-                            slotBg.color = new Color(0.15f, 0.14f, 0.10f, 1f);
-                            outline.effectColor = new Color(0.60f, 0.55f, 0.20f, 0.7f);
-                            break;
-                        default:
-                            slotBg.color = new Color(0.14f, 0.17f, 0.21f, 1f);
-                            outline.effectColor = new Color(0.30f, 0.35f, 0.42f, 0.7f);
-                            break;
-                    }
-                }
-
-                if (slotData.item.icon != null)
-                {
-                    icon.sprite = slotData.item.icon;
-                    icon.color = Color.white;
-                    icon.enabled = true;
-                }
-                else
-                {
-                    icon.enabled = false;
-                }
-
-                amountText.text = slotData.amount > 1 ? "x" + slotData.amount : "";
-                amountText.color = new Color(0.95f, 0.80f, 0.40f, 1f);
-
-                AddItemNameLabel(newSlot, slotData.item.itemName);
-
-                // ── 우클릭 컨텍스트 메뉴 연결 ──────────────
                 var captured = slotData; // 클로저 캡처
-                AddRightClickEvent(newSlot, () => OpenContextMenu(captured));
+                slot.RightClicked += _ => OpenContextMenu(captured);
             }
             else
             {
-                icon.enabled = false;
-                amountText.text = "";
+                slot.SetEmpty(theme);
             }
         }
+
         UpdateAmmoPanel();
+        UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)slotGrid);
     }
 
     // ── 컨텍스트 메뉴 ─────────────────────────────
@@ -134,17 +86,12 @@ public class InventoryUI : MonoBehaviour
     private void OpenContextMenu(InventorySlot slot)
     {
         var actions = ItemActionProvider.GetActions(slot);
-        Vector2 mousePos = UnityEngine.InputSystem.Mouse.current.position.ReadValue();
+        Vector2 mousePos = Mouse.current.position.ReadValue();
 
-        ContextMenuUI.Instance?.Show(mousePos, actions, actionType =>
-        {
-            ExecuteAction(actionType, slot);
-        });
+        ContextMenuUI.Instance?.Show(mousePos, actions, actionType => ExecuteAction(actionType, slot));
     }
 
-    /// <summary>
-    /// 액션 실행. 새 ActionType 추가 시 여기에 케이스 추가.
-    /// </summary>
+    /// <summary>액션 실행. 새 ActionType 추가 시 여기에 케이스 추가.</summary>
     private void ExecuteAction(ActionType actionType, InventorySlot slot)
     {
         switch (actionType)
@@ -152,16 +99,12 @@ public class InventoryUI : MonoBehaviour
             case ActionType.Use:
                 inventoryManager.UseConsumable(slot);
                 break;
-
             case ActionType.Equip:
-                if (slot.item is WeaponData wd)
-                    EquipWeapon(wd, slot.slotId);
+                if (slot.item is WeaponData wd) EquipWeapon(wd, slot.slotId);
                 break;
-
             case ActionType.EquipToHotbar:
                 EquipToHotbar(slot);
                 break;
-
             case ActionType.Drop:
                 DropItem(slot);
                 break;
@@ -177,28 +120,7 @@ public class InventoryUI : MonoBehaviour
         // TODO: 나중에 월드에 PickupItem 스폰 추가 가능
     }
 
-    // ── 기존 기능 ─────────────────────────────────
-
-    private void AddItemNameLabel(GameObject slot, string itemName)
-    {
-        Transform existing = slot.transform.Find("ItemName");
-        if (existing != null) return;
-
-        GameObject nameObj = new GameObject("ItemName");
-        nameObj.transform.SetParent(slot.transform, false);
-
-        RectTransform rt = nameObj.AddComponent<RectTransform>();
-        rt.anchorMin = new Vector2(0f, 0f);
-        rt.anchorMax = new Vector2(1f, 0.28f);
-        rt.offsetMin = rt.offsetMax = Vector2.zero;
-
-        TextMeshProUGUI txt = nameObj.AddComponent<TextMeshProUGUI>();
-        txt.text = itemName.Length > 8 ? itemName[..8] : itemName;
-        txt.fontSize = 8f;
-        txt.color = new Color(0.80f, 0.83f, 0.87f, 1f);
-        txt.alignment = TextAlignmentOptions.Center;
-        txt.overflowMode = TextOverflowModes.Truncate;
-    }
+    // ── 장착 로직 ─────────────────────────────────
 
     private void EquipWeapon(WeaponData newWeapon, string slotId)
     {
@@ -209,12 +131,10 @@ public class InventoryUI : MonoBehaviour
 
         int targetSlot = hotbar.GetActiveSlot();
 
-        // 1. 인벤토리에서 새 무기 슬롯 정보 미리 가져오기 (Remove 전에!)
         InventorySlot invSlot = inventoryManager.GetSlotById(slotId);
         int savedAmmo = invSlot?.currentAmmo ?? -1;
         int insertIndex = inventoryManager.GetSlotIndex(slotId);
 
-        // 2. 현재 핫바 슬롯 아이템을 인벤토리로 돌려보내기
         ItemData currentItem = hotbar.GetActiveItem();
         if (currentItem is WeaponData currentWeapon)
         {
@@ -222,14 +142,10 @@ public class InventoryUI : MonoBehaviour
             inventoryManager.InsertItemAt(insertIndex, currentWeapon, 1, currentAmmo);
         }
 
-        // 3. 새 무기를 인벤토리에서 제거
         inventoryManager.RemoveItemById(slotId);
 
-        // 4. 핫바에 직접 세팅 (SelectSlot 호출 안 함)
         int finalAmmo = savedAmmo >= 0 ? savedAmmo : newWeapon.maxAmmo;
         hotbar.SetSlotOnly(targetSlot, newWeapon, finalAmmo);
-
-        // 5. 플레이어에 장착
         playerController.SwapWeaponData(newWeapon, finalAmmo);
 
         Debug.Log($"[인벤토리] '{newWeapon.itemName}' → 핫바 슬롯 {targetSlot + 1}에 장착! (탄수: {finalAmmo})");
@@ -243,11 +159,9 @@ public class InventoryUI : MonoBehaviour
 
         int targetSlot = hotbar.GetActiveSlot();
 
-        // 1. 인벤토리 슬롯 정보 미리 가져오기 (Remove 전에!)
         int savedAmmo = slot.currentAmmo;
         int insertIndex = inventoryManager.GetSlotIndex(slot.slotId);
 
-        // 2. 현재 핫바 슬롯 아이템을 인벤토리로 돌려보내기
         ItemData currentItem = hotbar.GetActiveItem();
         if (currentItem != null)
         {
@@ -257,121 +171,63 @@ public class InventoryUI : MonoBehaviour
             inventoryManager.InsertItemAt(insertIndex, currentItem, 1, currentAmmo);
         }
 
-        // 3. 새 아이템을 인벤토리에서 제거
         inventoryManager.RemoveItemById(slot.slotId);
 
-        // 4. 핫바에 직접 세팅 (SelectSlot 호출 안 함)
         int finalCount = slot.item is WeaponData wd
             ? (savedAmmo >= 0 ? savedAmmo : wd.maxAmmo)
             : slot.amount;
 
         hotbar.SetSlotOnly(targetSlot, slot.item, finalCount);
 
-        // 5. 무기면 플레이어에 장착
         if (slot.item is WeaponData wd2)
             playerController.SwapWeaponData(wd2, finalCount);
 
         Debug.Log($"[인벤토리] '{slot.item.itemName}' 핫바 슬롯 {targetSlot + 1}에 등록! (탄수/개수: {finalCount})");
     }
 
-    private void AddRightClickEvent(GameObject target, System.Action action)
-    {
-        EventTrigger trigger = target.GetComponent<EventTrigger>() ?? target.AddComponent<EventTrigger>();
-
-        var entry = new EventTrigger.Entry();
-        entry.eventID = EventTriggerType.PointerClick;
-        entry.callback.AddListener(data =>
-        {
-            var pointerData = data as UnityEngine.EventSystems.PointerEventData;
-            if (pointerData?.button == UnityEngine.EventSystems.PointerEventData.InputButton.Right)
-                action?.Invoke();
-        });
-        trigger.triggers.Add(entry);
-    }
-
-    private GameObject ammoPanel;
+    // ── 탄약 패널 ─────────────────────────────────
 
     public void UpdateAmmoPanel()
     {
-        if (ammoPanel != null) Destroy(ammoPanel);
+        if (ammoPanelContainer == null || ammoCellPrefab == null) return;
 
-        ammoPanel = new GameObject("AmmoPanel");
-        ammoPanel.transform.SetParent(inventoryWindow.transform, false);
-        ammoPanel.transform.SetAsLastSibling();
+        UIUtils.ClearChildren(ammoPanelContainer);
 
-        LayoutElement le = ammoPanel.AddComponent<LayoutElement>();
-        le.ignoreLayout = true;
-
-        RectTransform rt = ammoPanel.GetComponent<RectTransform>();
-        rt.anchorMin = new Vector2(0f, 0f);
-        rt.anchorMax = new Vector2(1f, 0f);
-        rt.pivot = new Vector2(0.5f, 1f);
-        rt.anchoredPosition = new Vector2(0f, -5f);
-        rt.sizeDelta = new Vector2(0f, 36f);
-
-        Image bg = ammoPanel.AddComponent<Image>();
-        bg.color = new Color(0.06f, 0.08f, 0.11f, 0.95f);
-
-        HorizontalLayoutGroup hlg = ammoPanel.AddComponent<HorizontalLayoutGroup>();
-        hlg.padding = new RectOffset(4, 4, 6, 6);
-        hlg.spacing = 4f;
-        hlg.childAlignment = TextAnchor.MiddleLeft;
-        hlg.childControlHeight = true;
-        hlg.childControlWidth = false;
-        hlg.childForceExpandWidth = true;
-        hlg.childForceExpandHeight = true;
-        hlg.childAlignment = TextAnchor.MiddleCenter;
-
-        var ammoTypes = new (WeaponType type, string icon)[]
-        {
-        (WeaponType.Pistol,  "P"),
-        (WeaponType.AR,      "AR"),
-        (WeaponType.Shotgun, "SG"),
-        (WeaponType.Sniper,  "SR"),
-        };
-
-        foreach (var (type, icon) in ammoTypes)
-            CreateAmmoCell(ammoPanel.transform, type, icon);
-    }
-
-    private void CreateAmmoCell(Transform parent, WeaponType type, string typeLabel)
-    {
         if (AmmoInventory.Instance == null) return;
 
+        var ammoTypes = new (WeaponType type, string label)[]
+        {
+            (WeaponType.Pistol, "P"),
+            (WeaponType.AR, "AR"),
+            (WeaponType.Shotgun, "SG"),
+            (WeaponType.Sniper, "SR"),
+        };
+
+        foreach (var (type, label) in ammoTypes)
+            CreateAmmoCell(type, label);
+    }
+
+    private void CreateAmmoCell(WeaponType type, string typeLabel)
+    {
         int current = AmmoInventory.Instance.GetAmmo(type);
-        int max = AmmoInventory.Instance.GetMax(type);
         bool hasAmmo = current > 0;
 
-        GameObject cell = new GameObject(typeLabel);
-        cell.transform.SetParent(parent, false);
+        GameObject cell = Instantiate(ammoCellPrefab, ammoPanelContainer);
 
-        HorizontalLayoutGroup hlg = cell.AddComponent<HorizontalLayoutGroup>();
-        hlg.spacing = 4f;
-        hlg.childControlHeight = true;
-        hlg.childControlWidth = true;
-        hlg.childForceExpandWidth = false;
-        hlg.childForceExpandHeight = true;
-        hlg.childAlignment = TextAnchor.MiddleCenter;
-
-        // 타입 라벨 (P / AR / SG / SR)
-        GameObject labelObj = new GameObject("Type");
-        labelObj.transform.SetParent(cell.transform, false);
-        TextMeshProUGUI labelTxt = labelObj.AddComponent<TextMeshProUGUI>();
-        labelTxt.text = typeLabel;
-        labelTxt.fontSize = 11f;
-        labelTxt.color = new Color(0.55f, 0.60f, 0.65f, 1f);
-        labelTxt.alignment = TextAlignmentOptions.MidlineLeft;
-
-        // 탄약 수치
-        GameObject countObj = new GameObject("Count");
-        countObj.transform.SetParent(cell.transform, false);
-        TextMeshProUGUI countTxt = countObj.AddComponent<TextMeshProUGUI>();
-        countTxt.text = $"{current}";
-        countTxt.fontSize = 13f;
-        countTxt.color = hasAmmo
-            ? new Color(0.95f, 0.85f, 0.40f, 1f)
-            : new Color(0.40f, 0.40f, 0.40f, 1f);
-        countTxt.alignment = TextAlignmentOptions.MidlineLeft;
-        countTxt.fontStyle = hasAmmo ? FontStyles.Bold : FontStyles.Normal;
+        var texts = cell.GetComponentsInChildren<TextMeshProUGUI>();
+        // 프리팹 규약: 자식 TMP 순서 [0]=타입 라벨, [1]=수치
+        if (texts.Length > 0)
+        {
+            texts[0].text = typeLabel;
+            texts[0].color = theme != null ? theme.textAmmoLabel : new Color(0.85f, 0.72f, 0.32f, 1f);
+        }
+        if (texts.Length > 1)
+        {
+            texts[1].text = current.ToString();
+            texts[1].color = hasAmmo
+                ? (theme != null ? theme.textAmmoAvailable : Color.white)
+                : (theme != null ? theme.textAmmoEmpty : new Color(0.40f, 0.40f, 0.40f, 1f));
+            texts[1].fontStyle = hasAmmo ? FontStyles.Bold : FontStyles.Normal;
+        }
     }
 }
