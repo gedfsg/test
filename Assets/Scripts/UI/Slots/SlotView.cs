@@ -43,7 +43,6 @@ public class SlotView : MonoBehaviour, IPointerClickHandler
 
     public void OnPointerClick(PointerEventData eventData)
     {
-        Debug.Log($"[SlotView] 순번={transform.GetSiblingIndex()} / 마우스={eventData.position} / 슬롯중심={((RectTransform)transform).position}");
         if (eventData.button == PointerEventData.InputButton.Right)
             RightClicked?.Invoke(eventData);
         else if (eventData.button == PointerEventData.InputButton.Left)
