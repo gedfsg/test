@@ -10,7 +10,7 @@ public static class TempFixBuildingColliders
     [MenuItem("Tools/Map/Fix Building Colliders (Mesh)")]
     static void Fix()
     {
-        int buildingCount = 0, partCount = 0, clearedCount = 0;
+        int buildingCount = 0, partCount = 0, clearedCount = 0, zeroPartCount = 0;
 
         foreach (GameObject go in EditorSceneManager.GetActiveScene().GetRootGameObjects())
         {
@@ -21,8 +21,18 @@ public static class TempFixBuildingColliders
 
             if (isBuilding)
             {
-                partCount += ReplaceWithMeshColliders(go);
+                // BuildingInterior가 붙은 건물은 _TempApplyBuildingInterior가 문 구멍 낸
+                // BoxCollider로 관리 중이므로 건드리지 않음 (다시 덮으면 문이 막혀버림)
+                if (go.GetComponent<BuildingInterior>() != null) continue;
+
+                int parts = ReplaceWithMeshColliders(go);
+                partCount += parts;
                 buildingCount++;
+                if (parts == 0)
+                {
+                    zeroPartCount++;
+                    Debug.LogWarning($"⚠️ '{go.name}' (위치 {go.transform.position}) — MeshFilter/메시를 못 찾아서 콜라이더가 안 붙었습니다. 확인 필요.");
+                }
             }
             else if (isPassThrough)
             {
@@ -32,8 +42,9 @@ public static class TempFixBuildingColliders
 
         EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
         EditorSceneManager.SaveScene(EditorSceneManager.GetActiveScene());
-        Debug.Log($"✅ 건물 {buildingCount}개 → MeshCollider {partCount}개 파트 적용, " +
-                  $"도로/잔디·모래에서 콜라이더 {clearedCount}개 제거.");
+        Debug.Log($"✅ 건물 {buildingCount}개 검사 → MeshCollider {partCount}개 파트 적용" +
+                  (zeroPartCount > 0 ? $" ({zeroPartCount}개는 콜라이더 못 붙임, 위 경고 로그 확인)" : "") +
+                  $", 도로/잔디·모래에서 콜라이더 {clearedCount}개 제거.");
     }
 
     // 건물(및 자식 파츠)의 막힘용(non-trigger) BoxCollider를 제거하고,
