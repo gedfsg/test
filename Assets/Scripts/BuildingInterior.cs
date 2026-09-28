@@ -1,154 +1,164 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 /// <summary>
-/// 플레이어가 건물 트리거에 들어오면 지정된 오브젝트(지붕, 윗벽 등)를 반투명하게 처리.
-/// 건물에 BoxCollider(Is Trigger) 붙이고, 숨길 오브젝트들을 배열에 드래그.
-/// 충돌(막힘)용 콜라이더는 별도의 non-trigger Collider를 추가로 사용할 것
-/// (이 스크립트는 isTrigger=true인 콜라이더만 트리거로 사용함).
+/// 플레이어가 건물 안(축소된 트리거)에 들어가면 1층 높이(groundFloorHeight) 위쪽을
+/// 셰이더로 완전히 잘라내서(discard) 안 보이게 함 — 지붕은 물론 2층 이상도 다 사라지고
+/// 1층만 남음. 알파 블렌딩이 아니라 진짜로 안 그려지는 방식. 동시에 Fog로 주변을 어둡게
+/// 만들어 지금 있는 방 주변만 보이게 함(좀보이드 스타일). 건물 콜라이더(문 있는 벽 1면 +
+/// 막힌 벽 3면)/트리거 세팅은 _TempApplyBuildingInterior.cs(에디터 배치 툴)에서 담당.
 /// </summary>
 [RequireComponent(typeof(Collider))]
 public class BuildingInterior : MonoBehaviour
 {
-    [Header("플레이어 진입 시 반투명 처리할 오브젝트 (지붕, 윗벽 등)")]
-    public GameObject[] objectsToHide;
+    [Header("1층 높이 (건물 바닥에서 이 높이 위는 전부 잘라내서 1층만 보이게 함)")]
+    public float groundFloorHeight = 3f;
 
-    [Header("페이드 설정")]
-    public bool useFade = true;          // 즉시 바뀌지 않고 부드럽게
-    public float fadeDuration = 0.3f;
     public string playerTag = "Player";
 
-    [Header("진입 시 알파값 (0=완전 투명, 1=불투명, 완전히 사라지지 않게 0보다 크게)")]
-    [Range(0.05f, 1f)] public float hiddenAlpha = 0.3f;
+    [Header("실내 시야 제한 (좀보이드 스타일 - 안에 들어가면 주변이 어두워짐)")]
+    public bool darkenSurroundings = true;
+    public float indoorFogStartDistance = 2f;
+    public float indoorFogEndDistance = 14f;
+    public Color indoorFogColor = Color.black;
 
-    // ─────────────────────────────────────────────
-    private bool playerInside;
-    private readonly Dictionary<Renderer, Material[]> instanceMats = new Dictionary<Renderer, Material[]>();
-    private Coroutine fadeRoutine;
+    static readonly int CutHeightId = Shader.PropertyToID("_CutHeight");
+    static readonly int CutEnabledId = Shader.PropertyToID("_CutEnabled");
+
+    // 여러 건물이 겹쳐 있어도(모서리 등) 안개가 꼬이지 않게 전역 카운터로 관리.
+    // 실외 원래 안개 설정은 맨 처음 건물에 들어갈 때 한 번만 저장해뒀다가 마지막에 나갈 때 복원.
+    static int globalInsideCount = 0;
+    static bool originalFogSaved = false;
+    static bool originalFogEnabled;
+    static FogMode originalFogMode;
+    static Color originalFogColor;
+    static float originalFogStart, originalFogEnd;
+
+    Renderer[] renderers;
+    Material[][] instanceMats; // renderer별 인스턴스 머티리얼 슬롯
 
     void Awake()
     {
-        // 이 컴포넌트가 쓸 트리거 콜라이더를 찾음 (isTrigger=true인 것 우선)
         Collider triggerCol = FindTriggerCollider();
         if (triggerCol != null) triggerCol.isTrigger = true;
 
-        // 숨길 오브젝트들의 렌더러를 인스턴스 머티리얼로 전환 (다른 건물에 영향 없게)
-        foreach (var obj in objectsToHide)
+        renderers = GetComponentsInChildren<Renderer>(true);
+        float cutHeightWorldY = ComputeCutHeight();
+
+        Shader cutawayShader = Shader.Find("Custom/BuildingCutaway");
+        if (cutawayShader == null)
         {
-            if (obj == null) continue;
-            foreach (var r in obj.GetComponentsInChildren<Renderer>(true))
+            Debug.LogError($"'{name}' — Custom/BuildingCutaway 셰이더를 찾을 수 없습니다.");
+            return;
+        }
+
+        instanceMats = new Material[renderers.Length][];
+        for (int r = 0; r < renderers.Length; r++)
+        {
+            Material[] originals = renderers[r].sharedMaterials;
+            Material[] copies = new Material[originals.Length];
+            for (int m = 0; m < originals.Length; m++)
             {
-                if (instanceMats.ContainsKey(r)) continue;
-                Material[] mats = r.materials; // 접근 시 자동으로 인스턴스 복제됨
-                instanceMats[r] = mats;
-                foreach (var m in mats) PrepareTransparent(m);
+                Material src = originals[m];
+                Material cut = new Material(cutawayShader);
+                if (src != null)
+                {
+                    if (src.mainTexture != null) cut.mainTexture = src.mainTexture;
+                    if (src.HasProperty("_BaseColor") || src.HasProperty("_Color")) cut.color = src.color;
+                }
+                cut.SetFloat(CutHeightId, cutHeightWorldY);
+                cut.SetFloat(CutEnabledId, 0f);
+                copies[m] = cut;
             }
+            renderers[r].materials = copies;
+            instanceMats[r] = copies;
         }
     }
 
-    // 여러 Collider가 있을 수 있음(막힘용 콜라이더 별도 추가 시) → isTrigger=true인 것만 사용
-    private Collider FindTriggerCollider()
+    Collider FindTriggerCollider()
     {
         foreach (var c in GetComponents<Collider>())
             if (c.isTrigger) return c;
         return GetComponent<Collider>();
     }
 
+    float ComputeCutHeight()
+    {
+        if (renderers.Length == 0) return transform.position.y + 1000f;
+        Bounds b = renderers[0].bounds;
+        for (int i = 1; i < renderers.Length; i++) b.Encapsulate(renderers[i].bounds);
+        return b.min.y + groundFloorHeight;
+    }
+
     void OnTriggerEnter(Collider other)
     {
         if (!other.CompareTag(playerTag)) return;
-        if (playerInside) return;
-        playerInside = true;
-        SetHidden(true);
+        SetCut(true);
+        if (darkenSurroundings) EnterIndoorFog(other.transform);
     }
 
     void OnTriggerExit(Collider other)
     {
         if (!other.CompareTag(playerTag)) return;
-        if (!playerInside) return;
-        playerInside = false;
-        SetHidden(false);
+        SetCut(false);
+        if (darkenSurroundings) ExitIndoorFog();
     }
 
-    void SetHidden(bool hide)
+    void SetCut(bool cut)
     {
-        if (fadeRoutine != null) StopCoroutine(fadeRoutine);
-        float targetAlpha = hide ? hiddenAlpha : 1f;
-        fadeRoutine = useFade ? StartCoroutine(FadeRoutine(targetAlpha)) : null;
-        if (!useFade) ApplyAlphaToAll(targetAlpha);
-    }
-
-    IEnumerator FadeRoutine(float targetAlpha)
-    {
-        Dictionary<Material, float> startAlphas = new Dictionary<Material, float>();
-        foreach (var mats in instanceMats.Values)
+        if (instanceMats == null) return;
+        float v = cut ? 1f : 0f;
+        foreach (var mats in instanceMats)
             foreach (var m in mats)
-                if (!startAlphas.ContainsKey(m))
-                    startAlphas[m] = GetAlpha(m);
+                if (m != null) m.SetFloat(CutEnabledId, v);
+    }
 
-        float elapsed = 0f;
-        while (elapsed < fadeDuration)
+    // 좀보이드 스타일: 실내에 있을 때 Fog로 멀리 있는 바깥/다른 방을 어둡게 가려서
+    // 지금 있는 방 주변만 보이게 함. 여러 건물이 겹쳐도 카운터로 관리해서 정상 작동.
+    //
+    // 주의: Built-in RP의 Fog는 "카메라로부터의 거리" 기준임. 이 게임 카메라는
+    // CameraZoom.cs 기준 플레이어에서 20~80유닛(기본 40) 떨어진 탑뷰 카메라라서,
+    // fogStartDistance/EndDistance를 0~14 같은 작은 절대값으로 주면 카메라~플레이어
+    // 거리 자체가 이미 그 범위를 넘어버려서 아무 효과가 안 생김(또는 화면 전체가
+    // 안개색). 그래서 트리거 진입 시점의 "카메라→플레이어 거리"를 구해서 그 위에
+    // 상대값(indoorFogStartDistance/EndDistance)을 더하는 방식으로 계산함.
+    static void EnterIndoorFogStatic(Transform player, float startMargin, float endMargin, Color color)
+    {
+        if (!originalFogSaved)
         {
-            elapsed += Time.deltaTime;
-            float t = elapsed / fadeDuration;
-            foreach (var kv in startAlphas)
-                SetAlpha(kv.Key, Mathf.Lerp(kv.Value, targetAlpha, t));
-            yield return null;
+            originalFogEnabled = RenderSettings.fog;
+            originalFogMode = RenderSettings.fogMode;
+            originalFogColor = RenderSettings.fogColor;
+            originalFogStart = RenderSettings.fogStartDistance;
+            originalFogEnd = RenderSettings.fogEndDistance;
+            originalFogSaved = true;
         }
 
-        foreach (var kv in startAlphas)
-            SetAlpha(kv.Key, targetAlpha);
+        float camDist = 0f;
+        Camera cam = Camera.main;
+        if (cam != null && player != null)
+            camDist = Vector3.Distance(cam.transform.position, player.position);
+
+        RenderSettings.fog = true;
+        RenderSettings.fogMode = FogMode.Linear;
+        RenderSettings.fogColor = color;
+        RenderSettings.fogStartDistance = camDist + startMargin;
+        RenderSettings.fogEndDistance = camDist + endMargin;
+        globalInsideCount++;
     }
 
-    void ApplyAlphaToAll(float alpha)
+    static void ExitIndoorFogStatic()
     {
-        foreach (var mats in instanceMats.Values)
-            foreach (var m in mats)
-                SetAlpha(m, alpha);
+        globalInsideCount = Mathf.Max(0, globalInsideCount - 1);
+        if (globalInsideCount == 0 && originalFogSaved)
+        {
+            RenderSettings.fog = originalFogEnabled;
+            RenderSettings.fogMode = originalFogMode;
+            RenderSettings.fogColor = originalFogColor;
+            RenderSettings.fogStartDistance = originalFogStart;
+            RenderSettings.fogEndDistance = originalFogEnd;
+        }
     }
 
-    // ── 머티리얼 알파 유틸 ────────────────────────────
-    static float GetAlpha(Material m) => GetColor(m).a;
-
-    static Color GetColor(Material m)
-    {
-        if (m.HasProperty("_BaseColor")) return m.GetColor("_BaseColor");
-        if (m.HasProperty("_Color")) return m.color;
-        return Color.white;
-    }
-
-    static void SetAlpha(Material m, float alpha)
-    {
-        Color c = GetColor(m);
-        c.a = alpha;
-        if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c);
-        else if (m.HasProperty("_Color")) m.color = c;
-    }
-
-    // URP Lit/Simple Lit 머티리얼을 알파 블렌딩 가능하게 전환.
-    // 알파=1일 때는 기존 Opaque와 시각적으로 동일하게 보임.
-    static void PrepareTransparent(Material m)
-    {
-        if (m.HasProperty("_Surface")) m.SetFloat("_Surface", 1f);
-        if (m.HasProperty("_Blend")) m.SetFloat("_Blend", 0f);
-        if (m.HasProperty("_SrcBlend")) m.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha);
-        if (m.HasProperty("_DstBlend")) m.SetInt("_DstBlend", (int)BlendMode.OneMinusSrcAlpha);
-        if (m.HasProperty("_ZWrite")) m.SetInt("_ZWrite", 0);
-        m.DisableKeyword("_ALPHATEST_ON");
-        m.EnableKeyword("_ALPHABLEND_ON");
-        m.DisableKeyword("_ALPHAPREMULTIPLY_ON");
-        m.renderQueue = (int)RenderQueue.Transparent;
-    }
-
-    void OnDrawGizmosSelected()
-    {
-        Collider col = FindTriggerCollider();
-        if (col == null) return;
-        Gizmos.color = new Color(0.3f, 0.8f, 1f, 0.3f);
-        Gizmos.matrix = transform.localToWorldMatrix;
-        if (col is BoxCollider box)
-            Gizmos.DrawCube(box.center, box.size);
-    }
+    void EnterIndoorFog(Transform player) => EnterIndoorFogStatic(player, indoorFogStartDistance, indoorFogEndDistance, indoorFogColor);
+    void ExitIndoorFog() => ExitIndoorFogStatic();
 }
