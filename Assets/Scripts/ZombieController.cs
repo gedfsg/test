@@ -24,6 +24,16 @@ public class ZombieController : MonoBehaviour
     public float wanderIntervalMax  = 5f;
     public float wanderSpeedFactor  = 0.5f;
 
+    [Header("UI")]
+    public GameObject damageTextPrefab;
+    public bool showHealthBar = true;
+
+    [Header("탄약 드랍 (사망 시) - 프리팹별로 확률/종류/수량 다르게 설정")]
+    public AmmoData dropAmmoData;
+    [Range(0f, 1f)] public float dropChance = 0.5f;
+    public int dropAmmoMin = 5;
+    public int dropAmmoMax = 10;
+
     // ─────────────────────────────────────────────
     private float attackTimer;
     private bool  isDead;
@@ -94,17 +104,20 @@ public class ZombieController : MonoBehaviour
         // 4. Health 추가 (총알 데미지 받기)
         health = GetComponent<Health>();
         if (health == null) health = gameObject.AddComponent<Health>();
-        health.maxHealth = maxHealth;
-        // Health.Awake가 currentHealth=100으로 미리 설정함 → Heal(0)로 maxHealth(50)로 클램프
-        health.Heal(0f);
+        health.SetMaxHealth(maxHealth);
         // UnityEvent가 런타임 추가 시 null일 수 있음
         if (health.onDeath == null) health.onDeath = new UnityEngine.Events.UnityEvent();
         if (health.onHurt  == null) health.onHurt  = new UnityEngine.Events.UnityEvent();
         health.onDeath.RemoveListener(Die);
         health.onDeath.AddListener(Die);
+        if (damageTextPrefab != null) health.damageTextPrefab = damageTextPrefab;
         Debug.Log($"[Zombie] {name} Health 세팅: max={health.maxHealth}, current={health.GetCurrentHealth()}");
 
-        // 5. NavMesh 위로 워프 (스폰 직후 약간 떠 있을 수 있음)
+        // 5. 머리 위 체력바
+        if (showHealthBar && GetComponent<ZombieHealthBar>() == null)
+            gameObject.AddComponent<ZombieHealthBar>();
+
+        // 6. NavMesh 위로 워프 (스폰 직후 약간 떠 있을 수 있음)
         TryWarpToNavMesh();
     }
 
@@ -316,50 +329,6 @@ public class ZombieController : MonoBehaviour
             }
         }
 
-        // 트랜지션 안 먹어도 강제로 상태 전환 (다양한 이름 시도)
-        try
-        {
-            var info = anim.GetCurrentAnimatorStateInfo(0);
-            bool inAttack = info.IsName("Attack") || info.IsTag("Attack");
-            bool inDie    = info.IsName("Die")    || info.IsTag("Die");
-
-            if (inAttack || inDie) return;
-
-            if (walking)
-            {
-                if (!IsInState(info, "Walk", "Walking", "Run", "walk", "Move"))
-                {
-                    PlayFirstAvailable("Walk", "Walking", "Run", "walk", "Move");
-                }
-            }
-            else
-            {
-                if (!IsInState(info, "Idle", "idle", "Stand"))
-                {
-                    PlayFirstAvailable("Idle", "idle", "Stand");
-                }
-            }
-        }
-        catch { }
-    }
-
-    bool IsInState(AnimatorStateInfo info, params string[] names)
-    {
-        foreach (var n in names)
-            if (info.IsName(n)) return true;
-        return false;
-    }
-
-    void PlayFirstAvailable(params string[] names)
-    {
-        foreach (var n in names)
-        {
-            if (anim.HasState(0, Animator.StringToHash(n)))
-            {
-                anim.CrossFade(n, 0.15f);
-                return;
-            }
-        }
     }
 
     // 트리거 디버그 (총알 맞는지 확인용)
@@ -417,6 +386,8 @@ public class ZombieController : MonoBehaviour
         if (isDead) return;
         isDead = true;
 
+        TryDropAmmo();
+
         if (agent != null) agent.enabled = false;
 
         // Animator 끄기 (가짜 죽음 애니메이션과 충돌 방지)
@@ -430,6 +401,15 @@ public class ZombieController : MonoBehaviour
 
         // 죽는 클립이 컨트롤러에 있으면 사용, 없으면 가짜 죽음 코루틴
         StartCoroutine(FakeDeathRoutine());
+    }
+
+    void TryDropAmmo()
+    {
+        if (dropAmmoData == null) return;
+        if (Random.value > dropChance) return;
+
+        int amount = Random.Range(dropAmmoMin, dropAmmoMax + 1);
+        AmmoDropSpawner.Spawn(transform.position, dropAmmoData, amount);
     }
 
     System.Collections.IEnumerator FakeDeathRoutine()

@@ -11,7 +11,7 @@ using UnityEngine;
 public class BuildingInterior : MonoBehaviour
 {
     [Header("1층 높이 (건물 바닥에서 이 높이 위는 전부 잘라내서 1층만 보이게 함)")]
-    public float groundFloorHeight = 3f;
+    public float groundFloorHeight = 5f;
 
     public string playerTag = "Player";
 
@@ -27,6 +27,7 @@ public class BuildingInterior : MonoBehaviour
     // 여러 건물이 겹쳐 있어도(모서리 등) 안개가 꼬이지 않게 전역 카운터로 관리.
     // 실외 원래 안개 설정은 맨 처음 건물에 들어갈 때 한 번만 저장해뒀다가 마지막에 나갈 때 복원.
     static int globalInsideCount = 0;
+    public static bool IsAnyoneIndoors => globalInsideCount > 0;
     static bool originalFogSaved = false;
     static bool originalFogEnabled;
     static FogMode originalFogMode;
@@ -94,6 +95,8 @@ public class BuildingInterior : MonoBehaviour
         if (!other.CompareTag(playerTag)) return;
         SetCut(true);
         if (darkenSurroundings) EnterIndoorFog(other.transform);
+        BuildingTransition.Play();
+        Camera.main?.GetComponent<CameraZoom>()?.SetIndoor(true);
     }
 
     void OnTriggerExit(Collider other)
@@ -101,6 +104,8 @@ public class BuildingInterior : MonoBehaviour
         if (!other.CompareTag(playerTag)) return;
         SetCut(false);
         if (darkenSurroundings) ExitIndoorFog();
+        BuildingTransition.Play();
+        Camera.main?.GetComponent<CameraZoom>()?.SetIndoor(false);
     }
 
     void SetCut(bool cut)

@@ -10,15 +10,15 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -8679921383154817045, guid: 0efa45b1755a98f479288624fef99654, type: 3}
       propertyPath: m_LocalScale.x
-      value: 2
+      value: 3.2
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 0efa45b1755a98f479288624fef99654, type: 3}
       propertyPath: m_LocalScale.y
-      value: 2
+      value: 3.2
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 0efa45b1755a98f479288624fef99654, type: 3}
       propertyPath: m_LocalScale.z
-      value: 2
+      value: 3.2
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 0efa45b1755a98f479288624fef99654, type: 3}
       propertyPath: m_LocalPosition.x
@@ -154,3 +154,15 @@ MonoBehaviour:
   attackDamage: 10
   attackCooldown: 1.5
   detectionRange: 30
+  retargetInterval: 1
+  enableWander: 1
+  wanderRadius: 8
+  wanderIntervalMin: 2
+  wanderIntervalMax: 5
+  wanderSpeedFactor: 0.5
+  damageTextPrefab: {fileID: 7267503375520356018, guid: 42cf94d8cfb66fd469143863a639bda9, type: 3}
+  showHealthBar: 1
+  dropAmmoData: {fileID: 11400000, guid: d7d64191447ce2049a3bbb05cb355656, type: 2}
+  dropChance: 0.8
+  dropAmmoMin: 10
+  dropAmmoMax: 20

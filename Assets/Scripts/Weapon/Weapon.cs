@@ -161,6 +161,7 @@ public class Weapon : MonoBehaviour
         if (reserve <= 0)
         {
             Debug.Log("[재장전] 소지 탄약 없음!");
+            PickupFeedbackUI.Instance?.ShowWarning("탄약 없음!");
             yield break;
         }
 

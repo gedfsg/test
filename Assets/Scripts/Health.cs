@@ -18,13 +18,13 @@ public class Health : MonoBehaviour
         currentHealth = maxHealth;
     }
 
-    public void TakeDamage(float amount)
+    public void TakeDamage(float amount, bool isCritical = false)
     {
         currentHealth -= amount;
-        
+
         // 데미지 텍스트를 생성하는 함수를 호출함.
-        ShowDamageText(amount);
-        
+        ShowDamageText(amount, isCritical);
+
         onHurt?.Invoke();
         if (currentHealth <= 0f)
         {
@@ -33,7 +33,7 @@ public class Health : MonoBehaviour
     }
 
     // 인스턴스화 과정을 처리하는 내부 함수임.
-    private void ShowDamageText(float amount)
+    private void ShowDamageText(float amount, bool isCritical)
     {
         if (damageTextPrefab != null)
         {
@@ -41,13 +41,13 @@ public class Health : MonoBehaviour
             float randomX = UnityEngine.Random.Range(-0.5f, 0.5f);
             float randomZ = UnityEngine.Random.Range(-0.5f, 0.5f);
             Vector3 randomOffset = new Vector3(randomX, 1f, randomZ);
-            
+
             GameObject textObj = Instantiate(damageTextPrefab, transform.position + randomOffset, Quaternion.identity);
-            
+
             DamageText damageText = textObj.GetComponent<DamageText>();
             if (damageText != null)
             {
-                damageText.Setup(amount);
+                damageText.Setup(amount, isCritical);
             }
         }
     }
@@ -57,6 +57,14 @@ public class Health : MonoBehaviour
         currentHealth += amount;
         if (currentHealth > maxHealth)
             currentHealth = maxHealth;
+    }
+
+    // 스폰 시점에 maxHealth를 바꿔 끼울 때 사용 (currentHealth도 꽉 채워서 같이 맞춤).
+    // Heal(0)으로는 currentHealth가 새 maxHealth까지 안 올라가서 별도로 뺌.
+    public void SetMaxHealth(float newMax)
+    {
+        maxHealth = newMax;
+        currentHealth = maxHealth;
     }
 
     void Die()
