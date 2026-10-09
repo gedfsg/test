@@ -1,0 +1,312 @@
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+
+// 일회성 스크립트 - 확인 후 삭제할 것
+// BuildingInterior가 붙은 모든 건물에 대해:
+//  1) 기존 벽 BoxCollider 5개(_TempApplyBuildingInterior가 바운딩 박스 가장자리에 세운 것)에서
+//     문 위치(박스 2개로 나뉜 면의 가운데 틈)를 읽어냄
+//  2) 실제 보이는 벽(렌더 메시)까지의 거리를 레이캐스트로 재서 문 구멍 깊이를 정함
+//  3) 벽 BoxCollider 5개 제거 → BuildingWallCollider(런타임에 렌더 메시 그대로 양면
+//     MeshCollider를 만들고 문 구멍만 잘라냄) 부착
+//  4) 진입 트리거를 실제 실내 크기로 축소 (예전엔 바운딩 박스 95%라 벽 바깥까지 삐져나와서
+//     건물 옆을 스치기만 해도 실내 모드가 켜졌음)
+// 재실행해도 안전: 박스가 이미 없으면 BuildingWallCollider에 저장된 문 위치를 그대로 씀.
+public static class TempFixBuildingWallColliders
+{
+    const float DoorOutsideMargin = 1.0f;  // 문 구멍을 건물 바깥쪽으로 이만큼(m) 더 늘림
+    const float DoorInsideMargin = 1.5f;   // 보이는 벽면을 지나 실내 쪽으로 이만큼(m) 더 뚫음
+    const float TriggerWallInset = 0.3f;   // 트리거를 실내 벽면에서 이만큼(m) 안쪽으로
+
+    [MenuItem("Tools/Map/Fix Building Wall Colliders (Mesh + Door)")]
+    static void Apply()
+    {
+        var buildings = Object.FindObjectsByType<BuildingInterior>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        int applied = 0;
+        var warnings = new List<string>();
+
+        bool oldBackfaces = Physics.queriesHitBackfaces;
+        Physics.queriesHitBackfaces = true; // 실내에서 바깥으로 쏘는 측정 레이가 벽 안쪽(뒷면)을 맞추게
+        try
+        {
+            foreach (var bi in buildings)
+            {
+                string warn = FixOne(bi.gameObject);
+                if (warn != null) warnings.Add(warn);
+                if (bi.GetComponent<BuildingWallCollider>() != null) applied++;
+            }
+        }
+        finally
+        {
+            Physics.queriesHitBackfaces = oldBackfaces;
+        }
+
+        EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+        EditorSceneManager.SaveScene(EditorSceneManager.GetActiveScene());
+
+        string msg = $"✅ 건물 벽 콜라이더 교체 {applied}/{buildings.Length}개 (실제 메시 + 문 구멍 + 트리거 축소)";
+        if (warnings.Count > 0) msg += "\n⚠️ " + string.Join("\n⚠️ ", warnings);
+        Debug.Log(msg);
+    }
+
+    // 성공하면 null, 문제가 있으면 경고 문자열
+    static string FixOne(GameObject go)
+    {
+        MeshFilter mf = go.GetComponent<MeshFilter>();
+        Renderer rend = go.GetComponent<Renderer>();
+        if (mf == null || mf.sharedMesh == null || rend == null)
+            return $"'{go.name}' — 루트에 MeshFilter/Renderer가 없어 건너뜀";
+        if (!mf.sharedMesh.isReadable)
+            return $"'{go.name}' — 메시 Read/Write가 꺼져 있어 건너뜀";
+
+        Transform t = go.transform;
+        Bounds lb = mf.sharedMesh.bounds; // 로컬 좌표 (MeshFilter가 루트에 있으므로 건물 로컬 = 메시 로컬)
+        Bounds wb = rend.bounds;
+
+        BoxCollider trigger = null;
+        var wallBoxes = new List<BoxCollider>();
+        foreach (var bc in go.GetComponents<BoxCollider>())
+        {
+            if (bc.isTrigger) trigger = bc;
+            else wallBoxes.Add(bc);
+        }
+        if (trigger == null) return $"'{go.name}' — 진입 트리거가 없어 건너뜀";
+
+        var wall = go.GetComponent<BuildingWallCollider>();
+
+        // 측정용 임시 MeshCollider (원본 메시 그대로, 문 구멍 없음)
+        var probe = go.AddComponent<MeshCollider>();
+        probe.sharedMesh = mf.sharedMesh;
+        Physics.SyncTransforms();
+
+        try
+        {
+            // ── 1) 문 위치: 박스 2개로 나뉜 면 = 문 있는 면, 두 박스 사이 틈 = 문 ──
+            bool hasDoor;
+            int normalAxis = 0;
+            float sideSign = 1f, gapMin = 0f, gapMax = 0f;
+            if (wallBoxes.Count > 0)
+            {
+                // 문 없는 건물(공간 부족으로 4면 다 막힌 경우)이면 false
+                hasDoor = FindDoorFromBoxes(wallBoxes, lb, out normalAxis, out sideSign, out gapMin, out gapMax);
+            }
+            else if (wall != null)
+            {
+                // 재실행: 이미 변환된 건물은 저장된 문 구멍에서 문 면/폭을 다시 읽음
+                hasDoor = wall.hasDoor;
+                if (hasDoor) ReadDoorFromSlot(wall, lb, out normalAxis, out sideSign, out gapMin, out gapMax);
+            }
+            else
+            {
+                return $"'{go.name}' — 벽 박스도 BuildingWallCollider도 없어 문 위치를 알 수 없음";
+            }
+
+            // ── 2) 트리거를 실제 실내 크기로 (문 구멍 깊이를 실내 기준으로 재므로 먼저 함) ──
+            string triggerWarn = ShrinkTriggerToInterior(go, t, wb, trigger, probe);
+
+            Bounds slot = hasDoor
+                ? BuildDoorSlot(t, wb, lb, probe, trigger.center, normalAxis, sideSign, gapMin, gapMax)
+                : new Bounds();
+
+            // ── 3) 박스 제거 + BuildingWallCollider 부착 ──
+            foreach (var bc in wallBoxes) Undo.DestroyObjectImmediate(bc);
+            if (wall == null) wall = Undo.AddComponent<BuildingWallCollider>(go);
+            Undo.RecordObject(wall, "Set door slot");
+            wall.hasDoor = hasDoor;
+            wall.doorSlotCenter = slot.center;
+            wall.doorSlotSize = slot.size;
+            EditorUtility.SetDirty(wall);
+
+            return triggerWarn;
+        }
+        finally
+        {
+            Object.DestroyImmediate(probe);
+        }
+    }
+
+    // 벽 박스들을 "어느 면에 붙어있나"로 묶어서 2개짜리 면(=문 면)과 틈을 찾음
+    static bool FindDoorFromBoxes(List<BoxCollider> boxes, Bounds lb, out int normalAxis, out float sideSign, out float gapMin, out float gapMax)
+    {
+        normalAxis = 0; sideSign = 1f; gapMin = gapMax = 0f;
+        var groups = new Dictionary<(int, int), List<BoxCollider>>();
+        foreach (var bc in boxes)
+        {
+            int axis = bc.size.x < bc.size.z ? 0 : 2;                    // 얇은 축 = 벽의 법선 축
+            int sign = bc.center[axis] >= lb.center[axis] ? 1 : -1;
+            var key = (axis, sign);
+            if (!groups.ContainsKey(key)) groups[key] = new List<BoxCollider>();
+            groups[key].Add(bc);
+        }
+
+        foreach (var kv in groups)
+        {
+            if (kv.Value.Count != 2) continue;
+            normalAxis = kv.Key.Item1;
+            sideSign = kv.Key.Item2;
+            int along = normalAxis == 0 ? 2 : 0;
+            BoxCollider a = kv.Value[0], b = kv.Value[1];
+            if (a.center[along] > b.center[along]) { var tmp = a; a = b; b = tmp; }
+            gapMin = a.center[along] + a.size[along] * 0.5f;
+            gapMax = b.center[along] - b.size[along] * 0.5f;
+            return gapMax > gapMin;
+        }
+        return false;
+    }
+
+    // 저장된 문 구멍(로컬 AABB)에서 문 면(법선 축/방향)과 폭 범위를 복원
+    static void ReadDoorFromSlot(BuildingWallCollider wall, Bounds lb, out int normalAxis, out float sideSign, out float gapMin, out float gapMax)
+    {
+        Vector3 d = wall.doorSlotCenter - lb.center;
+        normalAxis = Mathf.Abs(d.x) / lb.extents.x > Mathf.Abs(d.z) / lb.extents.z ? 0 : 2;
+        sideSign = Mathf.Sign(d[normalAxis]);
+        int along = normalAxis == 0 ? 2 : 0;
+        gapMin = wall.doorSlotCenter[along] - wall.doorSlotSize[along] * 0.5f;
+        gapMax = wall.doorSlotCenter[along] + wall.doorSlotSize[along] * 0.5f;
+    }
+
+    // 문 구멍(로컬 AABB): 폭 = 박스 틈, 높이 = 건물 전체, 깊이 = 건물 바깥 ~ 실제 벽면 안쪽.
+    // 벽면 위치는 "실내(트리거 중심)에서 문 쪽으로" 쏴서 잼. 바깥에서 쏘면 처마 기둥/현관 계단
+    // 같은 앞쪽 장식에 먼저 맞아서 구멍이 벽면까지 못 닿는 문제가 있었음(building-c 등).
+    static Bounds BuildDoorSlot(Transform t, Bounds wb, Bounds lb, MeshCollider probe, Vector3 triggerCenterLocal, int normalAxis, float sideSign, float gapMin, float gapMax)
+    {
+        int along = normalAxis == 0 ? 2 : 0;
+        float gapMid = (gapMin + gapMax) * 0.5f;
+
+        Vector3 edgeLocal = lb.center;
+        edgeLocal[normalAxis] = lb.center[normalAxis] + sideSign * lb.extents[normalAxis];
+        edgeLocal[along] = gapMid;
+
+        Vector3 axisLocal = Vector3.zero;
+        axisLocal[normalAxis] = sideSign;
+        Vector3 outward = t.TransformDirection(axisLocal);
+        outward.y = 0f;
+        outward.Normalize();
+
+        Vector3 edgeWorld = t.TransformPoint(edgeLocal);
+        float outerA = t.InverseTransformPoint(edgeWorld + outward * DoorOutsideMargin)[normalAxis];
+
+        // 실내 쪽 시작점: 법선 축은 트리거 중심, 폭 축은 문 중앙
+        Vector3 insideLocal = triggerCenterLocal;
+        insideLocal[along] = gapMid;
+        Vector3 insideWorld = t.TransformPoint(insideLocal);
+
+        // 여러 높이에서 실내→문 방향으로 쏴서 가장 가까운 막힘(벽 안쪽 면, 문 바로 뒤 가구 등)을 찾음.
+        // 그 지점보다 DoorInsideMargin 더 안쪽부터 바깥까지 전부 잘라서 확실히 드나들 수 있게 함.
+        float nearest = float.MaxValue;
+        float maxDist = wb.size.magnitude;
+        foreach (float h in new[] { 0.3f, 0.6f, 0.9f, 1.2f, 1.5f, 1.8f })
+        {
+            Vector3 origin = new Vector3(insideWorld.x, wb.min.y + h, insideWorld.z);
+            foreach (var hit in Physics.RaycastAll(origin, outward, maxDist, ~0, QueryTriggerInteraction.Ignore))
+                if (hit.collider == probe && hit.distance > 0.3f && hit.distance < nearest) nearest = hit.distance;
+        }
+
+        float innerA;
+        if (nearest == float.MaxValue)
+        {
+            innerA = edgeLocal[normalAxis]; // 막힌 게 없으면 자를 것도 없음
+        }
+        else
+        {
+            float cutFromInside = Mathf.Max(0f, nearest - DoorInsideMargin);
+            Vector3 innerWorld = new Vector3(insideWorld.x, wb.min.y + 1f, insideWorld.z) + outward * cutFromInside;
+            innerA = t.InverseTransformPoint(innerWorld)[normalAxis];
+        }
+
+        Vector3 min = new Vector3(), max = new Vector3();
+        min[normalAxis] = Mathf.Min(outerA, innerA);
+        max[normalAxis] = Mathf.Max(outerA, innerA);
+        min[along] = gapMin;
+        max[along] = gapMax;
+        min.y = lb.min.y - lb.size.y * 0.1f;
+        max.y = lb.max.y + lb.size.y * 0.1f;
+
+        var slot = new Bounds();
+        slot.SetMinMax(min, max);
+        return slot;
+    }
+
+    // 트리거를 실제 실내 크기로 맞춤.
+    // 건물 풋프린트를 격자로 나눠 "실내 칸"(위에 지붕이 있고, 벽 속이 아니고, 4방향 모두 벽으로
+    // 둘러싸인 칸)만 골라낸 뒤 그 칸들을 감싸는 사각형 - TriggerWallInset 으로 트리거를 정함.
+    // 중심에서 레이 4방향만 쏘는 방식은 ㄱ자/내부 칸막이가 있는 건물에서 트리거가 한쪽 방에만
+    // 쪼그라들어서(building-b 등) 격자 방식으로 함. 처마 밑 현관처럼 한쪽이 트인 곳은 제외됨.
+    static string ShrinkTriggerToInterior(GameObject go, Transform t, Bounds wb, BoxCollider trigger, MeshCollider probe)
+    {
+        const int Grid = 24;
+        Bounds lb = go.GetComponent<MeshFilter>().sharedMesh.bounds;
+        float maxDist = wb.size.magnitude;
+
+        bool found = false;
+        Vector3 cellMin = Vector3.zero, cellMax = Vector3.zero;
+        Vector3 cellHalf = new Vector3(lb.size.x / Grid * 0.5f, 0f, lb.size.z / Grid * 0.5f);
+
+        for (int ix = 0; ix < Grid; ix++)
+        {
+            for (int iz = 0; iz < Grid; iz++)
+            {
+                Vector3 lp = new Vector3(
+                    Mathf.Lerp(lb.min.x, lb.max.x, (ix + 0.5f) / Grid),
+                    lb.center.y,
+                    Mathf.Lerp(lb.min.z, lb.max.z, (iz + 0.5f) / Grid));
+                Vector3 wp = t.TransformPoint(lp);
+                wp.y = wb.min.y + 1.0f;
+
+                if (!IsInteriorCell(wp, t, probe, maxDist)) continue;
+
+                Vector3 lo = lp - cellHalf, hi = lp + cellHalf;
+                if (!found) { cellMin = lo; cellMax = hi; found = true; }
+                else { cellMin = Vector3.Min(cellMin, lo); cellMax = Vector3.Max(cellMax, hi); }
+            }
+        }
+
+        if (!found) return $"'{go.name}' — 벽은 교체됨. 단, 실내 칸을 못 찾아 트리거는 기존 크기 유지";
+
+        Undo.RecordObject(trigger, "Shrink building trigger");
+
+        // 로컬 단위로 인셋 (스케일이 축마다 달라서 축별로 환산)
+        Vector3 scale = t.lossyScale;
+        float insetX = TriggerWallInset / Mathf.Abs(scale.x);
+        float insetZ = TriggerWallInset / Mathf.Abs(scale.z);
+        cellMin.x += insetX; cellMax.x -= insetX;
+        cellMin.z += insetZ; cellMax.z -= insetZ;
+
+        Vector3 oldMin = trigger.center - trigger.size * 0.5f;
+        Vector3 oldMax = trigger.center + trigger.size * 0.5f;
+        float oldArea = (oldMax.x - oldMin.x) * (oldMax.z - oldMin.z);
+
+        // Y(높이)는 기존 트리거 그대로
+        Vector3 newMin = new Vector3(cellMin.x, oldMin.y, cellMin.z);
+        Vector3 newMax = new Vector3(cellMax.x, oldMax.y, cellMax.z);
+        trigger.center = (newMin + newMax) * 0.5f;
+        trigger.size = newMax - newMin;
+
+        float ratio = (trigger.size.x * trigger.size.z) / oldArea;
+        if (ratio < 0.5f)
+            return $"'{go.name}' — 벽은 교체됨. 단, 트리거가 {ratio:P0}로 크게 줄었으니 확인 필요";
+        return null;
+    }
+
+    // 지붕 아래 + 벽 속 아님 + 수평 4방향 모두 같은 건물 벽에 막힘 = 실내
+    static bool IsInteriorCell(Vector3 wp, Transform t, MeshCollider probe, float maxDist)
+    {
+        if (!HitsProbe(wp, Vector3.up, probe, maxDist)) return false;
+
+        foreach (var c in Physics.OverlapSphere(wp, 0.3f, ~0, QueryTriggerInteraction.Ignore))
+            if (c == probe) return false; // 벽 속
+
+        Vector3 r = t.right; r.y = 0f; r.Normalize();
+        Vector3 f = t.forward; f.y = 0f; f.Normalize();
+        return HitsProbe(wp, r, probe, maxDist) && HitsProbe(wp, -r, probe, maxDist)
+            && HitsProbe(wp, f, probe, maxDist) && HitsProbe(wp, -f, probe, maxDist);
+    }
+
+    static bool HitsProbe(Vector3 origin, Vector3 dir, MeshCollider probe, float maxDist)
+    {
+        foreach (var h in Physics.RaycastAll(origin, dir, maxDist, ~0, QueryTriggerInteraction.Ignore))
+            if (h.collider == probe) return true;
+        return false;
+    }
+}
