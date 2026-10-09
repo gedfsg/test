@@ -159,6 +159,10 @@ public class Bullet : MonoBehaviour
             hitSomething = true;
         }
 
+        // 데미지를 줄 수 없는 트리거(건물 진입 감지 영역 등)는 통과시킴.
+        // 이게 없으면 바깥에서 문 안으로 쏜 총알이 진입 트리거 경계에서 그냥 사라졌음.
+        if (!hitSomething && other.isTrigger) return false;
+
         if (!hitSomething) { Destroy(gameObject); destroyed = true; return true; }
 
         if (!penetrating) { Destroy(gameObject); destroyed = true; }
