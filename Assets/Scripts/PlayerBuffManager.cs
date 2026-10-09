@@ -56,6 +56,14 @@ public class PlayerBuffManager : MonoBehaviour
         if (data.staminaAmount > 0f)
             locomotion.RecoverStamina(data.staminaAmount);
 
+        // 3-1. 수분/포만감 회복 (SurvivalNeeds)
+        var needs = GetComponent<SurvivalNeeds>();
+        if (needs != null)
+        {
+            if (data.waterAmount > 0f) needs.Drink(data.waterAmount);
+            if (data.foodAmount > 0f) needs.Eat(data.foodAmount);
+        }
+
         // 4. 버프
         if (data.buffType != BuffType.None && data.buffDuration > 0f)
         {
