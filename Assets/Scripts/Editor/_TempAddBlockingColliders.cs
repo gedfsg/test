@@ -9,7 +9,9 @@ public static class TempAddBlockingColliders
 {
     const float ThinPostSize = 0.6f; // 신호등/가로등 기둥 두께
 
-    [MenuItem("Tools/Map/Add Blocking Colliders")]
+    // 메뉴 비활성화 (2026-10-10): 재실행하면 바운딩 박스 벽/박스 콜라이더가 다시 생겨 유령 벽이 됨.
+    // 건물 벽은 _TempFixBuildingWallColliders + BuildingWallCollider가 담당. 코드는 참고용으로 유지.
+    // [MenuItem("Tools/Map/Add Blocking Colliders")]
     static void Add()
     {
         int blockCount = 0, thinCount = 0, skipped = 0;
