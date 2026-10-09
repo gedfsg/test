@@ -37,9 +37,13 @@ public static class HudAssetBuilder
         WriteSprite("Ring", 128, 128, (x, y) => Mathf.Min(CircleCoverage(x, y, 64f, 64f, 63f), 1f - CircleCoverage(x, y, 64f, 64f, 57f)), Vector4.zero);
         WriteSprite("Triangle", 64, 64, TriangleCoverage, Vector4.zero);
 
+        // 미니맵 (레퍼런스 픽셀 샘플링 기준 색상을 직접 구움 → Image 색은 흰색으로 씀)
+        WriteColorSprite("MetalRing", 256, 256, MetalRingColor);
+        WriteColorSprite("NavArrow", 64, 64, NavArrowColor);
+
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
-        Debug.Log("[HudAssetBuilder] ✅ Pretendard 폰트 3종 + HUD 스프라이트 4종 생성 완료");
+        Debug.Log("[HudAssetBuilder] ✅ Pretendard 폰트 3종 + HUD 스프라이트 6종 생성 완료");
     }
 
     // ── 폰트 ──
@@ -49,8 +53,10 @@ public static class HudAssetBuilder
         Font font = AssetDatabase.LoadAssetAtPath<Font>(src);
         if (font == null) { Debug.LogError($"[HudAssetBuilder] 폰트 없음: {src}"); return null; }
 
+        // 이미 있으면 재사용 (지우고 다시 만들면 GUID가 바뀌어 기존 참조가 깨짐)
         string outPath = $"{FontOutDir}/Pretendard-{weight} SDF.asset";
-        AssetDatabase.DeleteAsset(outPath);
+        var existing = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(outPath);
+        if (existing != null) return existing;
 
         // 동적 아틀라스: 쓰이는 글자만 그때그때 아틀라스에 추가 (한글 11,172자를 미리 굽지 않음)
         var fa = TMP_FontAsset.CreateFontAsset(font, 64, 6, GlyphRenderMode.SDFAA, 1024, 1024,
@@ -108,6 +114,94 @@ public static class HudAssetBuilder
         ti.filterMode = FilterMode.Bilinear;
         ti.textureCompression = TextureImporterCompression.Uncompressed;
         ti.SaveAndReimport();
+    }
+
+    // 색이 들어간 스프라이트 (4x4 슈퍼샘플 평균)
+    delegate Color ColorAt(float x, float y);
+
+    static void WriteColorSprite(string name, int w, int h, ColorAt colorAt)
+    {
+        var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                Color sum = Color.clear;
+                for (int sy = 0; sy < 4; sy++)
+                    for (int sx = 0; sx < 4; sx++)
+                    {
+                        Color c = colorAt(x + (sx + 0.5f) / 4f, y + (sy + 0.5f) / 4f);
+                        sum += new Color(c.r * c.a, c.g * c.a, c.b * c.a, c.a); // 프리멀티 평균 (가장자리 색 번짐 방지)
+                    }
+                sum /= 16f;
+                tex.SetPixel(x, y, sum.a > 0f ? new Color(sum.r / sum.a, sum.g / sum.a, sum.b / sum.a, sum.a) : Color.clear);
+            }
+        }
+        string path = $"{SpriteOutDir}/{name}.png";
+        File.WriteAllBytes(path, tex.EncodeToPNG());
+        Object.DestroyImmediate(tex);
+
+        AssetDatabase.ImportAsset(path);
+        var ti = (TextureImporter)AssetImporter.GetAtPath(path);
+        ti.textureType = TextureImporterType.Sprite;
+        ti.spriteImportMode = SpriteImportMode.Single;
+        ti.alphaIsTransparency = true;
+        ti.mipmapEnabled = false;
+        ti.filterMode = FilterMode.Bilinear;
+        ti.textureCompression = TextureImporterCompression.Uncompressed;
+        ti.SaveAndReimport();
+    }
+
+    // 레퍼런스 미니맵 링 (지름 188px 기준 두께 10px): 바깥부터
+    // 어두운 테(0~2) → 밝은 웜그레이 하이라이트(2~7, 위쪽이 살짝 밝음) → 중간 회색(7~8) → 어두운 안쪽 선(8~10)
+    static Color MetalRingColor(float x, float y)
+    {
+        const float size = 256f, refDiameter = 188f;
+        float px = size / refDiameter;                 // 레퍼런스 1px = 텍스처 몇 px
+        float r = Vector2.Distance(new Vector2(x, y), new Vector2(size / 2f, size / 2f));
+        float fromOuter = (size / 2f - 0.5f - r) / px; // 바깥 테두리에서 안쪽으로 레퍼런스 px
+        if (fromOuter < 0f || fromOuter > 10f) return Color.clear;
+
+        float top = Mathf.Clamp01(y / size);           // 위쪽일수록 1 (빛이 위에서 오는 느낌)
+        if (fromOuter < 2f) return new Color32(70, 72, 79, 255);
+        if (fromOuter < 7f) return Color.Lerp(new Color32(150, 140, 131, 255), new Color32(178, 167, 158, 255), top);
+        if (fromOuter < 8f) return new Color32(115, 108, 103, 255);
+        return new Color32(56, 52, 48, 255);
+    }
+
+    // 내비게이션 화살표 (위쪽 방향, 아래 가운데가 오목): 흰색 채움 + 어두운 외곽선
+    static readonly Vector2[] ArrowPoly = { new Vector2(32f, 60f), new Vector2(8f, 6f), new Vector2(32f, 20f), new Vector2(56f, 6f) };
+
+    static Color NavArrowColor(float x, float y)
+    {
+        var p = new Vector2(x, y);
+        if (InPolygon(p, ScalePoly(ArrowPoly, 0.78f))) return Color.white;
+        if (InPolygon(p, ArrowPoly)) return new Color32(30, 30, 32, 255);
+        return Color.clear;
+    }
+
+    static Vector2[] ScalePoly(Vector2[] poly, float s)
+    {
+        Vector2 c = Vector2.zero;
+        foreach (var v in poly) c += v;
+        c /= poly.Length;
+        c.y += 4f; // 오목한 꼬리 쪽으로 중심이 쏠려 있어서 살짝 보정 (외곽선 두께를 균일하게)
+        var result = new Vector2[poly.Length];
+        for (int i = 0; i < poly.Length; i++) result[i] = c + (poly[i] - c) * s;
+        return result;
+    }
+
+    // 짝수-홀수 규칙 다각형 내부 판정 (오목 다각형 OK)
+    static bool InPolygon(Vector2 p, Vector2[] poly)
+    {
+        bool inside = false;
+        for (int i = 0, j = poly.Length - 1; i < poly.Length; j = i++)
+        {
+            if ((poly[i].y > p.y) != (poly[j].y > p.y) &&
+                p.x < (poly[j].x - poly[i].x) * (p.y - poly[i].y) / (poly[j].y - poly[i].y) + poly[i].x)
+                inside = !inside;
+        }
+        return inside;
     }
 
     static float RoundedRectCoverage(float x, float y, float w, float h, float r)

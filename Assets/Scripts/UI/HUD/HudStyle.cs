@@ -26,7 +26,9 @@ public static class HudStyle
     public static TMP_FontAsset Bold     => bold     != null ? bold     : bold     = Resources.Load<TMP_FontAsset>("HUD/Fonts/Pretendard-Bold SDF");
 
     // ── 스프라이트 ──
-    static Sprite roundedRect, circle, ring, triangle;
+    static Sprite roundedRect, circle, ring, triangle, metalRing, navArrow;
+    public static Sprite MetalRing   => metalRing   != null ? metalRing   : metalRing   = Resources.Load<Sprite>("HUD/Sprites/MetalRing");
+    public static Sprite NavArrow    => navArrow    != null ? navArrow    : navArrow    = Resources.Load<Sprite>("HUD/Sprites/NavArrow");
     public static Sprite RoundedRect => roundedRect != null ? roundedRect : roundedRect = Resources.Load<Sprite>("HUD/Sprites/RoundedRect");
     public static Sprite Circle      => circle      != null ? circle      : circle      = Resources.Load<Sprite>("HUD/Sprites/Circle");
     public static Sprite Ring        => ring        != null ? ring        : ring        = Resources.Load<Sprite>("HUD/Sprites/Ring");
