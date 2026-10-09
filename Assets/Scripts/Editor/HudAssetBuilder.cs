@@ -41,9 +41,14 @@ public static class HudAssetBuilder
         WriteColorSprite("MetalRing", 256, 256, MetalRingColor);
         WriteColorSprite("NavArrow", 64, 64, NavArrowColor);
 
+        // 상단 중앙 (흰색 → Image 색으로 틴트)
+        WriteSprite("Sun", 64, 64, SunCoverage, Vector4.zero);
+        WriteSprite("Moon", 64, 64, (x, y) => Mathf.Min(CircleCoverage(x, y, 32f, 32f, 24f), 1f - CircleCoverage(x, y, 42f, 40f, 20f)), Vector4.zero);
+        WriteColorSprite("SoftShadow", 128, 64, SoftShadowColor);
+
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
-        Debug.Log("[HudAssetBuilder] ✅ Pretendard 폰트 3종 + HUD 스프라이트 6종 생성 완료");
+        Debug.Log("[HudAssetBuilder] ✅ Pretendard 폰트 3종 + HUD 스프라이트 9종 생성 완료");
     }
 
     // ── 폰트 ──
@@ -202,6 +207,31 @@ public static class HudAssetBuilder
                 inside = !inside;
         }
         return inside;
+    }
+
+    // 해: 가운데 원 + 둥근 끝 광선 8개 (레퍼런스 ☀)
+    static float SunCoverage(float x, float y)
+    {
+        Vector2 p = new Vector2(x - 32f, y - 32f);
+        if (p.magnitude <= 13f) return 1f;
+        for (int i = 0; i < 8; i++)
+        {
+            float ang = i * Mathf.PI / 4f;
+            Vector2 dir = new Vector2(Mathf.Cos(ang), Mathf.Sin(ang));
+            Vector2 a = dir * 19f, b = dir * 29f;
+            float t = Mathf.Clamp01(Vector2.Dot(p - a, b - a) / (b - a).sqrMagnitude);
+            if (Vector2.Distance(p, a + (b - a) * t) <= 2.4f) return 1f;
+        }
+        return 0f;
+    }
+
+    // 글자 뒤 은은한 그림자: 가장자리로 갈수록 투명해지는 검은 타원
+    static Color SoftShadowColor(float x, float y)
+    {
+        float nx = (x - 64f) / 64f, ny = (y - 32f) / 32f;
+        float d = Mathf.Sqrt(nx * nx + ny * ny);
+        float a = Mathf.Clamp01(1f - d);
+        return new Color(0f, 0f, 0f, a * a * (3f - 2f * a)); // smoothstep
     }
 
     static float RoundedRectCoverage(float x, float y, float w, float h, float r)

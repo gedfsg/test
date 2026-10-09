@@ -87,6 +87,35 @@ public static class HudLayoutApplier
         Save("1. Minimap");
     }
 
+    [MenuItem("Tools/HUD/Apply Layout/2. Top Center (Day + Time)")]
+    static void ApplyTopCenter()
+    {
+        Canvas canvas = FindHudCanvas();
+        if (canvas == null) return;
+        SetupScaler(canvas);
+
+        // 레퍼런스: 블록 중심 x=815.5 (화면 중앙 840.5보다 25px 왼쪽), 제목 줄 y=32
+        Transform t = canvas.transform.Find("TopCenterHUD");
+        if (t == null)
+        {
+            var go = new GameObject("TopCenterHUD", typeof(RectTransform));
+            Undo.RegisterCreatedObjectUndo(go, "HUD TopCenter");
+            go.transform.SetParent(canvas.transform, false);
+            go.layer = canvas.gameObject.layer;
+            t = go.transform;
+        }
+        var rt = (RectTransform)t;
+        Undo.RecordObject(rt, "HUD TopCenter");
+        SetRect(rt, new Vector2(0.5f, 1f), new Vector2(-25f, -32f), Vector2.zero);
+        if (t.GetComponent<SurvivalDayHUD>() == null) Undo.AddComponent<SurvivalDayHUD>(t.gameObject);
+
+        // 기존 사이버펑크 타이머 패널은 끔 (코드/컴포넌트는 유지)
+        var oldTimer = canvas.GetComponent<SurvivalTimerUI>();
+        if (oldTimer != null) { Undo.RecordObject(oldTimer, "HUD TopCenter"); oldTimer.enabled = false; }
+
+        Save("2. Top Center");
+    }
+
     // ── 공용 ──
 
     static Canvas FindHudCanvas()

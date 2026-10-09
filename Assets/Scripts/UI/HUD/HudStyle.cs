@@ -26,11 +26,55 @@ public static class HudStyle
     public static TMP_FontAsset Bold     => bold     != null ? bold     : bold     = Resources.Load<TMP_FontAsset>("HUD/Fonts/Pretendard-Bold SDF");
 
     // ── 스프라이트 ──
-    static Sprite roundedRect, circle, ring, triangle, metalRing, navArrow;
+    static Sprite roundedRect, circle, ring, triangle, metalRing, navArrow, sun, moon, softShadow;
+    public static Sprite Sun         => sun         != null ? sun         : sun         = Resources.Load<Sprite>("HUD/Sprites/Sun");
+    public static Sprite Moon        => moon        != null ? moon        : moon        = Resources.Load<Sprite>("HUD/Sprites/Moon");
+    public static Sprite SoftShadow  => softShadow  != null ? softShadow  : softShadow  = Resources.Load<Sprite>("HUD/Sprites/SoftShadow");
     public static Sprite MetalRing   => metalRing   != null ? metalRing   : metalRing   = Resources.Load<Sprite>("HUD/Sprites/MetalRing");
     public static Sprite NavArrow    => navArrow    != null ? navArrow    : navArrow    = Resources.Load<Sprite>("HUD/Sprites/NavArrow");
     public static Sprite RoundedRect => roundedRect != null ? roundedRect : roundedRect = Resources.Load<Sprite>("HUD/Sprites/RoundedRect");
     public static Sprite Circle      => circle      != null ? circle      : circle      = Resources.Load<Sprite>("HUD/Sprites/Circle");
     public static Sprite Ring        => ring        != null ? ring        : ring        = Resources.Load<Sprite>("HUD/Sprites/Ring");
     public static Sprite Triangle    => triangle    != null ? triangle    : triangle    = Resources.Load<Sprite>("HUD/Sprites/Triangle");
+
+    // ── 코드로 HUD 만들 때 쓰는 헬퍼 (위치/크기는 레퍼런스 px, 부모 가운데 기준) ──
+
+    public static RectTransform NewRect(Transform parent, string name, Vector2 pos, Vector2 size)
+    {
+        var go = new GameObject(name, typeof(RectTransform));
+        go.layer = parent.gameObject.layer;
+        var rt = (RectTransform)go.transform;
+        rt.SetParent(parent, false);
+        rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = pos;
+        rt.sizeDelta = size;
+        return rt;
+    }
+
+    public static UnityEngine.UI.Image NewImage(Transform parent, string name, Sprite sprite, Color color, Vector2 pos, Vector2 size)
+    {
+        var rt = NewRect(parent, name, pos, size);
+        var img = rt.gameObject.AddComponent<UnityEngine.UI.Image>();
+        img.sprite = sprite;
+        img.color = color;
+        img.raycastTarget = false;
+        if (sprite != null && sprite.border != Vector4.zero) img.type = UnityEngine.UI.Image.Type.Sliced;
+        return img;
+    }
+
+    public static TextMeshProUGUI NewText(Transform parent, string name, string text, TMP_FontAsset font, float fontSize,
+        Color color, TextAlignmentOptions align, Vector2 pos, Vector2 size)
+    {
+        var rt = NewRect(parent, name, pos, size);
+        var tmp = rt.gameObject.AddComponent<TextMeshProUGUI>();
+        tmp.font = font;
+        tmp.fontSize = fontSize;
+        tmp.color = color;
+        tmp.alignment = align;
+        tmp.text = text;
+        tmp.enableWordWrapping = false;
+        tmp.overflowMode = TextOverflowModes.Overflow;
+        tmp.raycastTarget = false;
+        return tmp;
+    }
 }
