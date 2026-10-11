@@ -46,9 +46,22 @@ public static class HudAssetBuilder
         WriteSprite("Moon", 64, 64, (x, y) => Mathf.Min(CircleCoverage(x, y, 32f, 32f, 24f), 1f - CircleCoverage(x, y, 42f, 40f, 20f)), Vector4.zero);
         WriteColorSprite("SoftShadow", 128, 64, SoftShadowColor);
 
+        // 좌하단 상태 패널 아이콘 (흰색 → 틴트)
+        WriteSprite("Heart", 64, 64, HeartCoverage, Vector4.zero);
+        WriteSprite("Bolt", 64, 64, (x, y) => InPolygon(new Vector2(x, y), BoltPoly) ? 1f : 0f, Vector4.zero);
+        WriteSprite("Drop", 64, 64, DropCoverage, Vector4.zero);
+        WriteSprite("ForkKnife", 64, 64, ForkKnifeCoverage, Vector4.zero);
+        // 수분/포만감 원형 게이지: 지름 86px 기준 두께 7px → 128px 텍스처에서 약 10.5px
+        WriteSprite("RingThick", 128, 128, (x, y) => Mathf.Min(CircleCoverage(x, y, 64f, 64f, 63f), 1f - CircleCoverage(x, y, 64f, 64f, 52.5f)), Vector4.zero);
+
+        // 테두리만 있는 둥근 사각형 (9-slice): 핫바/패널 테두리. 얇은 것 4px, 두꺼운 것 6px
+        // (Image.pixelsPerUnitMultiplier 2로 쓰면 각각 2px / 3px 테두리, 모서리 반경 8px)
+        WriteSprite("RoundedFrame", 64, 64, (x, y) => FrameCoverage(x, y, 4f), new Vector4(16, 16, 16, 16));
+        WriteSprite("RoundedFrameThick", 64, 64, (x, y) => FrameCoverage(x, y, 6f), new Vector4(16, 16, 16, 16));
+
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
-        Debug.Log("[HudAssetBuilder] ✅ Pretendard 폰트 3종 + HUD 스프라이트 9종 생성 완료");
+        Debug.Log("[HudAssetBuilder] ✅ Pretendard 폰트 3종 + HUD 스프라이트 16종 생성 완료");
     }
 
     // ── 폰트 ──
@@ -232,6 +245,53 @@ public static class HudAssetBuilder
         float d = Mathf.Sqrt(nx * nx + ny * ny);
         float a = Mathf.Clamp01(1f - d);
         return new Color(0f, 0f, 0f, a * a * (3f - 2f * a)); // smoothstep
+    }
+
+    // 하트: (x²+y²-1)³ - x²y³ ≤ 0
+    static float HeartCoverage(float x, float y)
+    {
+        float u = (x - 32f) / 26f, v = (y - 30f) / 26f;
+        float a = u * u + v * v - 1f;
+        return a * a * a - u * u * v * v * v <= 0f ? 1f : 0f;
+    }
+
+    // 번개 (⚡): 오른쪽 위 → 왼쪽 아래로 꺾이는 모양
+    static readonly Vector2[] BoltPoly =
+    {
+        new Vector2(40f, 63f), new Vector2(12f, 29f), new Vector2(29f, 29f),
+        new Vector2(21f, 1f), new Vector2(52f, 37f), new Vector2(35f, 37f), new Vector2(46f, 63f)
+    };
+
+    // 물방울: 아래 원 + 위로 뾰족한 삼각형
+    static float DropCoverage(float x, float y)
+    {
+        if (CircleCoverage(x, y, 32f, 23f, 18f) > 0f) return 1f;
+        var tri = new[] { new Vector2(32f, 62f), new Vector2(15.2f, 29.5f), new Vector2(48.8f, 29.5f) };
+        return InPolygon(new Vector2(x, y), tri) ? 1f : 0f;
+    }
+
+    // 포크 + 나이프
+    static float ForkKnifeCoverage(float x, float y)
+    {
+        bool InRect(float x0, float y0, float x1, float y1) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
+        // 포크: 손잡이 + 머리 + 갈래 3개
+        if (InRect(17.5f, 4f, 23.5f, 36f)) return 1f;
+        if (InRect(11f, 32f, 30f, 42f)) return 1f;
+        if (InRect(11f, 42f, 14.5f, 60f) || InRect(18.8f, 42f, 22.2f, 60f) || InRect(26.5f, 42f, 30f, 60f)) return 1f;
+        // 나이프: 손잡이 + 위가 둥근 칼날
+        if (InRect(39f, 4f, 46f, 34f)) return 1f;
+        if (InRect(39f, 30f, 50f, 52f)) return 1f;
+        if (CircleCoverage(x, y, 44.5f, 52f, 5.5f) > 0f && x >= 39f) return 1f;
+        return 0f;
+    }
+
+    // 테두리만 있는 둥근 사각형 (64px, 반경 16)
+    static float FrameCoverage(float x, float y, float stroke)
+    {
+        if (RoundedRectCoverage(x, y, 64f, 64f, 16f) == 0f) return 0f;
+        float ix = x - stroke, iy = y - stroke, iw = 64f - stroke * 2f;
+        if (ix < 0f || iy < 0f || ix > iw || iy > iw) return 1f;
+        return RoundedRectCoverage(ix, iy, iw, iw, 16f - stroke) > 0f ? 0f : 1f;
     }
 
     static float RoundedRectCoverage(float x, float y, float w, float h, float r)

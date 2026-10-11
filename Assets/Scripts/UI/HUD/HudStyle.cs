@@ -27,6 +27,15 @@ public static class HudStyle
 
     // ── 스프라이트 ──
     static Sprite roundedRect, circle, ring, triangle, metalRing, navArrow, sun, moon, softShadow;
+    static Sprite heart, bolt, drop, forkKnife, ringThick, roundedFrame, roundedFrameThick;
+    public static Sprite Heart => Load(ref heart, "Heart");
+    public static Sprite Bolt => Load(ref bolt, "Bolt");
+    public static Sprite Drop => Load(ref drop, "Drop");
+    public static Sprite ForkKnife => Load(ref forkKnife, "ForkKnife");
+    public static Sprite RingThick => Load(ref ringThick, "RingThick");
+    public static Sprite RoundedFrame => Load(ref roundedFrame, "RoundedFrame");
+    public static Sprite RoundedFrameThick => Load(ref roundedFrameThick, "RoundedFrameThick");
+    static Sprite Load(ref Sprite cache, string name) => cache != null ? cache : cache = Resources.Load<Sprite>("HUD/Sprites/" + name);
     public static Sprite Sun         => sun         != null ? sun         : sun         = Resources.Load<Sprite>("HUD/Sprites/Sun");
     public static Sprite Moon        => moon        != null ? moon        : moon        = Resources.Load<Sprite>("HUD/Sprites/Moon");
     public static Sprite SoftShadow  => softShadow  != null ? softShadow  : softShadow  = Resources.Load<Sprite>("HUD/Sprites/SoftShadow");

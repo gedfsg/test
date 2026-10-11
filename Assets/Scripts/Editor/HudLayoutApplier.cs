@@ -116,6 +116,154 @@ public static class HudLayoutApplier
         Save("2. Top Center");
     }
 
+    [MenuItem("Tools/HUD/Apply Layout/3. Status Panel (Bottom Left)")]
+    static void ApplyStatusPanel()
+    {
+        Canvas canvas = FindHudCanvas();
+        if (canvas == null) return;
+        SetupScaler(canvas);
+
+        // 레퍼런스: 패널 x 27~458, y 661~889 → 중심 (242.5, 775), 화면 아래에서 161
+        var rt = GetOrCreateChild(canvas.transform, "StatusPanelHUD");
+        Undo.RecordObject(rt, "HUD Status");
+        SetRect(rt, new Vector2(0f, 0f), new Vector2(242.5f, 936f - 775f), new Vector2(431f, 228f));
+        if (rt.GetComponent<StatusPanelHUD>() == null) Undo.AddComponent<StatusPanelHUD>(rt.gameObject);
+
+        // 기존 상태 패널(팀원 PlayerHealthUI/PlayerStaminaUI 포함)은 끔 (삭제하지 않음)
+        var old = canvas.transform.Find("StatusPanel");
+        if (old != null) { Undo.RecordObject(old.gameObject, "HUD Status"); old.gameObject.SetActive(false); }
+
+        Save("3. Status Panel");
+    }
+
+    const string HotbarSlotPrefabPath = "Assets/Prefab/UI/HUD_HotbarSlot.prefab";
+    const string HotbarThemePath = "Assets/Prefab/UI/HUD_UITheme.asset";
+
+    [MenuItem("Tools/HUD/Apply Layout/4. Hotbar")]
+    static void ApplyHotbar()
+    {
+        Canvas canvas = FindHudCanvas();
+        if (canvas == null) return;
+        SetupScaler(canvas);
+
+        var hotbar = Object.FindFirstObjectByType<WeaponHotbarUI>(FindObjectsInactive.Include);
+        if (hotbar == null) { Debug.LogError("[HudLayout] WeaponHotbarUI 없음"); return; }
+
+        // 팀원 코드(WeaponHotbarUI/SlotView)는 그대로 두고, 레퍼런스 스타일의
+        // 새 슬롯 프리팹 + 새 테마 에셋을 만들어 씬에서 연결만 바꿈
+        UITheme theme = BuildHotbarTheme();
+        SlotView slotPrefab = BuildHotbarSlotPrefab();
+
+        var so = new SerializedObject(hotbar);
+        so.FindProperty("slotPrefab").objectReferenceValue = slotPrefab;
+        so.FindProperty("theme").objectReferenceValue = theme;
+        so.ApplyModifiedProperties();
+
+        // 레퍼런스: 슬롯 90x90, 간격 97(틈 7), 묶음 중심 x=829(화면 중앙 -11.5), 세로 중심 y=845.5(아래에서 90.5)
+        var rt = (RectTransform)hotbar.transform;
+        Undo.RecordObject(rt, "HUD Hotbar");
+        SetRect(rt, new Vector2(0.5f, 0f), new Vector2(-11.5f, 936f - 845.5f), new Vector2(5 * 90f + 4 * 7f, 90f));
+
+        var container = rt.Find("SlotContainer") as RectTransform;
+        if (container != null)
+        {
+            Undo.RecordObject(container, "HUD Hotbar");
+            SetRect(container, new Vector2(0.5f, 0.5f), Vector2.zero, container.sizeDelta);
+            var hlg = container.GetComponent<HorizontalLayoutGroup>();
+            Undo.RecordObject(hlg, "HUD Hotbar");
+            hlg.spacing = 7f;
+            hlg.childAlignment = TextAnchor.MiddleCenter;
+        }
+
+        Save("4. Hotbar");
+    }
+
+    static UITheme BuildHotbarTheme()
+    {
+        var theme = AssetDatabase.LoadAssetAtPath<UITheme>(HotbarThemePath);
+        if (theme == null)
+        {
+            theme = ScriptableObject.CreateInstance<UITheme>();
+            AssetDatabase.CreateAsset(theme, HotbarThemePath);
+        }
+        // 레퍼런스 핫바: 슬롯 채움 #292A2F, 활성 테두리 #F3D255, 번호는 전부 흰색
+        Color slot = new Color32(41, 42, 47, 235);
+        theme.slotEmpty = theme.slotFilled = slot;
+        theme.consumableBg = theme.weaponBg = theme.materialBg = theme.defaultItemBg = slot;
+        theme.slotActive = new Color32(0xF3, 0xD2, 0x55, 0xFF);
+        theme.textPrimary = Color.white;
+        theme.textMuted = new Color(1f, 1f, 1f, 0.92f);
+        EditorUtility.SetDirty(theme);
+        AssetDatabase.SaveAssets();
+        return theme;
+    }
+
+    // SlotView 프리팹 구조(팀원 SlotView 주석 참고)를 그대로 따르되 모양만 레퍼런스대로
+    static SlotView BuildHotbarSlotPrefab()
+    {
+        var root = new GameObject("HUD_HotbarSlot", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        ((RectTransform)root.transform).sizeDelta = new Vector2(90f, 90f);
+        var bg = root.GetComponent<Image>();
+        bg.sprite = HudStyle.RoundedRect; bg.type = Image.Type.Sliced; bg.pixelsPerUnitMultiplier = 2f;
+        var view = root.AddComponent<SlotView>();
+
+        var icon = HudStyle.NewImage(root.transform, "Icon", null, Color.white, Vector2.zero, Vector2.zero);
+        Stretch(icon.rectTransform, 10f);
+        icon.preserveAspect = true;
+
+        var nameLabel = HudStyle.NewText(root.transform, "NameLabel", "", HudStyle.Regular, 12f, Color.white,
+            TMPro.TextAlignmentOptions.Bottom, new Vector2(0f, -30f), new Vector2(86f, 20f));
+        var countLabel = HudStyle.NewText(root.transform, "CountLabel", "", HudStyle.SemiBold, 14f, Color.white,
+            TMPro.TextAlignmentOptions.BottomRight, new Vector2(18f, -30f), new Vector2(46f, 20f));
+
+        var frame = HudStyle.NewImage(root.transform, "Frame", HudStyle.RoundedFrame, new Color32(106, 104, 104, 255), Vector2.zero, Vector2.zero);
+        frame.type = Image.Type.Sliced; frame.pixelsPerUnitMultiplier = 2f; Stretch(frame.rectTransform, 0f);
+        var active = HudStyle.NewImage(root.transform, "ActiveBar", HudStyle.RoundedFrameThick, Color.white, Vector2.zero, Vector2.zero);
+        active.type = Image.Type.Sliced; active.pixelsPerUnitMultiplier = 2f; Stretch(active.rectTransform, -0.5f);
+
+        // 번호: 레퍼런스에서 슬롯 왼쪽 위 모서리 기준 (16, 18) 위치
+        var number = HudStyle.NewText(root.transform, "NumberLabel", "1", HudStyle.Regular, 18f, Color.white,
+            TMPro.TextAlignmentOptions.Center, Vector2.zero, new Vector2(24f, 24f));
+        number.rectTransform.anchorMin = number.rectTransform.anchorMax = new Vector2(0f, 1f);
+        number.rectTransform.anchoredPosition = new Vector2(16f, -18f);
+
+        var so = new SerializedObject(view);
+        so.FindProperty("background").objectReferenceValue = bg;
+        so.FindProperty("icon").objectReferenceValue = icon;
+        so.FindProperty("outline").objectReferenceValue = null;
+        so.FindProperty("nameLabel").objectReferenceValue = nameLabel;
+        so.FindProperty("countLabel").objectReferenceValue = countLabel;
+        so.FindProperty("numberLabel").objectReferenceValue = number;
+        so.FindProperty("activeBar").objectReferenceValue = active;
+        so.ApplyModifiedPropertiesWithoutUndo();
+
+        var prefab = PrefabUtility.SaveAsPrefabAsset(root, HotbarSlotPrefabPath);
+        Object.DestroyImmediate(root);
+        return prefab.GetComponent<SlotView>();
+    }
+
+    static void Stretch(RectTransform rt, float inset)
+    {
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = new Vector2(inset, inset);
+        rt.offsetMax = new Vector2(-inset, -inset);
+    }
+
+    static RectTransform GetOrCreateChild(Transform parent, string name)
+    {
+        Transform t = parent.Find(name);
+        if (t == null)
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            Undo.RegisterCreatedObjectUndo(go, "HUD create");
+            go.transform.SetParent(parent, false);
+            go.layer = parent.gameObject.layer;
+            t = go.transform;
+        }
+        return (RectTransform)t;
+    }
+
     // ── 공용 ──
 
     static Canvas FindHudCanvas()

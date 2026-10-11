@@ -1,0 +1,41 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f52ae6c3b10fb4040aef57c2fd7c0f12, type: 3}
+  m_Name: HUD_UITheme
+  m_EditorClassIdentifier: Assembly-CSharp::UITheme
+  slotEmpty: {r: 0.16078432, g: 0.16470589, b: 0.18431373, a: 0.92156863}
+  slotFilled: {r: 0.16078432, g: 0.16470589, b: 0.18431373, a: 0.92156863}
+  slotActive: {r: 0.9529412, g: 0.8235294, b: 0.33333334, a: 1}
+  slotOutlineDefault: {r: 0.35, g: 0.36, b: 0.28, a: 0.8}
+  consumableBg: {r: 0.16078432, g: 0.16470589, b: 0.18431373, a: 0.92156863}
+  consumableOutline: {r: 0.42, g: 0.55, b: 0.25, a: 0.8}
+  weaponBg: {r: 0.16078432, g: 0.16470589, b: 0.18431373, a: 0.92156863}
+  weaponOutline: {r: 0.65, g: 0.32, b: 0.14, a: 0.85}
+  materialBg: {r: 0.16078432, g: 0.16470589, b: 0.18431373, a: 0.92156863}
+  materialOutline: {r: 0.6, g: 0.5, b: 0.22, a: 0.8}
+  defaultItemBg: {r: 0.16078432, g: 0.16470589, b: 0.18431373, a: 0.92156863}
+  defaultItemOutline: {r: 0.38, g: 0.39, b: 0.32, a: 0.8}
+  textPrimary: {r: 1, g: 1, b: 1, a: 1}
+  textSecondary: {r: 0.7, g: 0.71, b: 0.64, a: 1}
+  textMuted: {r: 1, g: 1, b: 1, a: 0.92}
+  textAmount: {r: 0.85, g: 0.7, b: 0.3, a: 1}
+  textAmmoLabel: {r: 0.85, g: 0.72, b: 0.32, a: 1}
+  textAmmoAvailable: {r: 1, g: 1, b: 1, a: 1}
+  textAmmoEmpty: {r: 0.42, g: 0.42, b: 0.38, a: 1}
+  healthHigh: {r: 0.45, g: 0.6, b: 0.2, a: 1}
+  healthLow: {r: 0.7, g: 0.2, b: 0.12, a: 1}
+  staminaFill: {r: 0.75, g: 0.6, b: 0.2, a: 1}
+  buttonNormal: {r: 0.13, g: 0.14, b: 0.11, a: 1}
+  buttonHover: {r: 0.45, g: 0.36, b: 0.14, a: 1}
+  buttonText: {r: 0.9, g: 0.9, b: 0.84, a: 1}
+  panelBackground: {r: 0.08, g: 0.09, b: 0.07, a: 0.97}
+  panelOutline: {r: 0.45, g: 0.4, b: 0.2, a: 0.85}
