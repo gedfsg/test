@@ -20,6 +20,13 @@ public class InventoryUI : MonoBehaviour
     public Transform ammoPanelContainer;
     public GameObject ammoCellPrefab; // TypeLabel(TMP) + CountLabel(TMP)를 가진 프리팹, 선택사항
 
+    [Tooltip("탄약 칸 아이콘 (순서: P, AR, SG, SR). 칸 프리팹에 'Icon' 이름의 Image가 있으면 적용된다.")]
+    public Sprite[] ammoIcons;
+
+    [Header("소지품 개수 표시 (선택)")]
+    [Tooltip("'현재 개수 / 최대 칸' 텍스트 (예: 0 / 24). 비워두면 표시하지 않는다.")]
+    public TextMeshProUGUI capacityText;
+
     public bool isInventoryOpen = false;
 
     private PlayerInputActions inputActions;
@@ -76,6 +83,9 @@ public class InventoryUI : MonoBehaviour
                 slot.SetEmpty(theme);
             }
         }
+
+        if (capacityText != null)
+            capacityText.text = $"{inventoryManager.inventory.Count} / {inventoryManager.maxCapacity}";
 
         UpdateAmmoPanel();
         UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)slotGrid);
@@ -203,16 +213,23 @@ public class InventoryUI : MonoBehaviour
             (WeaponType.Sniper, "SR"),
         };
 
-        foreach (var (type, label) in ammoTypes)
-            CreateAmmoCell(type, label);
+        for (int i = 0; i < ammoTypes.Length; i++)
+            CreateAmmoCell(ammoTypes[i].type, ammoTypes[i].label, i, i == ammoTypes.Length - 1);
     }
 
-    private void CreateAmmoCell(WeaponType type, string typeLabel)
+    private void CreateAmmoCell(WeaponType type, string typeLabel, int index, bool isLast)
     {
         int current = AmmoInventory.Instance.GetAmmo(type);
         bool hasAmmo = current > 0;
 
         GameObject cell = Instantiate(ammoCellPrefab, ammoPanelContainer);
+
+        // 선택: 'Icon' Image에 탄약 종류별 아이콘, 마지막 칸은 오른쪽 'Divider' 숨김
+        var iconTf = cell.transform.Find("Icon");
+        if (iconTf != null && ammoIcons != null && index < ammoIcons.Length && ammoIcons[index] != null)
+            iconTf.GetComponent<UnityEngine.UI.Image>().sprite = ammoIcons[index];
+        var dividerTf = cell.transform.Find("Divider");
+        if (dividerTf != null) dividerTf.gameObject.SetActive(!isLast);
 
         var texts = cell.GetComponentsInChildren<TextMeshProUGUI>();
         // 프리팹 규약: 자식 TMP 순서 [0]=타입 라벨, [1]=수치

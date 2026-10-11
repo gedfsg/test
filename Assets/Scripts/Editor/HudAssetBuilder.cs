@@ -59,9 +59,16 @@ public static class HudAssetBuilder
         WriteSprite("RoundedFrame", 64, 64, (x, y) => FrameCoverage(x, y, 4f), new Vector4(16, 16, 16, 16));
         WriteSprite("RoundedFrameThick", 64, 64, (x, y) => FrameCoverage(x, y, 6f), new Vector4(16, 16, 16, 16));
 
+        // 인벤토리 탄약 / 우하단 탄약·손전등 아이콘 (흰색 → 틴트)
+        WriteSprite("BulletP", 64, 64, (x, y) => BulletCoverage(x, y, 32f, 9f, 6f, 36f, 54f), Vector4.zero);
+        WriteSprite("BulletAR", 64, 64, (x, y) => Mathf.Max(BulletCoverage(x, y, 21f, 7f, 2f, 38f, 58f), BulletCoverage(x, y, 43f, 7f, 2f, 38f, 58f)), Vector4.zero);
+        WriteSprite("ShellSG", 64, 64, ShellCoverage, Vector4.zero);
+        WriteSprite("BulletSR", 64, 64, (x, y) => BulletCoverage(x, y, 32f, 7f, 2f, 40f, 62f), Vector4.zero);
+        WriteSprite("Flashlight", 64, 64, FlashlightCoverage, Vector4.zero);
+
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
-        Debug.Log("[HudAssetBuilder] ✅ Pretendard 폰트 3종 + HUD 스프라이트 16종 생성 완료");
+        Debug.Log("[HudAssetBuilder] ✅ Pretendard 폰트 3종 + HUD 스프라이트 21종 생성 완료");
     }
 
     // ── 폰트 ──
@@ -282,6 +289,43 @@ public static class HudAssetBuilder
         if (InRect(39f, 4f, 46f, 34f)) return 1f;
         if (InRect(39f, 30f, 50f, 52f)) return 1f;
         if (CircleCoverage(x, y, 44.5f, 52f, 5.5f) > 0f && x >= 39f) return 1f;
+        return 0f;
+    }
+
+    // 탄환: 몸통(cx±halfW, bottom~bodyTop) + 위로 둥글게 좁아지는 탄두(bodyTop~tipY)
+    static float BulletCoverage(float x, float y, float cx, float halfW, float bottom, float bodyTop, float tipY)
+    {
+        float dx = Mathf.Abs(x - cx);
+        if (y >= bottom && y <= bodyTop) return dx <= halfW ? 1f : 0f;
+        if (y > bodyTop && y <= tipY)
+        {
+            float t = (y - bodyTop) / (tipY - bodyTop);          // 0(몸통 끝) → 1(탄두 끝)
+            return dx <= halfW * Mathf.Sqrt(1f - t * t) ? 1f : 0f; // 타원형 탄두
+        }
+        return 0f;
+    }
+
+    // 산탄 탄피: 원통 + 아래쪽 테두리(림)와 몸통 사이 가는 틈
+    static float ShellCoverage(float x, float y)
+    {
+        float dx = Mathf.Abs(x - 32f);
+        if (y >= 2f && y <= 12f) return dx <= 12f ? 1f : 0f;   // 금속 바닥
+        if (y > 12f && y < 15f) return 0f;                       // 경계 틈
+        if (y >= 15f && y <= 60f) return dx <= 10f ? 1f : 0f;   // 몸통
+        return 0f;
+    }
+
+    // 손전등: 위가 넓은 헤드 + 몸통 + 스위치 구멍
+    static float FlashlightCoverage(float x, float y)
+    {
+        float dx = Mathf.Abs(x - 32f);
+        if (y >= 46f && y <= 62f) return dx <= 17f ? 1f : 0f;                        // 렌즈 헤드
+        if (y >= 36f && y < 46f) return dx <= Mathf.Lerp(9f, 17f, (y - 36f) / 10f) ? 1f : 0f; // 넓어지는 목
+        if (y >= 2f && y < 36f)
+        {
+            if (CircleCoverage(x, y, 32f, 24f, 3.2f) > 0f) return 0f;                 // 스위치
+            return dx <= 9f ? 1f : 0f;                                                 // 몸통
+        }
         return 0f;
     }
 

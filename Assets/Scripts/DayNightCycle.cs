@@ -46,6 +46,20 @@ public class DayNightCycle : MonoBehaviour
     [Header("손전등 (T키)")]
     public Light flashlight;
     public TextMeshProUGUI flashlightStatusText;
+    [Tooltip("예전 텍스트 표시(FlashlightStatusText)를 자동 생성할지. 새 HUD(FlashlightHUD)를 쓰면 끔")]
+    public bool buildLegacyFlashlightText = true;
+
+    [Header("손전등 배터리")]
+    [Tooltip("켜둔 상태로 100% → 0%까지 걸리는 시간(초)")]
+    public float batteryDrainSeconds = 240f;
+    [Tooltip("꺼둔 상태로 0% → 100%까지 충전되는 시간(초)")]
+    public float batteryRechargeSeconds = 480f;
+    [Tooltip("이 잔량(0~1) 이상 충전돼야 다시 켤 수 있음. 방전 직후 켰다 꺼졌다 깜빡이는 것 방지")]
+    [Range(0f, 1f)] public float minBatteryToTurnOn = 0.1f;
+
+    /// <summary>배터리 잔량 0~1. 0이 되면 손전등이 자동으로 꺼지고 충전될 때까지 못 켬.</summary>
+    public float Battery01 { get; private set; } = 1f;
+    public bool FlashlightOn => flashlightOn;
 
     [Header("UI")]
     public TextMeshProUGUI dayText;
@@ -79,7 +93,7 @@ public class DayNightCycle : MonoBehaviour
             if (player != null)
                 flashlight = player.GetComponentInChildren<Light>();
         }
-        if (flashlightStatusText == null) BuildFlashlightUI();
+        if (flashlightStatusText == null && buildLegacyFlashlightText) BuildFlashlightUI();
         Debug.Log($"[Flashlight] 초기화: flashlight={(flashlight != null ? flashlight.name : "NULL! 못 찾음")}" +
                    (flashlight != null ? $" localPos={flashlight.transform.localPosition} enabled={flashlight.enabled}" : ""));
 
@@ -98,7 +112,8 @@ public class DayNightCycle : MonoBehaviour
             UnityEngine.InputSystem.Keyboard.current.tKey.wasPressedThisFrame)
         {
             Debug.Log($"[Flashlight] T키 입력 받음 (flashlight={(flashlight != null ? "있음" : "NULL!")})");
-            if (flashlight != null)
+            // 배터리가 minBatteryToTurnOn 미만이면 켜지지 않음 (끄는 건 항상 가능)
+            if (flashlight != null && (flashlightOn || Battery01 >= minBatteryToTurnOn))
             {
                 flashlightOn = !flashlightOn;
                 flashlight.enabled = flashlightOn;
@@ -106,6 +121,8 @@ public class DayNightCycle : MonoBehaviour
                 Debug.Log($"[Flashlight] 토글됨 -> {(flashlightOn ? "ON" : "OFF")}");
             }
         }
+
+        UpdateBattery();
 
         phaseTimer += Time.deltaTime;
         float duration = PhaseDuration(CurrentPhase);
@@ -249,6 +266,26 @@ public class DayNightCycle : MonoBehaviour
         RenderSettings.fogColor = targetColor;
         RenderSettings.fogStartDistance = targetStart;
         RenderSettings.fogEndDistance = targetEnd;
+    }
+
+    // 켜져 있으면 닳고, 꺼져 있으면 천천히 충전. 0이 되면 자동으로 꺼짐.
+    void UpdateBattery()
+    {
+        if (flashlightOn)
+        {
+            Battery01 = Mathf.Max(0f, Battery01 - Time.deltaTime / Mathf.Max(batteryDrainSeconds, 0.01f));
+            if (Battery01 <= 0f && flashlight != null)
+            {
+                flashlightOn = false;
+                flashlight.enabled = false;
+                UpdateFlashlightUI();
+                Debug.Log("[Flashlight] 배터리 방전 → 자동 OFF");
+            }
+        }
+        else
+        {
+            Battery01 = Mathf.Min(1f, Battery01 + Time.deltaTime / Mathf.Max(batteryRechargeSeconds, 0.01f));
+        }
     }
 
     void BuildFlashlightUI()

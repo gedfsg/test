@@ -35,6 +35,12 @@ public static class HudStyle
     public static Sprite RingThick => Load(ref ringThick, "RingThick");
     public static Sprite RoundedFrame => Load(ref roundedFrame, "RoundedFrame");
     public static Sprite RoundedFrameThick => Load(ref roundedFrameThick, "RoundedFrameThick");
+    static Sprite bulletP, bulletAR, shellSG, bulletSR, flashlight;
+    public static Sprite BulletP => Load(ref bulletP, "BulletP");
+    public static Sprite BulletAR => Load(ref bulletAR, "BulletAR");
+    public static Sprite ShellSG => Load(ref shellSG, "ShellSG");
+    public static Sprite BulletSR => Load(ref bulletSR, "BulletSR");
+    public static Sprite Flashlight => Load(ref flashlight, "Flashlight");
     static Sprite Load(ref Sprite cache, string name) => cache != null ? cache : cache = Resources.Load<Sprite>("HUD/Sprites/" + name);
     public static Sprite Sun         => sun         != null ? sun         : sun         = Resources.Load<Sprite>("HUD/Sprites/Sun");
     public static Sprite Moon        => moon        != null ? moon        : moon        = Resources.Load<Sprite>("HUD/Sprites/Moon");

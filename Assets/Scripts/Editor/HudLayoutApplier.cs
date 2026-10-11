@@ -242,6 +242,233 @@ public static class HudLayoutApplier
         return prefab.GetComponent<SlotView>();
     }
 
+    const string InvSlotPrefabPath = "Assets/Prefab/UI/HUD_InventorySlot.prefab";
+    const string AmmoCellPrefabPath = "Assets/Prefab/UI/HUD_AmmoCell.prefab";
+    const string InvThemePath = "Assets/Prefab/UI/HUD_InventoryTheme.asset";
+
+    [MenuItem("Tools/HUD/Apply Layout/5. Inventory (Top Right)")]
+    static void ApplyInventory()
+    {
+        Canvas canvas = FindHudCanvas();
+        if (canvas == null) return;
+        SetupScaler(canvas);
+
+        var invUI = Object.FindFirstObjectByType<InventoryUI>(FindObjectsInactive.Include);
+        if (invUI == null || invUI.inventoryWindow == null) { Debug.LogError("[HudLayout] InventoryUI/inventoryWindow 없음"); return; }
+        Transform win = invUI.inventoryWindow.transform;
+
+        // 레퍼런스: 창 x 1105~1655, y 64~749 → 중심 (1380, 406.5), 크기 550x685, 우상단 앵커
+        var winRt = (RectTransform)win;
+        Undo.RecordObject(winRt, "HUD Inventory");
+        SetRect(winRt, new Vector2(1f, 1f), new Vector2(1380f - 1681f, -406.5f), new Vector2(550f, 685f));
+        var winImg = win.GetComponent<Image>();
+        Undo.RecordObject(winImg, "HUD Inventory");
+        winImg.sprite = HudStyle.RoundedRect; winImg.type = Image.Type.Sliced; winImg.pixelsPerUnitMultiplier = 2f;
+        winImg.color = new Color32(32, 33, 37, 250);
+        var outlineFx = win.GetComponent<Outline>();
+        if (outlineFx != null) { Undo.RecordObject(outlineFx, "HUD Inventory"); outlineFx.enabled = false; }
+        var header = win.Find("HeaderBar");
+        if (header != null) { Undo.RecordObject(header.gameObject, "HUD Inventory"); header.gameObject.SetActive(false); }
+
+        // 이전 실행에서 만든 HUD_* 요소는 지우고 새로 만듦 (재실행 안전)
+        for (int i = win.childCount - 1; i >= 0; i--)
+            if (win.GetChild(i).name.StartsWith("HUD_")) Undo.DestroyObjectImmediate(win.GetChild(i).gameObject);
+
+        // 좌표: 창 중심(1380, 406.5) 기준, UI y = 406.5 - 레퍼런스 y
+        Color cream = new Color32(246, 236, 214, 255);
+        Color lineColor = new Color32(120, 115, 110, 255);
+        var border = Track(HudStyle.NewImage(win, "HUD_Border", HudStyle.RoundedFrame, new Color32(110, 105, 100, 255), Vector2.zero, Vector2.zero));
+        border.pixelsPerUnitMultiplier = 2f; Stretch(border.rectTransform, 0f);
+        border.transform.SetAsFirstSibling();
+
+        Track(HudStyle.NewText(win, "HUD_Title", "인벤토리", HudStyle.Bold, 32f, cream, TMPro.TextAlignmentOptions.Left, new Vector2(-240f + 100f, 299.5f), new Vector2(200f, 40f)));
+        var sub = Track(HudStyle.NewText(win, "HUD_Subtitle", "INVENTORY", HudStyle.Regular, 14f, new Color32(170, 163, 152, 255), TMPro.TextAlignmentOptions.Left, new Vector2(-239f + 100f, 260.5f), new Vector2(200f, 20f)));
+        sub.characterSpacing = 42f;
+
+        // 닫기 X 버튼 (클릭 → InventoryUI.ToggleInventory)
+        var close = Track(HudStyle.NewImage(win, "HUD_Close", null, new Color(0f, 0f, 0f, 0f), new Vector2(233f, 298.5f), new Vector2(34f, 34f)));
+        close.raycastTarget = true;
+        Color xColor = new Color32(177, 167, 153, 255);
+        HudStyle.NewImage(close.transform, "Line1", null, xColor, Vector2.zero, new Vector2(30f, 2f)).rectTransform.localEulerAngles = new Vector3(0f, 0f, 45f);
+        HudStyle.NewImage(close.transform, "Line2", null, xColor, Vector2.zero, new Vector2(30f, 2f)).rectTransform.localEulerAngles = new Vector3(0f, 0f, -45f);
+        var button = close.gameObject.AddComponent<Button>();
+        button.targetGraphic = close;
+        UnityEditor.Events.UnityEventTools.AddPersistentListener(button.onClick, invUI.ToggleInventory);
+
+        Track(HudStyle.NewImage(win, "HUD_Sep1", null, lineColor, new Vector2(0f, 235.5f), new Vector2(504f, 1.5f)));
+        Track(HudStyle.NewText(win, "HUD_ItemsLabel", "소지품", HudStyle.SemiBold, 19f, cream, TMPro.TextAlignmentOptions.Left, new Vector2(-240f + 60f, 206.5f), new Vector2(120f, 28f)));
+        var capacity = Track(HudStyle.NewText(win, "HUD_Capacity", "0 / 24", HudStyle.Regular, 17f, Color.white, TMPro.TextAlignmentOptions.Right, new Vector2(239f - 50f, 206.5f), new Vector2(100f, 26f)));
+        Track(HudStyle.NewImage(win, "HUD_Sep2", null, lineColor, new Vector2(0f, -201.5f), new Vector2(504f, 1.5f)));
+        Track(HudStyle.NewText(win, "HUD_AmmoLabel", "보유 탄약", HudStyle.SemiBold, 17f, cream, TMPro.TextAlignmentOptions.Left, new Vector2(-242f + 60f, -228.5f), new Vector2(120f, 26f)));
+        Track(HudStyle.NewText(win, "HUD_CloseHint", "[ I ] 닫기", HudStyle.Regular, 15f, new Color(1f, 1f, 1f, 0.85f), TMPro.TextAlignmentOptions.Right, new Vector2(238f - 60f, -323.5f), new Vector2(120f, 24f)));
+
+        // 슬롯 그리드: 6열, 칸 76x79, 간격 8.7 (레퍼런스 x 1132~1631, y 227~569)
+        var grid = win.Find("SlotGrid") as RectTransform;
+        if (grid != null)
+        {
+            Undo.RecordObject(grid, "HUD Inventory");
+            SetRect(grid, new Vector2(0.5f, 0.5f), new Vector2(1.75f, 8.5f), new Vector2(499.5f, 342f));
+            var glg = grid.GetComponent<GridLayoutGroup>();
+            Undo.RecordObject(glg, "HUD Inventory");
+            glg.cellSize = new Vector2(76f, 79f);
+            glg.spacing = new Vector2(8.7f, 8.7f);
+            glg.padding = new RectOffset(0, 0, 0, 0);
+            glg.startCorner = GridLayoutGroup.Corner.UpperLeft;
+            glg.childAlignment = TextAnchor.UpperLeft;
+            glg.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            glg.constraintCount = 6;
+        }
+
+        // 탄약 줄: 4칸 가로 (레퍼런스 x 1138~1632, y 660~705)
+        var ammo = win.Find("AmmoPanel") as RectTransform;
+        if (ammo != null)
+        {
+            Undo.RecordObject(ammo, "HUD Inventory");
+            SetRect(ammo, new Vector2(0.5f, 0.5f), new Vector2(5f, -276f), new Vector2(494f, 50f));
+            var ammoImg = ammo.GetComponent<Image>();
+            if (ammoImg != null) { Undo.RecordObject(ammoImg, "HUD Inventory"); ammoImg.enabled = false; }
+            var hlg = ammo.GetComponent<HorizontalLayoutGroup>();
+            Undo.RecordObject(hlg, "HUD Inventory");
+            hlg.spacing = 0f;
+            hlg.padding = new RectOffset(0, 0, 0, 0);
+            hlg.childControlWidth = hlg.childControlHeight = false;
+            hlg.childForceExpandWidth = hlg.childForceExpandHeight = false;
+            hlg.childAlignment = TextAnchor.MiddleLeft;
+        }
+
+        // 프리팹/테마 교체 + 새 필드 연결 (팀원 InventoryUI)
+        var so = new SerializedObject(invUI);
+        so.FindProperty("slotPrefab").objectReferenceValue = BuildInventorySlotPrefab();
+        so.FindProperty("ammoCellPrefab").objectReferenceValue = BuildAmmoCellPrefab();
+        so.FindProperty("theme").objectReferenceValue = BuildInventoryTheme();
+        so.FindProperty("capacityText").objectReferenceValue = capacity;
+        var icons = so.FindProperty("ammoIcons");
+        Sprite[] ammoSprites = { HudStyle.BulletP, HudStyle.BulletAR, HudStyle.ShellSG, HudStyle.BulletSR };
+        icons.arraySize = ammoSprites.Length;
+        for (int i = 0; i < ammoSprites.Length; i++) icons.GetArrayElementAtIndex(i).objectReferenceValue = ammoSprites[i];
+        so.ApplyModifiedProperties();
+
+        // 소지품 24칸
+        var invMgr = invUI.inventoryManager;
+        if (invMgr != null) { Undo.RecordObject(invMgr, "HUD Inventory"); invMgr.maxCapacity = 24; }
+
+        Save("5. Inventory");
+    }
+
+    static T Track<T>(T comp) where T : Component
+    {
+        Undo.RegisterCreatedObjectUndo(comp.gameObject, "HUD create");
+        return comp;
+    }
+
+    static UITheme BuildInventoryTheme()
+    {
+        var theme = AssetDatabase.LoadAssetAtPath<UITheme>(InvThemePath);
+        if (theme == null)
+        {
+            theme = ScriptableObject.CreateInstance<UITheme>();
+            AssetDatabase.CreateAsset(theme, InvThemePath);
+        }
+        // 레퍼런스: 칸 채움은 창 배경과 거의 같은 어두운 회색, 탄약 종류 라벨은 노랑, 수치는 흰색
+        Color slot = new Color32(36, 37, 40, 245);
+        theme.slotEmpty = theme.slotFilled = slot;
+        theme.consumableBg = theme.weaponBg = theme.materialBg = theme.defaultItemBg = new Color32(44, 45, 49, 230);
+        theme.textAmmoLabel = new Color32(0xF5, 0xBE, 0x46, 0xFF);
+        theme.textAmmoAvailable = Color.white;
+        theme.textAmmoEmpty = new Color(1f, 1f, 1f, 0.9f);
+        theme.textPrimary = Color.white;
+        theme.textMuted = new Color(1f, 1f, 1f, 0.7f);
+        EditorUtility.SetDirty(theme);
+        AssetDatabase.SaveAssets();
+        return theme;
+    }
+
+    static SlotView BuildInventorySlotPrefab()
+    {
+        var root = new GameObject("HUD_InventorySlot", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        ((RectTransform)root.transform).sizeDelta = new Vector2(76f, 79f);
+        var bg = root.GetComponent<Image>();
+        bg.sprite = HudStyle.RoundedRect; bg.type = Image.Type.Sliced; bg.pixelsPerUnitMultiplier = 4f;
+        var view = root.AddComponent<SlotView>();
+
+        var icon = HudStyle.NewImage(root.transform, "Icon", null, Color.white, Vector2.zero, Vector2.zero);
+        Stretch(icon.rectTransform, 8f);
+        icon.preserveAspect = true;
+        var nameLabel = HudStyle.NewText(root.transform, "NameLabel", "", HudStyle.Regular, 11f, Color.white,
+            TMPro.TextAlignmentOptions.Bottom, new Vector2(0f, -27f), new Vector2(72f, 18f));
+        var countLabel = HudStyle.NewText(root.transform, "CountLabel", "", HudStyle.SemiBold, 13f, Color.white,
+            TMPro.TextAlignmentOptions.TopRight, new Vector2(14f, 27f), new Vector2(40f, 18f));
+        // 레퍼런스 칸 테두리: 1px 밝은 회갈색, 모서리 4px
+        var frame = HudStyle.NewImage(root.transform, "Frame", HudStyle.RoundedFrame, new Color32(102, 97, 94, 255), Vector2.zero, Vector2.zero);
+        frame.pixelsPerUnitMultiplier = 4f; Stretch(frame.rectTransform, 0f);
+
+        var so = new SerializedObject(view);
+        so.FindProperty("background").objectReferenceValue = bg;
+        so.FindProperty("icon").objectReferenceValue = icon;
+        so.FindProperty("outline").objectReferenceValue = null;
+        so.FindProperty("nameLabel").objectReferenceValue = nameLabel;
+        so.FindProperty("countLabel").objectReferenceValue = countLabel;
+        so.FindProperty("numberLabel").objectReferenceValue = null;
+        so.FindProperty("activeBar").objectReferenceValue = null;
+        so.ApplyModifiedPropertiesWithoutUndo();
+
+        var prefab = PrefabUtility.SaveAsPrefabAsset(root, InvSlotPrefabPath);
+        Object.DestroyImmediate(root);
+        return prefab.GetComponent<SlotView>();
+    }
+
+    // InventoryUI 규약: 자식 TMP 순서 [0]=종류 라벨, [1]=수치. 'Icon'/'Divider'는 선택 요소
+    static GameObject BuildAmmoCellPrefab()
+    {
+        var root = new GameObject("HUD_AmmoCell", typeof(RectTransform));
+        ((RectTransform)root.transform).sizeDelta = new Vector2(123.5f, 50f);
+        HudStyle.NewImage(root.transform, "Icon", HudStyle.BulletP, new Color32(0xF9, 0xE2, 0xBC, 0xFF), new Vector2(-44.75f, 0f), new Vector2(36f, 46f));
+        HudStyle.NewText(root.transform, "TypeLabel", "P", HudStyle.SemiBold, 15f, Color.white,
+            TMPro.TextAlignmentOptions.Left, new Vector2(-1.75f + 10f, 15f), new Vector2(60f, 20f));
+        HudStyle.NewText(root.transform, "CountLabel", "0", HudStyle.Regular, 19f, Color.white,
+            TMPro.TextAlignmentOptions.Left, new Vector2(-1.75f + 10f, -11f), new Vector2(60f, 26f));
+        HudStyle.NewImage(root.transform, "Divider", null, new Color32(70, 70, 72, 255), new Vector2(61f, 0f), new Vector2(1.5f, 50f));
+
+        var prefab = PrefabUtility.SaveAsPrefabAsset(root, AmmoCellPrefabPath);
+        Object.DestroyImmediate(root);
+        return prefab;
+    }
+
+    [MenuItem("Tools/HUD/Apply Layout/6. Flashlight + Ammo (Bottom Right)")]
+    static void ApplyBottomRight()
+    {
+        Canvas canvas = FindHudCanvas();
+        if (canvas == null) return;
+        SetupScaler(canvas);
+
+        // 레퍼런스: 손전등 패널 x 1433~1655, y 763~808 / 탄약 패널 y 815~912 (우하단 앵커)
+        var fl = GetOrCreateChild(canvas.transform, "FlashlightHUD");
+        Undo.RecordObject(fl, "HUD BottomRight");
+        SetRect(fl, new Vector2(1f, 0f), new Vector2(1544f - 1681f, 936f - 785.5f), new Vector2(222f, 45f));
+        if (fl.GetComponent<FlashlightHUD>() == null) Undo.AddComponent<FlashlightHUD>(fl.gameObject);
+
+        var am = GetOrCreateChild(canvas.transform, "AmmoHUD");
+        Undo.RecordObject(am, "HUD BottomRight");
+        SetRect(am, new Vector2(1f, 0f), new Vector2(1544f - 1681f, 936f - 863.5f), new Vector2(222f, 97f));
+        if (am.GetComponent<AmmoHUD>() == null) Undo.AddComponent<AmmoHUD>(am.gameObject);
+
+        // 기존 탄약 표시(팀원 AmmoUI)는 크로스헤어가 AmmoUI.Instance를 쓰므로 오브젝트는 켜둔 채 투명하게만
+        var oldAmmo = canvas.transform.Find("AmmoHud");
+        if (oldAmmo != null)
+        {
+            var cg = oldAmmo.GetComponent<CanvasGroup>();
+            if (cg == null) cg = Undo.AddComponent<CanvasGroup>(oldAmmo.gameObject);
+            Undo.RecordObject(cg, "HUD BottomRight");
+            cg.alpha = 0f; cg.interactable = false; cg.blocksRaycasts = false;
+        }
+
+        // 예전 손전등 텍스트 자동 생성 끔
+        var dnc = Object.FindFirstObjectByType<DayNightCycle>(FindObjectsInactive.Include);
+        if (dnc != null) { Undo.RecordObject(dnc, "HUD BottomRight"); dnc.buildLegacyFlashlightText = false; }
+
+        Save("6. Flashlight + Ammo");
+    }
+
     static void Stretch(RectTransform rt, float inset)
     {
         rt.anchorMin = Vector2.zero;
