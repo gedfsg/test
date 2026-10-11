@@ -334,6 +334,9 @@ public static class HudLayoutApplier
             hlg.childControlWidth = hlg.childControlHeight = false;
             hlg.childForceExpandWidth = hlg.childForceExpandHeight = false;
             hlg.childAlignment = TextAnchor.MiddleLeft;
+
+            // 칸별 폭/아이콘·라벨 위치를 레퍼런스대로 (P/AR/SG/SR 폭이 서로 다름)
+            if (ammo.GetComponent<HudAmmoRowLayout>() == null) Undo.AddComponent<HudAmmoRowLayout>(ammo.gameObject);
         }
 
         // 프리팹/테마 교체 + 새 필드 연결 (팀원 InventoryUI)
@@ -422,7 +425,7 @@ public static class HudLayoutApplier
     {
         var root = new GameObject("HUD_AmmoCell", typeof(RectTransform));
         ((RectTransform)root.transform).sizeDelta = new Vector2(123.5f, 50f);
-        HudStyle.NewImage(root.transform, "Icon", HudStyle.BulletP, new Color32(0xF9, 0xE2, 0xBC, 0xFF), new Vector2(-44.75f, 0f), new Vector2(36f, 46f));
+        HudStyle.NewImage(root.transform, "Icon", HudStyle.BulletP, Color.white, new Vector2(-44.75f, 0f), new Vector2(36f, 46f));
         HudStyle.NewText(root.transform, "TypeLabel", "P", HudStyle.SemiBold, 15f, Color.white,
             TMPro.TextAlignmentOptions.Left, new Vector2(-1.75f + 10f, 15f), new Vector2(60f, 20f));
         HudStyle.NewText(root.transform, "CountLabel", "0", HudStyle.Regular, 19f, Color.white,

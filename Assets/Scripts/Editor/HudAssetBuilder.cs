@@ -60,10 +60,15 @@ public static class HudAssetBuilder
         WriteSprite("RoundedFrameThick", 64, 64, (x, y) => FrameCoverage(x, y, 6f), new Vector4(16, 16, 16, 16));
 
         // 인벤토리 탄약 / 우하단 탄약·손전등 아이콘 (흰색 → 틴트)
-        WriteSprite("BulletP", 64, 64, (x, y) => BulletCoverage(x, y, 32f, 9f, 6f, 36f, 54f), Vector4.zero);
-        WriteSprite("BulletAR", 64, 64, (x, y) => Mathf.Max(BulletCoverage(x, y, 21f, 7f, 2f, 38f, 58f), BulletCoverage(x, y, 43f, 7f, 2f, 38f, 58f)), Vector4.zero);
-        WriteSprite("ShellSG", 64, 64, ShellCoverage, Vector4.zero);
-        WriteSprite("BulletSR", 64, 64, (x, y) => BulletCoverage(x, y, 32f, 7f, 2f, 40f, 62f), Vector4.zero);
+// 탄약 아이콘은 2색(크림 몸통 + 황동색 탄두/밑동)을 직접 구움 → Image 색은 흰색으로 씀
+        WriteColorSprite("BulletP", 64, 64, (x, y) => BulletTwoTone(x, y, 32f, 9f, 6f, 36f, 54f, headFrom: 30f, gap: 2f, rimTo: 9f, tanHead: true));
+        WriteColorSprite("BulletAR", 64, 64, (x, y) =>
+        {
+            Color a = BulletTwoTone(x, y, 21f, 7f, 2f, 38f, 58f, headFrom: 33f, gap: 2f, rimTo: 6f, tanHead: true);
+            return a.a > 0f ? a : BulletTwoTone(x, y, 43f, 7f, 2f, 38f, 58f, headFrom: 33f, gap: 2f, rimTo: 6f, tanHead: true);
+        });
+        WriteColorSprite("ShellSG", 64, 64, ShellTwoTone);
+        WriteColorSprite("BulletSR", 64, 64, (x, y) => BulletTwoTone(x, y, 32f, 7f, 2f, 40f, 62f, headFrom: 44f, gap: 2f, rimTo: 7f, tanHead: false));
         WriteSprite("Flashlight", 64, 64, FlashlightCoverage, Vector4.zero);
 
         AssetDatabase.SaveAssets();
@@ -305,14 +310,31 @@ public static class HudAssetBuilder
         return 0f;
     }
 
-    // 산탄 탄피: 원통 + 아래쪽 테두리(림)와 몸통 사이 가는 틈
-    static float ShellCoverage(float x, float y)
+    // 레퍼런스 탄약 아이콘 2색 (픽셀 샘플링): 크림 몸통 / 황동색(탄두·밑동)
+    static readonly Color AmmoCream = new Color32(249, 228, 192, 255);
+    static readonly Color AmmoTan = new Color32(198, 178, 150, 255);
+
+    // 탄환 2색: headFrom 위는 탄두(tanHead면 황동색), 그 바로 아래 gap 높이는 틈(투명),
+    // rimTo 아래는 밑동(황동색), 나머지 탄피는 크림색
+    static Color BulletTwoTone(float x, float y, float cx, float halfW, float bottom, float bodyTop, float tipY,
+        float headFrom, float gap, float rimTo, bool tanHead)
+    {
+        if (BulletCoverage(x, y, cx, halfW, bottom, bodyTop, tipY) == 0f) return Color.clear;
+        if (y >= headFrom - gap && y < headFrom) return Color.clear;
+        if (y >= headFrom) return tanHead ? AmmoTan : AmmoCream;
+        if (y < rimTo) return AmmoTan;
+        return AmmoCream;
+    }
+
+    // 산탄 탄피: 아래부터 크림 림 → 틈 → 황동색 띠 → 크림 몸통
+    static Color ShellTwoTone(float x, float y)
     {
         float dx = Mathf.Abs(x - 32f);
-        if (y >= 2f && y <= 12f) return dx <= 12f ? 1f : 0f;   // 금속 바닥
-        if (y > 12f && y < 15f) return 0f;                       // 경계 틈
-        if (y >= 15f && y <= 60f) return dx <= 10f ? 1f : 0f;   // 몸통
-        return 0f;
+        if (y >= 2f && y < 7f) return dx <= 12f ? AmmoCream : Color.clear;   // 림
+        if (y >= 7f && y < 9f) return Color.clear;                           // 틈
+        if (y >= 9f && y < 19f) return dx <= 10.5f ? AmmoTan : Color.clear;  // 황동 띠
+        if (y >= 19f && y <= 60f) return dx <= 10f ? AmmoCream : Color.clear; // 몸통
+        return Color.clear;
     }
 
     // 손전등: 위가 넓은 헤드 + 몸통 + 스위치 구멍

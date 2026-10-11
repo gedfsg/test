@@ -16,7 +16,6 @@ public class AmmoHUD : MonoBehaviour
     [Header("색상 (레퍼런스 샘플링)")]
     public Color panelBg = new Color32(32, 34, 38, 225);
     public Color panelBorder = new Color32(100, 98, 96, 255);
-    public Color iconColor = new Color32(0xF8, 0xE9, 0xC1, 0xFF);
     public Color loadedColor = Color.white;
     public Color loadedEmptyColor = new Color32(0xFC, 0x62, 0x60, 0xFF);
     public Color reserveColor = new Color(1f, 1f, 1f, 0.75f);
@@ -33,7 +32,8 @@ public class AmmoHUD : MonoBehaviour
         var border = HudStyle.NewImage(root, "Border", HudStyle.RoundedFrame, panelBorder, Vector2.zero, new Vector2(222f, 97f));
         border.pixelsPerUnitMultiplier = 2f;
 
-        icon = HudStyle.NewImage(root, "Icon", HudStyle.BulletAR, iconColor, new Vector2(-77.5f, 16.5f), new Vector2(41f, 47f));
+        // 탄 아이콘 스프라이트에 2색이 구워져 있으므로 틴트는 흰색
+        icon = HudStyle.NewImage(root, "Icon", HudStyle.BulletAR, Color.white, new Vector2(-77.5f, 16.5f), new Vector2(41f, 47f));
         // 장전 탄: 오른쪽 끝이 레퍼런스 x 1582 → +38
         loadedText = HudStyle.NewText(root, "Loaded", "24", HudStyle.Bold, 46f, loadedColor,
             TextAlignmentOptions.Right, new Vector2(38f - 50f, 17f), new Vector2(100f, 50f));
