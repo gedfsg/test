@@ -16,6 +16,10 @@ public static class HudLayoutApplier
 {
     public static readonly Vector2 ReferenceResolution = new Vector2(1681f, 936f);
 
+    // 하단 HUD(상태 패널/핫바/손전등·탄약) 크기 배율. 레퍼런스 크기의 50%로 줄이되,
+    // 화면 가장자리와의 여백(레퍼런스 px)은 그대로 유지하도록 위치를 다시 계산함
+    const float BottomHudScale = 0.5f;
+
     [MenuItem("Tools/HUD/Apply Layout/1. Minimap")]
     static void ApplyMinimap()
     {
@@ -57,7 +61,17 @@ public static class HudLayoutApplier
 
         // N 배지: 링 아래쪽에 걸친 지름 30px 어두운 원 (중심이 지도 중심보다 89px 아래)
         var badge = ImageAt(panel, "NorthBadge", HudStyle.Circle, new Color32(88, 86, 84, 255), 30f, create: true);
-        SetRect(badge.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(1f, -89f), new Vector2(30f, 30f));
+        // 실제 위치는 실행 중 MinimapController가 카메라 방향에 맞춰 링 위로 옮김 (기본 카메라 방향 = 북쪽 → 위)
+        SetRect(badge.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 89f), new Vector2(30f, 30f));
+        var mmc = Object.FindFirstObjectByType<MinimapController>(FindObjectsInactive.Include);
+        if (mmc != null)
+        {
+            Undo.RecordObject(mmc, "HUD Minimap");
+            mmc.northBadge = badge.rectTransform;
+            mmc.northBadgeRadius = 89f;
+            mmc.rotateWithMainCamera = true;
+            mmc.markerFollowsPlayerHeading = false;
+        }
         ImageAt(badge.transform, "Fill", HudStyle.Circle, new Color32(37, 37, 40, 255), 27f, create: true);
 
         var n = panel.Find("Compass_N") ?? badge.transform.Find("Compass_N");
@@ -126,7 +140,10 @@ public static class HudLayoutApplier
         // 레퍼런스: 패널 x 27~458, y 661~889 → 중심 (242.5, 775), 화면 아래에서 161
         var rt = GetOrCreateChild(canvas.transform, "StatusPanelHUD");
         Undo.RecordObject(rt, "HUD Status");
-        SetRect(rt, new Vector2(0f, 0f), new Vector2(242.5f, 936f - 775f), new Vector2(431f, 228f));
+        // 여백: 왼쪽 27, 아래 47 (레퍼런스) 유지
+        float s = BottomHudScale;
+        SetRect(rt, new Vector2(0f, 0f), new Vector2(27f + 431f * s / 2f, 47f + 228f * s / 2f), new Vector2(431f, 228f));
+        rt.localScale = Vector3.one * s;
         if (rt.GetComponent<StatusPanelHUD>() == null) Undo.AddComponent<StatusPanelHUD>(rt.gameObject);
 
         // 기존 상태 패널(팀원 PlayerHealthUI/PlayerStaminaUI 포함)은 끔 (삭제하지 않음)
@@ -162,7 +179,10 @@ public static class HudLayoutApplier
         // 레퍼런스: 슬롯 90x90, 간격 97(틈 7), 묶음 중심 x=829(화면 중앙 -11.5), 세로 중심 y=845.5(아래에서 90.5)
         var rt = (RectTransform)hotbar.transform;
         Undo.RecordObject(rt, "HUD Hotbar");
-        SetRect(rt, new Vector2(0.5f, 0f), new Vector2(-11.5f, 936f - 845.5f), new Vector2(5 * 90f + 4 * 7f, 90f));
+        // 여백: 아래 46 (레퍼런스) 유지, 가로 중심은 그대로
+        float s = BottomHudScale;
+        SetRect(rt, new Vector2(0.5f, 0f), new Vector2(-11.5f, 46f + 90f * s / 2f), new Vector2(5 * 90f + 4 * 7f, 90f));
+        rt.localScale = Vector3.one * s;
 
         var container = rt.Find("SlotContainer") as RectTransform;
         if (container != null)
@@ -447,12 +467,17 @@ public static class HudLayoutApplier
         // 레퍼런스: 손전등 패널 x 1433~1655, y 763~808 / 탄약 패널 y 815~912 (우하단 앵커)
         var fl = GetOrCreateChild(canvas.transform, "FlashlightHUD");
         Undo.RecordObject(fl, "HUD BottomRight");
-        SetRect(fl, new Vector2(1f, 0f), new Vector2(1544f - 1681f, 936f - 785.5f), new Vector2(222f, 45f));
+        // 여백: 오른쪽 26, 아래 24, 두 패널 사이 7 (레퍼런스) → 크기와 간격만 배율 적용
+        float s = BottomHudScale;
+        float panelX = -(26f + 222f * s / 2f);
+        SetRect(fl, new Vector2(1f, 0f), new Vector2(panelX, 24f + 97f * s + 7f * s + 45f * s / 2f), new Vector2(222f, 45f));
+        fl.localScale = Vector3.one * s;
         if (fl.GetComponent<FlashlightHUD>() == null) Undo.AddComponent<FlashlightHUD>(fl.gameObject);
 
         var am = GetOrCreateChild(canvas.transform, "AmmoHUD");
         Undo.RecordObject(am, "HUD BottomRight");
-        SetRect(am, new Vector2(1f, 0f), new Vector2(1544f - 1681f, 936f - 863.5f), new Vector2(222f, 97f));
+        SetRect(am, new Vector2(1f, 0f), new Vector2(panelX, 24f + 97f * s / 2f), new Vector2(222f, 97f));
+        am.localScale = Vector3.one * s;
         if (am.GetComponent<AmmoHUD>() == null) Undo.AddComponent<AmmoHUD>(am.gameObject);
 
         // 기존 탄약 표시(팀원 AmmoUI)는 크로스헤어가 AmmoUI.Instance를 쓰므로 오브젝트는 켜둔 채 투명하게만
