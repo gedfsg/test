@@ -28,11 +28,14 @@ public class DamageText : MonoBehaviour
     }
 
     // 생성 직후 데미지 수치를 설정하는 함수임.
-    public void Setup(float damageAmount)
+    public void Setup(float damageAmount, bool isCritical = false)
     {
         if (textMesh != null)
         {
             textMesh.text = damageAmount.ToString("F0");
+            textColor = isCritical ? Color.red : Color.white;
+            textMesh.color = textColor;
+            textMesh.fontSize = isCritical ? textMesh.fontSize * 1.4f : textMesh.fontSize;
         }
     }
 

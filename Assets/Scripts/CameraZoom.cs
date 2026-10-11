@@ -19,11 +19,33 @@ public class CameraZoom : MonoBehaviour
     [Header("우클릭 홀드 확대 비율 (0.12 = 12% 확대)")]
     [SerializeField, Range(0.1f, 0.15f)] private float aimZoomRatio = 0.12f;
 
+    [Header("건물 실내 진입 시 줌 거리 (BuildingInterior에서 호출)")]
+    [SerializeField] private float indoorDistance = 33f;
+
     private CameraFollow cameraFollow;
     private PlayerInputActions inputActions;
 
     private float baseTargetDistance; // 스크롤로 조절되는 기준 거리
     private bool aimZoomHeld;
+
+    // 건물 여러 개가 붙어있어 트리거가 겹칠 수 있어서 bool 대신 카운터로 관리.
+    // (bool이면 A 건물 안에서 B 건물에도 겹쳐 들어간 뒤 A만 나가도 실외로 잘못 풀리거나,
+    //  반대로 실내 상태가 안 풀리고 계속 남는 버그가 생김 - Fog 처리와 동일한 패턴)
+    private int indoorCount;
+    private bool isIndoor => indoorCount > 0;
+
+    public void SetIndoor(bool indoor)
+    {
+        indoorCount = indoor ? indoorCount + 1 : Mathf.Max(0, indoorCount - 1);
+    }
+
+    // 개발 중 도구 재실행 등으로 상태가 꼬였을 때 강제로 실외 상태로 되돌림
+    public void ForceOutdoor()
+    {
+        indoorCount = 0;
+        baseTargetDistance = Mathf.Clamp(defaultDistance, minDistance, maxDistance);
+        if (cameraFollow != null) cameraFollow.distance = baseTargetDistance;
+    }
 
     void Awake()
     {
@@ -61,7 +83,8 @@ public class CameraZoom : MonoBehaviour
             baseTargetDistance = Mathf.Clamp(baseTargetDistance, minDistance, maxDistance);
         }
 
-        float targetDistance = aimZoomHeld ? baseTargetDistance * (1f - aimZoomRatio) : baseTargetDistance;
+        float targetDistance = isIndoor ? indoorDistance
+            : aimZoomHeld ? baseTargetDistance * (1f - aimZoomRatio) : baseTargetDistance;
 
         // 부드러운 줌 보간
         cameraFollow.distance = Mathf.Lerp(cameraFollow.distance, targetDistance, Time.deltaTime * zoomSmoothSpeed);

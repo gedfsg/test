@@ -1,0 +1,40 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1554f16458745e2458d957e17b4bc749, type: 3}
+  m_Name: Zombie_fast
+  m_EditorClassIdentifier: Assembly-CSharp::ZombieProfile
+  displayName: "\uC77C\uBC18 \uC880\uBE44"
+  debugColor: {r: 1, g: 1, b: 1, a: 1}
+  maxHealth: 50
+  moveSpeed: 2
+  attackRange: 1.8
+  attackDamage: 10
+  attackCooldown: 1.5
+  detectionRange: 30
+  vision:
+    viewAngle: 110
+    nearSenseRadius: 4
+    occlusionMask:
+      serializedVersion: 2
+      m_Bits: 4294967295
+    eyeHeight: 1.6
+    targetHeight: 1
+    hearingSensitivity: 1
+    checkInterval: 0.2
+    debugDrawSight: 0
+  sightMemory: 1.2
+  investigateMemory: 6
+  alertDuration: 5
+  alertRangeMultiplier: 2
+  enableWander: 1
+  wanderRadius: 8
+  wanderSpeedFactor: 0.5

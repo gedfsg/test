@@ -27,6 +27,20 @@ public class ZombieController : MonoBehaviour
     public float detectionRange   = 30f;
     public float retargetInterval = 1f;   // 플레이어 다시 찾기 간격
 
+    [Header("UI")]
+    public GameObject damageTextPrefab;
+    public bool showHealthBar = true;
+
+    [Header("탄약 드랍 (사망 시) - 프리팹별로 확률/종류/수량 다르게 설정")]
+    public AmmoData dropAmmoData;
+    [Range(0f, 1f)] public float dropChance = 0.5f;
+    public int dropAmmoMin = 5;
+    public int dropAmmoMax = 10;
+
+    [Header("종류")]
+    [Tooltip("일반/달리기/탱커 프로필. 비워두면 아래 인스펙터 값을 그대로 쓴다.")]
+    public ZombieProfile profile;
+
     [Header("시야")]
     public ZombieVision vision = new ZombieVision();
 
@@ -90,12 +104,18 @@ public class ZombieController : MonoBehaviour
     // ─────────────────────────────────────────────
     void Awake()
     {
+        // 프로필이 꽂혀 있으면 인스펙터 값을 덮어쓴다.
+        // SetupAgent/SetupHealth가 moveSpeed, maxHealth를 읽으므로 반드시 먼저.
+        if (profile != null) profile.ApplyTo(this);
+
         SetupAgent();
         SetupCollider();
         SetupRigidbody();
         SetupAnimator();
         SetupHealth();
         SetupBrain();
+
+        if (profile != null && fallbackBrain != null) profile.ApplyTo(fallbackBrain);
 
         perception = new ZombiePerception(this);
 
@@ -167,9 +187,8 @@ public class ZombieController : MonoBehaviour
     {
         health = GetComponent<Health>();
         if (health == null) health = gameObject.AddComponent<Health>();
-        health.maxHealth = maxHealth;
-        // Health.Awake가 currentHealth=100으로 미리 설정함 → Heal(0)로 maxHealth로 클램프
-        health.Heal(0f);
+        // main에서 추가된 API. Heal(0)은 currentHealth가 새 maxHealth까지 안 올라가서 교체됨.
+        health.SetMaxHealth(maxHealth);
 
         // UnityEvent가 런타임 추가 시 null일 수 있음
         if (health.onDeath == null) health.onDeath = new UnityEngine.Events.UnityEvent();
@@ -182,6 +201,12 @@ public class ZombieController : MonoBehaviour
         //    좀비는 총에 맞은 사실 자체를 모른다. Brain에 피격을 전달하는 유일한 경로.
         health.onHurt.RemoveListener(NotifyBrainDamaged);
         health.onHurt.AddListener(NotifyBrainDamaged);
+
+        if (damageTextPrefab != null) health.damageTextPrefab = damageTextPrefab;
+
+        // 머리 위 체력바
+        if (showHealthBar && GetComponent<ZombieHealthBar>() == null)
+            gameObject.AddComponent<ZombieHealthBar>();
     }
 
     void SetupBrain()
@@ -377,44 +402,6 @@ public class ZombieController : MonoBehaviour
             }
         }
 
-        // 트랜지션이 안 먹는 컨트롤러 대비 강제 전환
-        try
-        {
-            var info = anim.GetCurrentAnimatorStateInfo(0);
-            if (info.IsName("Attack") || info.IsTag("Attack")) return;
-            if (info.IsName("Die")    || info.IsTag("Die"))    return;
-
-            if (walking)
-            {
-                if (!IsInState(info, "Walk", "Walking", "Run", "walk", "Move"))
-                    PlayFirstAvailable("Walk", "Walking", "Run", "walk", "Move");
-            }
-            else
-            {
-                if (!IsInState(info, "Idle", "idle", "Stand"))
-                    PlayFirstAvailable("Idle", "idle", "Stand");
-            }
-        }
-        catch { }
-    }
-
-    bool IsInState(AnimatorStateInfo info, params string[] names)
-    {
-        foreach (var n in names)
-            if (info.IsName(n)) return true;
-        return false;
-    }
-
-    void PlayFirstAvailable(params string[] names)
-    {
-        foreach (var n in names)
-        {
-            if (anim.HasState(0, Animator.StringToHash(n)))
-            {
-                anim.CrossFade(n, 0.15f);
-                return;
-            }
-        }
     }
 
     // ── 공격 ─────────────────────────────────────────
@@ -471,6 +458,42 @@ public class ZombieController : MonoBehaviour
         ActiveBrain?.OnHeardNoise(position);
     }
 
+    /// <summary>
+    /// ML-Agents 에피소드 리셋용. 좀비를 지정 위치로 옮기고 내부 상태를 초기화한다.
+    /// 학습 씬에서만 호출되며, 본 게임 흐름에는 영향 없다.
+    /// </summary>
+    public void ResetForEpisode(Vector3 position, Quaternion rotation)
+    {
+        isDead      = false;
+        isStunned   = false;
+        stunTimer   = 0f;
+        attackTimer = 0f;
+
+        hasDestination = false;
+        repathTimer    = 0f;
+
+        transform.SetPositionAndRotation(position, rotation);
+
+        if (agent != null)
+        {
+            agent.enabled = true;
+            if (NavMesh.SamplePosition(position, out NavMeshHit hit, 5f, NavMesh.AllAreas))
+                agent.Warp(hit.position);
+            if (agent.isOnNavMesh) agent.ResetPath();
+        }
+
+        if (health != null) health.SetMaxHealth(maxHealth);
+
+        // 이전 에피소드의 목격 기록이 남으면 새 에피소드가 오염된다
+        perception = new ZombiePerception(this);
+
+        foreach (var b in GetComponents<ZombieBrain>())
+        {
+            b.enabled = true;
+            b.OnResetEpisode();
+        }
+    }
+
     public void Stun(float duration)
     {
         if (isDead) return;
@@ -484,6 +507,8 @@ public class ZombieController : MonoBehaviour
     {
         if (isDead) return;
         isDead = true;
+
+        TryDropAmmo();
 
         if (agent != null) agent.enabled = false;
 
@@ -500,6 +525,15 @@ public class ZombieController : MonoBehaviour
         foreach (var b in GetComponents<ZombieBrain>()) b.enabled = false;
 
         StartCoroutine(FakeDeathRoutine());
+    }
+
+    void TryDropAmmo()
+    {
+        if (dropAmmoData == null) return;
+        if (Random.value > dropChance) return;
+
+        int amount = Random.Range(dropAmmoMin, dropAmmoMax + 1);
+        AmmoDropSpawner.Spawn(transform.position, dropAmmoData, amount);
     }
 
     System.Collections.IEnumerator FakeDeathRoutine()

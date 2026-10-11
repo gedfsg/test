@@ -10,6 +10,8 @@ public class ZombieSpawner : MonoBehaviour
 {
     [Header("좀비 프리팹")]
     public GameObject[] zombiePrefabs;
+    [Tooltip("zombiePrefabs와 같은 순서의 스폰 가중치. 비워두거나 길이가 안 맞으면 균등 확률로 폴백.")]
+    public float[] spawnWeights;
 
     [Header("━━ 실내 스폰 (건물 안) ━━")]
     [Tooltip("건물 내부에 배치한 빈 오브젝트들")]
@@ -56,6 +58,8 @@ public class ZombieSpawner : MonoBehaviour
     private readonly List<GameObject> indoorZombies  = new List<GameObject>();
     private readonly List<GameObject> outdoorZombies = new List<GameObject>();
     private Transform player;
+    private bool  lastIsNight;
+    private float countLogTimer;
 
     void Start()
     {
@@ -74,6 +78,24 @@ public class ZombieSpawner : MonoBehaviour
 
         bool isNight = DayNightCycle.Instance != null &&
                        DayNightCycle.Instance.CurrentPhase == DayNightCycle.Phase.Night;
+
+        if (debugLog)
+        {
+            if (isNight != lastIsNight)
+            {
+                lastIsNight = isNight;
+                Debug.Log(isNight
+                    ? $"[ZombieSpawner] 🌙 밤 시작 - 스폰 간격 실내{nightIndoorInterval}s/{nightIndoorBurst}마리, 실외{nightOutdoorInterval}s/{nightOutdoorBurst}마리로 전환"
+                    : $"[ZombieSpawner] ☀ 낮 시작 - 스폰 간격 실내{dayIndoorInterval}s/{dayIndoorBurst}마리, 실외{dayOutdoorInterval}s/{dayOutdoorBurst}마리로 전환");
+            }
+
+            countLogTimer += Time.deltaTime;
+            if (countLogTimer >= 5f)
+            {
+                countLogTimer = 0f;
+                Debug.Log($"[ZombieSpawner] 현재 활성 좀비: 실내 {indoorZombies.Count}/{maxIndoorZombies}, 실외 {outdoorZombies.Count}/{maxOutdoorZombies}, 합계 {indoorZombies.Count + outdoorZombies.Count}");
+            }
+        }
 
         // ── 실내 스폰 ──
         if (indoorZombies.Count < maxIndoorZombies)
@@ -183,9 +205,26 @@ public class ZombieSpawner : MonoBehaviour
         }
     }
 
+    GameObject PickWeightedPrefab()
+    {
+        if (spawnWeights == null || spawnWeights.Length != zombiePrefabs.Length)
+            return zombiePrefabs[Random.Range(0, zombiePrefabs.Length)];
+
+        float total = 0f;
+        foreach (var w in spawnWeights) total += w;
+        float r = Random.Range(0f, total);
+        float acc = 0f;
+        for (int i = 0; i < spawnWeights.Length; i++)
+        {
+            acc += spawnWeights[i];
+            if (r <= acc) return zombiePrefabs[i];
+        }
+        return zombiePrefabs[zombiePrefabs.Length - 1];
+    }
+
     void Spawn(Vector3 pos, List<GameObject> list)
     {
-        GameObject prefab = zombiePrefabs[Random.Range(0, zombiePrefabs.Length)];
+        GameObject prefab = PickWeightedPrefab();
         GameObject zombie = Instantiate(prefab, pos, Quaternion.Euler(0, Random.Range(0f, 360f), 0));
 
         // NavMeshAgent를 NavMesh 위로 강제 Warp (안 그러면 isOnNavMesh=false 가 됨)

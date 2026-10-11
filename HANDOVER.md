@@ -7,7 +7,36 @@
 
 ---
 
-## 🆕 2026-08-29 세션 진행 상황
+## 🆕 2026-10-02 세션 진행 상황 (맵/좀비/건물 진입/UI 대규모 업데이트)
+
+### ✅ 이번 세션 완료 작업
+- **좀비 4종 다양화** — 일반/탱커/경찰/러너 + Super Low-poly(Stylized) 모델 적용 (`Assets/Character/Zombie/Stylized/`, `_TempBuildStylizedZombies.cs`)
+- **건물 84개 실내 진입 시스템** (Project Zomboid 스타일) — `BuildingTransition.cs` 신규, `BuildingInterior.cs` 수정
+- **벽 두께 셰이더 + 카메라 줌 + 페이드 전환** — `BuildingCutaway.shader`, `CameraZoom.cs`
+- **밤 좀비 폭주 스폰** — `ZombieSpawner.cs`, `DayNightCycle.cs`
+- **좀비 처치 시 탄약 드랍** — `Items/AmmoDropSpawner.cs`, `Items/AutoPickupRadius.cs`, `Items/ItemSpawner.cs`, `UI/PickupFeedbackUI.cs`
+- **자동차/파괴된 소품 배치** (urban lemon props) — `Assets/Props/`
+- **프로스트펑크 스타일 상단 UI** (Day/시간/생존율) — `SurvivalTimerUI.cs`
+- **Simple Water Shader로 강**
+- **스텝업 로직** (낮은 턱 자동 등반 + 벽 차단) — `Locomotion.cs`
+- **손전등 키 변경** Q → T
+- **환경 콜라이더 자동 추가** (뚫림 방지) — `_TempAddEnvironmentColliders.cs`, `_TempAddPropColliders.cs`, `_TempEnableRoadColliders.cs`
+- **크리티컬 히트 + 데미지 숫자 UI** — `Weapon/Bullet.cs`, `Health.cs`, `DamageText.cs`, `ZombieHealthBar.cs`
+- **미니맵 밤 가시성 개선** — `MinimapNightFix.cs`
+- 기타: `BloodVignette.cs`(피격 비네트), 플레이어 솔저 모델(`Assets/Character/Player_Soldier/`, `_TempBuildPlayerSoldier.cs`)
+
+⚠️ 새로 추가된 `_Temp*.cs` 에디터 스크립트 5개는 일회성 도구. 결과 확인 후 필요 없으면 정리할 것.
+
+### 📋 다음 세션 할 일
+1. **ML-Agents 환경 구축** — Python 학습 환경, Agent(관측/행동/보상) 설계, PPO 하이퍼파라미터
+2. **ML-Agents 학습 실행 + FSM vs RL 비교** (처치율/추적 시간/회피 성공률)
+3. **가방(인벤토리 확장) 시스템** — 가방 장착 시 슬롯 증가 등 (동료 인벤토리 시스템과 연동 협의 필요)
+4. 좀비 4종 밸런스 튜닝 (체력/속도/데미지, 밤 폭주 스폰량)
+5. `_Temp*.cs` 정리, `Assets/Screenshots/` 커밋 유지 여부 결정
+
+---
+
+## 🗂️ 2026-08-29 세션 진행 상황
 
 **맵:** 참고 지도(MapGuide) 배치, Kenney City Kit(Roads/Suburban/Commercial) 임포트, Simple Water Shader로 강 제작, 도로 배치 완료, 건물 일부 배치 및 신호등/가로등 배치 시작.
 
