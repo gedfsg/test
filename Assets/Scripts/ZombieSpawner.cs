@@ -222,6 +222,26 @@ public class ZombieSpawner : MonoBehaviour
         return zombiePrefabs[zombiePrefabs.Length - 1];
     }
 
+    // 상자 열기/창고 같은 이벤트용 추가 스폰 (실내/실외 최대 수 제한에 안 들어감)
+    private readonly List<GameObject> extraZombies = new List<GameObject>();
+
+    /// <summary>center 기준 minDist~maxDist 거리의 NavMesh 위에 좀비 1마리 스폰. 실패하면 null</summary>
+    public GameObject SpawnExtraNear(Vector3 center, float minDist, float maxDist)
+    {
+        if (zombiePrefabs == null || zombiePrefabs.Length == 0) return null;
+        for (int i = 0; i < 20; i++)
+        {
+            Vector2 rnd = Random.insideUnitCircle.normalized * Random.Range(minDist, maxDist);
+            Vector3 candidate = center + new Vector3(rnd.x, 0f, rnd.y);
+            if (NavMesh.SamplePosition(candidate, out NavMeshHit hit, 3f, NavMesh.AllAreas))
+            {
+                Spawn(hit.position, extraZombies);
+                return extraZombies[extraZombies.Count - 1];
+            }
+        }
+        return null;
+    }
+
     void Spawn(Vector3 pos, List<GameObject> list)
     {
         GameObject prefab = PickWeightedPrefab();

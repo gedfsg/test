@@ -386,7 +386,10 @@ public class ZombieController : MonoBehaviour
         if (isDead) return;
         isDead = true;
 
-        TryDropAmmo();
+        // 좀비 종류별 드랍 (LootDatabase: 일반 탄약10%/넝마20%, 경찰 권총30%/탄약50%, 러너 음식, 탱커 희귀).
+        // 데이터베이스가 없을 때만 예전 방식(프리팹의 dropAmmoData)으로 탄약 드랍
+        if (LootDatabase.Instance != null) LootDatabase.Instance.DropForZombie(gameObject);
+        else TryDropAmmo();
 
         if (agent != null) agent.enabled = false;
 

@@ -107,8 +107,9 @@ public class PickupItem : MonoBehaviour
         if (show)
         {
             bool hotbarFull = itemData is WeaponData && (WeaponHotbarUI.Instance?.IsFull() ?? false);
-            promptText.text = hotbarFull ? "핫바 가득 참" : "F키로 획득";
-            promptText.color = hotbarFull ? Color.red : Color.white;
+            // 무기 슬롯이 차 있어도 인벤토리로 들어감 (PlayerController 픽업)
+            promptText.text = hotbarFull ? "F키로 획득 (인벤토리)" : "F키로 획득";
+            promptText.color = Color.white;
             promptObj.SetActive(true);
 
             // 아이템 옆에 위치 (월드 공간)

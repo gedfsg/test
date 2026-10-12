@@ -194,11 +194,9 @@ public class PlayerController : MonoBehaviour
         if (nearestItem.itemData is WeaponData wd)
         {
             var hotbar = WeaponHotbarUI.Instance;
-            if (hotbar != null)
-            {
-                if (hotbar.IsFull()) return;
-                picked = hotbar.AddWeapon(wd);
-            }
+            // 무기 슬롯(1,2)에 자리 있으면 핫바, 꽉 찼으면 인벤토리로
+            if (hotbar != null) picked = hotbar.AddWeapon(wd);
+            if (!picked) picked = inventory.AddItem(wd, 1);
         }
         else
         {

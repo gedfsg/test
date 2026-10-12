@@ -1,0 +1,61 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 232eea3291527f3409bc89f592f4628b, type: 3}
+  m_Name: Bldg_House
+  m_EditorClassIdentifier: Assembly-CSharp::LootTable
+  minRolls: 1
+  maxRolls: 3
+  entries:
+  - item: {fileID: 11400000, guid: cc20aae19861272409bac6e711b38117, type: 2}
+    weight: 10
+    minAmount: 1
+    maxAmount: 1
+  - item: {fileID: 11400000, guid: 25312cf130c5ae34fa9a52939aa41d1c, type: 2}
+    weight: 8
+    minAmount: 1
+    maxAmount: 1
+  - item: {fileID: 11400000, guid: cd36bf374795f864faf8ea01469d4d4a, type: 2}
+    weight: 6
+    minAmount: 1
+    maxAmount: 1
+  - item: {fileID: 11400000, guid: fe5c88d08eff31541abcdb79aa088125, type: 2}
+    weight: 5
+    minAmount: 1
+    maxAmount: 1
+  - item: {fileID: 11400000, guid: 93e19276e79a99444b4946da43bc44a9, type: 2}
+    weight: 10
+    minAmount: 1
+    maxAmount: 1
+  - item: {fileID: 11400000, guid: b35b9595aba14364482e4d76fea4bc34, type: 2}
+    weight: 6
+    minAmount: 1
+    maxAmount: 1
+  - item: {fileID: 11400000, guid: 43d75a1a3ba5d8242a833bd547af1999, type: 2}
+    weight: 5
+    minAmount: 1
+    maxAmount: 1
+  - item: {fileID: 11400000, guid: 9d628dd35c62dd6458bca345419913e2, type: 2}
+    weight: 6
+    minAmount: 1
+    maxAmount: 1
+  - item: {fileID: 11400000, guid: 0b1b7f57d9fbd0d4f89465ac7e6370f5, type: 2}
+    weight: 4
+    minAmount: 8
+    maxAmount: 15
+  - item: {fileID: 11400000, guid: 272cef92113e53846ba3841e9dd2e926, type: 2}
+    weight: 1.5
+    minAmount: 1
+    maxAmount: 1
+  - item: {fileID: 11400000, guid: b3bebea9dee0d9a4c84f267a061bccf7, type: 2}
+    weight: 1.5
+    minAmount: 1
+    maxAmount: 1
