@@ -167,17 +167,28 @@ public class InventoryUI : MonoBehaviour
         var hotbar = WeaponHotbarUI.Instance;
         if (hotbar == null) return;
 
-        int targetSlot = hotbar.GetActiveSlot();
+        // 슬롯 타입 제한: 총 → 선택된 총 슬롯(1/2), 소비 아이템 → 같은 아이템 칸 or 빈 소비 칸(3~5)
+        int targetSlot = hotbar.FindTargetSlot(slot.item);
+        if (targetSlot < 0)
+        {
+            Debug.Log($"[인벤토리] '{slot.item.itemName}' 핫바 등록 불가 (총은 1,2번 / 소비 아이템은 3~5번 빈 칸만)");
+            return; // 인벤토리에서 빼기 전에 막아서 아이템 손실 없음
+        }
 
         int savedAmmo = slot.currentAmmo;
         int insertIndex = inventoryManager.GetSlotIndex(slot.slotId);
 
-        ItemData currentItem = hotbar.GetActiveItem();
-        if (currentItem != null)
+        ItemData currentItem = hotbar.GetItem(targetSlot);
+        int stackCount = 0; // 같은 소비 아이템이 이미 있으면 개수 합침
+        if (currentItem == slot.item && !(slot.item is WeaponData))
         {
-            int currentAmmo = currentItem is WeaponData
+            stackCount = hotbar.GetAmmo(targetSlot);
+        }
+        else if (currentItem != null)
+        {
+            int currentAmmo = currentItem is WeaponData && targetSlot == hotbar.GetActiveSlot()
                 ? playerController.GetCurrentAmmo()
-                : hotbar.GetActiveAmmo();
+                : hotbar.GetAmmo(targetSlot);
             inventoryManager.InsertItemAt(insertIndex, currentItem, 1, currentAmmo);
         }
 
@@ -185,7 +196,7 @@ public class InventoryUI : MonoBehaviour
 
         int finalCount = slot.item is WeaponData wd
             ? (savedAmmo >= 0 ? savedAmmo : wd.maxAmmo)
-            : slot.amount;
+            : slot.amount + stackCount;
 
         hotbar.SetSlotOnly(targetSlot, slot.item, finalCount);
 

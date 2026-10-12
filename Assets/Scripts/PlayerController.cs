@@ -282,6 +282,14 @@ public class PlayerController : MonoBehaviour
         ConsumableData consumable = hotbar.GetActiveItem() as ConsumableData;
         if (consumable == null) return;
 
+        UseConsumable(consumable);
+
+        hotbar.ConsumeItem(hotbar.GetActiveSlot());
+    }
+
+    /// <summary>소비 아이템 효과 적용 (핫바 3~5 키에서도 호출). 개수 차감은 호출하는 쪽에서</summary>
+    public void UseConsumable(ConsumableData consumable)
+    {
         PlayerBuffManager buffMgr = GetComponent<PlayerBuffManager>();
         Health health = GetComponent<Health>();
 
@@ -289,8 +297,6 @@ public class PlayerController : MonoBehaviour
             buffMgr.ApplyConsumable(consumable, health);
         else if (health != null)
             health.Heal(consumable.healAmount);
-
-        hotbar.ConsumeItem(hotbar.GetActiveSlot());
     }
 
     // ── 무기 ─────────────────────────────────────

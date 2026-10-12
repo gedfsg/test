@@ -110,10 +110,9 @@ public class LootCrate : MonoBehaviour
             if (item is WeaponData wd)
             {
                 var hotbar = WeaponHotbarUI.Instance;
-                if (hotbar != null && !hotbar.IsFull())
-                    hotbar.AddWeapon(wd);
-                else
-                    Debug.LogWarning($"{wd.itemName} 핫바 가득 차서 드롭됨");
+                // 총 슬롯(1,2)이 다 차 있으면 버리지 않고 인벤토리로
+                if (hotbar == null || !hotbar.AddWeapon(wd))
+                    inventory.AddItem(wd, 1);
             }
             else
             {
