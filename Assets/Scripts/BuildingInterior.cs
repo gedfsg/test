@@ -29,6 +29,12 @@ public class BuildingInterior : MonoBehaviour
     public float outsideMaskMargin = 0.6f;
     [Tooltip("구멍 둘레에서 위로 세우는 검정 벽 높이(m). 옆 고층 건물이 판 위로 솟아 보이는 것 방지")]
     public float outsideMaskWallHeight = 60f;
+    [Tooltip("화면 마스크: 보이는 표면이 실내 상자 밖이면 검정으로 덮음. Q/E로 카메라를 돌려도 " +
+             "카메라 쪽 옆 건물 지붕이 실내를 가리거나 화면에 보이지 않게 함")]
+    public bool useScreenMask = true;
+    [Tooltip("화면 마스크 사용 시, 실내 상자 밖의 고정 메시(옆 건물/소품)를 이 반경(m) 안에서 숨김. " +
+             "카메라와 실내 사이에 있는 지붕이 실내를 가리지 않게 함 (어차피 검정으로 덮이는 부분)")]
+    public float hideOccluderRadius = 90f;
 
     static readonly int CutHeightId = Shader.PropertyToID("_CutHeight");
     static readonly int CutEnabledId = Shader.PropertyToID("_CutEnabled");
@@ -129,6 +135,7 @@ public class BuildingInterior : MonoBehaviour
         {
             if (cut && outsideMask == null) outsideMask = BuildOutsideMask();
             if (outsideMask != null) outsideMask.SetActive(cut);
+            if (useScreenMask) SetOccludersHidden(cut);
         }
 
         if (instanceMats == null) return;
@@ -192,8 +199,112 @@ public class BuildingInterior : MonoBehaviour
         mr.sharedMaterial = OutsideMaskMaterial;
         mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         mr.receiveShadows = false;
+        if (useScreenMask) BuildScreenMask(go.transform, x0, x1, z0, z1, y, trigger, scale);
+
         go.SetActive(false);
         return go;
+    }
+
+    // 화면 마스크 (Q/E로 카메라를 돌려도 실내만 보이게)
+    // 위 판+벽은 카메라 반대편 바깥만 가리고, 카메라 쪽(실내와 카메라 사이)에 솟은 옆 건물 지붕은 못 가림.
+    // → 실내 상자(구멍 크기 × 바닥~잘린 높이)를 스텐실 볼륨으로 그려서 "보이는 표면이 상자 안"인 픽셀만 표시하고
+    //    나머지 화면은 전부 검정으로 덮음. 상자 앞을 가리는 지붕은 상자 밖 표면이라 검정이 됨.
+    void BuildScreenMask(Transform parent, float x0, float x1, float z0, float z1, float y, BoxCollider trigger, Vector3 scale)
+    {
+        float bottom = trigger.center.y - trigger.size.y / 2f - 0.5f / Mathf.Abs(scale.y); // 바닥 표면이 상자 안에 들어오게 살짝 아래
+        float top = y + 1f / Mathf.Abs(scale.y);
+
+        // 1) 실내 상자 (닫힌 박스, 바깥을 향한 면)
+        var box = new Mesh { name = name + "_IndoorVolume" };
+        box.SetVertices(new System.Collections.Generic.List<Vector3>
+        {
+            new Vector3(x0, bottom, z0), new Vector3(x1, bottom, z0), new Vector3(x1, bottom, z1), new Vector3(x0, bottom, z1),
+            new Vector3(x0, top, z0),    new Vector3(x1, top, z0),    new Vector3(x1, top, z1),    new Vector3(x0, top, z1),
+        });
+        box.SetTriangles(new[]
+        {
+            0, 1, 2, 0, 2, 3,   // 아래 (-Y)
+            4, 6, 5, 4, 7, 6,   // 위 (+Y)
+            0, 4, 5, 0, 5, 1,   // -Z
+            2, 6, 7, 2, 7, 3,   // +Z
+            1, 5, 6, 1, 6, 2,   // +X
+            3, 7, 4, 3, 4, 0,   // -X
+        }, 0);
+        box.RecalculateBounds();
+        AddMaskRenderer(parent, "IndoorVolume", box, ScreenMaskMaterials.volume);
+
+        // 2) 화면 전체 검정 사각형 (셰이더가 클립 공간에 바로 찍음 → 컬링 안 되게 bounds 크게)
+        var quad = new Mesh { name = "IndoorScreenQuad" };
+        quad.SetVertices(new System.Collections.Generic.List<Vector3>
+            { new Vector3(-0.5f, -0.5f, 0), new Vector3(0.5f, -0.5f, 0), new Vector3(0.5f, 0.5f, 0), new Vector3(-0.5f, 0.5f, 0) });
+        quad.SetTriangles(new[] { 0, 1, 2, 0, 2, 3 }, 0);
+        quad.bounds = new Bounds(Vector3.zero, Vector3.one * 100000f);
+        AddMaskRenderer(parent, "IndoorScreenMask", quad, ScreenMaskMaterials.screen);
+    }
+
+    // ── 가리는 물체 숨기기 ──
+    // 여러 건물 트리거가 겹쳐도 꼬이지 않게 렌더러별 숨김 카운트로 관리 (0이 되면 다시 켬)
+    static readonly System.Collections.Generic.Dictionary<Renderer, int> hiddenCount = new System.Collections.Generic.Dictionary<Renderer, int>();
+    System.Collections.Generic.List<Renderer> hiddenByMe;
+
+    void SetOccludersHidden(bool hide)
+    {
+        if (hide)
+        {
+            if (hiddenByMe != null || outsideMask == null) return;
+            var volume = outsideMask.transform.Find("IndoorVolume");
+            if (volume == null) return;
+            Bounds column = volume.GetComponent<Renderer>().bounds;
+            Vector2 c2 = new Vector2(column.center.x, column.center.z);
+            hiddenByMe = new System.Collections.Generic.List<Renderer>();
+
+            // 고정 메시만 대상 (MeshRenderer). 캐릭터/좀비(SkinnedMesh), 파티클, 물리로 움직이는 물체, 이 건물 자신은 제외
+            foreach (var r in FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
+            {
+                if (!r.enabled || r.transform.IsChildOf(transform)) continue;
+                Bounds b = r.bounds;
+                if (b.Intersects(column)) continue;                  // 바닥/도로처럼 실내 상자와 겹치는 건 유지
+                if (b.max.y < column.min.y) continue;                // 실내 바닥보다 낮은 건 가릴 일 없음
+                if (Vector2.Distance(new Vector2(b.center.x, b.center.z), c2) - b.extents.magnitude > hideOccluderRadius) continue;
+                if (r.GetComponentInParent<Rigidbody>() != null || r.CompareTag(playerTag)) continue;
+
+                hiddenCount.TryGetValue(r, out int n);
+                hiddenCount[r] = n + 1;
+                r.enabled = false;
+                hiddenByMe.Add(r);
+            }
+        }
+        else
+        {
+            if (hiddenByMe == null) return;
+            foreach (var r in hiddenByMe)
+            {
+                if (r == null) continue;
+                hiddenCount.TryGetValue(r, out int n);
+                if (n <= 1) { hiddenCount.Remove(r); r.enabled = true; }
+                else hiddenCount[r] = n - 1;
+            }
+            hiddenByMe = null;
+        }
+    }
+
+    static void AddMaskRenderer(Transform parent, string objName, Mesh mesh, Material mat)
+    {
+        var go = new GameObject(objName);
+        go.transform.SetParent(parent, false);
+        go.AddComponent<MeshFilter>().sharedMesh = mesh;
+        var mr = go.AddComponent<MeshRenderer>();
+        mr.sharedMaterial = mat;
+        mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        mr.receiveShadows = false;
+    }
+
+    // Resources에 둔 머티리얼(빌드에 셰이더 포함용). 없으면 셰이더로 즉석 생성
+    static class ScreenMaskMaterials
+    {
+        static Material v, s;
+        public static Material volume => v != null ? v : (v = Resources.Load<Material>("IndoorVolumeMask") ?? new Material(Shader.Find("Hidden/IndoorVolumeMask")));
+        public static Material screen => s != null ? s : (s = Resources.Load<Material>("IndoorScreenMask") ?? new Material(Shader.Find("Hidden/IndoorScreenMask")));
     }
 
     static Material outsideMaskMaterial;
@@ -238,9 +349,25 @@ public class BuildingInterior : MonoBehaviour
         RenderSettings.fog = true;
         RenderSettings.fogMode = FogMode.Linear;
         RenderSettings.fogColor = color;
+        fogPlayer = player; fogStartMargin = startMargin; fogEndMargin = endMargin; // LateUpdate에서 계속 갱신
         RenderSettings.fogStartDistance = camDist + startMargin;
         RenderSettings.fogEndDistance = camDist + endMargin;
         globalInsideCount++;
+    }
+
+    // 진입 순간엔 카메라가 아직 실외 거리(40)라서, 그 뒤 실내 거리(55)로 줌아웃되면 실내가 안개 끝을 넘어 통째로 검정이 됨.
+    // → 실내에 있는 동안 매 프레임 "지금 카메라→플레이어 거리 + 여유"로 안개 범위를 다시 맞춤.
+    static Transform fogPlayer;
+    static float fogStartMargin, fogEndMargin;
+
+    void LateUpdate()
+    {
+        if (globalInsideCount <= 0 || fogPlayer == null) return;
+        Camera cam = Camera.main;
+        if (cam == null) return;
+        float camDist = Vector3.Distance(cam.transform.position, fogPlayer.position);
+        RenderSettings.fogStartDistance = camDist + fogStartMargin;
+        RenderSettings.fogEndDistance = camDist + fogEndMargin;
     }
 
     static void ExitIndoorFogStatic()
