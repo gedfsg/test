@@ -78,6 +78,8 @@ public class BuildingInterior : MonoBehaviour
                 {
                     if (src.mainTexture != null) cut.mainTexture = src.mainTexture;
                     if (src.HasProperty("_BaseColor") || src.HasProperty("_Color")) cut.color = src.color;
+                    // glTF 임포터 재질(glTF/PbrMetallicRoughness)은 색을 baseColorFactor에 저장 (Sketchfab/Quaternius 모델)
+                    else if (src.HasProperty("baseColorFactor")) cut.color = src.GetColor("baseColorFactor");
                 }
                 cut.SetFloat(CutHeightId, cutHeightWorldY);
                 cut.SetFloat(CutEnabledId, 0f);

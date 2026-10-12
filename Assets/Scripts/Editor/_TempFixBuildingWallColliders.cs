@@ -29,7 +29,11 @@ public static class TempFixBuildingWallColliders
     struct DoorDef
     {
         public int axis; public float sign, min, max;
-        public DoorDef(int axis, float sign, float min, float max) { this.axis = axis; this.sign = sign; this.min = min; this.max = max; }
+        public int along; // 폭 방향 로컬 축. 위쪽이 Y인 모델은 생략(법선이 X면 Z, Z면 X), 위쪽이 Z인 모델은 직접 지정
+        public bool cutFromOutside; // 문이 건물 안쪽 깊숙이 있을 때(울타리 안 창고 등): 바깥에서 첫 '막힌 벽'까지 뚫음
+        public DoorDef(int axis, float sign, float min, float max) : this(axis, sign, min, max, axis == 0 ? 2 : 0) { }
+        public DoorDef(int axis, float sign, float min, float max, int along, bool cutFromOutside = false)
+        { this.axis = axis; this.sign = sign; this.min = min; this.max = max; this.along = along; this.cutFromOutside = cutFromOutside; }
     }
 
     static readonly Dictionary<string, DoorDef[]> DoorTable = new Dictionary<string, DoorDef[]>
@@ -69,6 +73,19 @@ public static class TempFixBuildingWallColliders
         { "building_G", new[] { new DoorDef(2, 1, -0.00083f, 0.00083f) } },
         // 경찰서 (Sketchfab low_poly_police_station): -X 면 파란 기둥 사이 정문 (2026-10-13 스크린샷 확인)
         { "PublicBuilding_Police_Pack2_0", new[] { new DoorDef(0, -1, -0.72734f, 0.70013f) } },
+        // ── 2026-10-13 추가: 위쪽이 Z축인 모델이 있어서 폭 축을 직접 지정 (5번째 값) ──
+        // 교회: -X 면 정문
+        { "Node-Mesh", new[] { new DoorDef(0, -1, -21.362717f, 21.228819f, 2) } },
+        // FirstAge 집: 벽 없는 정자 → -X 면 기둥 사이
+        { "Houses_FirstAge_1_Level1", new[] { new DoorDef(0, -1, -0.002435f, 0.001488f, 1) } },
+        // 농장(Poly): -Z 면 헛간 입구
+        { "Farm_1", new[] { new DoorDef(2, -1, -1.852082f, 29.299894f, 0) } },
+        // 농장(Quaternius): +Z 면 창고 나무문
+        { "Farm_SecondAge_Level3", new[] { new DoorDef(1, -1, 0.004180f, 0.005818f, 0, cutFromOutside: true) } }, // 실물 촬영으로 재확인: 울타리 안쪽 창고의 남향 나무문
+        // Structure_3(창고): +Z 면 셔터
+        { "Structure_3", new[] { new DoorDef(1, -1, 0.005446f, 0.015860f, 0) } },
+        // Structure_4(창고): +Z 면 셔터
+        { "Structure_4", new[] { new DoorDef(1, -1, -0.026544f, 0.021712f, 0) } },
     };
 
     [MenuItem("Tools/Map/Fix Building Wall Colliders (Mesh + Door)")]
@@ -157,6 +174,7 @@ public static class TempFixBuildingWallColliders
             // ── 1) 문 위치: 박스 2개로 나뉜 면 = 문 있는 면, 두 박스 사이 틈 = 문 ──
             bool hasDoor;
             string warnNoTable = null;
+            bool cutFromOutside = false;
             int normalAxis = 0;
             float sideSign = 1f, gapMin = 0f, gapMax = 0f;
             if (wallBoxes.Count > 0)
@@ -194,7 +212,7 @@ public static class TempFixBuildingWallColliders
                     Vector3 dir = Vector3.zero;
                     dir[ax] = sg;
                     float score = Vector3.Dot(dir, prefer);
-                    if (score > bestScore) { bestScore = score; normalAxis = ax; sideSign = sg; gapMin = g0; gapMax = g1; }
+                    if (score > bestScore) { bestScore = score; normalAxis = ax; sideSign = sg; gapMin = g0; gapMax = g1; cutFromOutside = d.cutFromOutside; }
                 }
                 hasDoor = true;
 
@@ -220,10 +238,14 @@ public static class TempFixBuildingWallColliders
             string triggerWarn = ShrinkTriggerToInterior(go, t, wb, floorY, lb, trigger, probe);
 
             Bounds slotRoot = hasDoor
-                ? BuildDoorSlot(t, wb, floorY, lb, probe, trigger.center, normalAxis, sideSign, gapMin, gapMax)
+                ? BuildDoorSlot(t, wb, floorY, lb, probe, trigger.center, normalAxis, sideSign, gapMin, gapMax, cutFromOutside)
                 : new Bounds();
             // 저장은 BuildingWallCollider가 쓰는 메시 로컬 좌표로
             Bounds slot = hasDoor ? TransformBounds(slotRoot, meshToRoot.inverse) : new Bounds();
+
+            // 바깥 기준 문(울타리 안 창고 등): 문 너머 실내가 격자 측정 트리거 밖으로 남는 경우가 있어서
+            // 문 중앙선을 따라 '문 안쪽 끝 → 다음 벽' 까지 트리거를 넓힘 (농장 창고 뒤쪽이 실내 모드에서 빠지던 문제)
+            if (hasDoor && cutFromOutside) ExtendTriggerAlongDoor(t, trigger, slotRoot, normalAxis, sideSign, floorY, probe, wb);
 
             // ── 3) 박스 제거 + BuildingWallCollider 부착 ──
             foreach (var bc in wallBoxes) Undo.DestroyObjectImmediate(bc);
@@ -271,6 +293,49 @@ public static class TempFixBuildingWallColliders
         return false;
     }
 
+    static void ExtendTriggerAlongDoor(Transform t, BoxCollider trigger, Bounds slotRoot, int normalAxis, float sideSign,
+        float floorY, MeshCollider probe, Bounds wb)
+    {
+        Vector3 inwardLocal = Vector3.zero;
+        inwardLocal[normalAxis] = -sideSign;
+        Vector3 inward = t.TransformDirection(inwardLocal);
+        inward.y = 0f;
+        inward.Normalize();
+
+        // 문 구멍의 안쪽 끝에서 실내 쪽으로 1.5m 높이 레이 → 다음 벽
+        Vector3 innerEndLocal = slotRoot.center;
+        innerEndLocal[normalAxis] = sideSign > 0 ? slotRoot.min[normalAxis] : slotRoot.max[normalAxis];
+        Vector3 start = t.TransformPoint(innerEndLocal);
+        start.y = floorY + 1.5f;
+        float[] hits = AllHitDistances(probe, start, inward, wb.size.magnitude);
+        if (hits.Length == 0) return;
+        Vector3 farLocal = t.InverseTransformPoint(start + inward * (hits[0] - TriggerWallInset));
+
+        Undo.RecordObject(trigger, "Extend trigger along door");
+        Vector3 min = trigger.center - trigger.size * 0.5f, max = trigger.center + trigger.size * 0.5f;
+        if (sideSign > 0) min[normalAxis] = Mathf.Min(min[normalAxis], farLocal[normalAxis]);
+        else max[normalAxis] = Mathf.Max(max[normalAxis], farLocal[normalAxis]);
+        trigger.center = (min + max) * 0.5f;
+        trigger.size = max - min;
+    }
+
+    // 한 콜라이더에 대해 레이 방향의 모든 면까지 거리 (RaycastAll은 콜라이더당 첫 히트 하나만 줌 → 맞은 지점 바로 뒤에서 다시 쏨)
+    static float[] AllHitDistances(Collider c, Vector3 origin, Vector3 dir, float maxDist)
+    {
+        var list = new System.Collections.Generic.List<float>();
+        float travelled = 0f;
+        Vector3 o = origin;
+        while (travelled < maxDist && list.Count < 64)
+        {
+            if (!c.Raycast(new Ray(o, dir), out RaycastHit hit, maxDist - travelled)) break;
+            travelled += hit.distance;
+            list.Add(travelled);
+            travelled += 0.01f;
+            o = origin + dir * travelled;
+        }
+        return list.ToArray();
+    }
+
     // 저장된 문 구멍(메시 로컬 AABB)에서 문 면(법선 축/방향)과 폭 범위를 루트 로컬 기준으로 복원
     static void ReadDoorFromSlot(BuildingWallCollider wall, Bounds lb, Matrix4x4 meshToRoot, out int normalAxis, out float sideSign, out float gapMin, out float gapMax)
     {
@@ -309,13 +374,14 @@ public static class TempFixBuildingWallColliders
     static void DoorToRoot(DoorDef d, Bounds meshLb, Matrix4x4 meshToRoot, Bounds lbRoot,
         out int normalAxis, out float sideSign, out float gapMin, out float gapMax)
     {
-        int along = d.axis == 0 ? 2 : 0;
+        int along = d.along;
+        int vertical = 3 - d.axis - along; // 남은 축 = 높이 방향
         Vector3 c = meshLb.center, size = Vector3.zero;
         c[d.axis] = meshLb.center[d.axis] + d.sign * meshLb.extents[d.axis];
         c[along] = (d.min + d.max) * 0.5f;
         size[d.axis] = meshLb.size[d.axis] * 0.001f;
         size[along] = d.max - d.min;
-        size.y = meshLb.size.y;
+        size[vertical] = meshLb.size[vertical];
         Bounds r = TransformBounds(new Bounds(c, size), meshToRoot);
 
         normalAxis = r.size.x / lbRoot.size.x < r.size.z / lbRoot.size.z ? 0 : 2; // 얇은 쪽 = 법선
@@ -343,7 +409,7 @@ public static class TempFixBuildingWallColliders
     // 문 구멍(로컬 AABB): 폭 = 박스 틈, 높이 = 건물 전체, 깊이 = 건물 바깥 ~ 실제 벽면 안쪽.
     // 벽면 위치는 "실내(트리거 중심)에서 문 쪽으로" 쏴서 잼. 바깥에서 쏘면 처마 기둥/현관 계단
     // 같은 앞쪽 장식에 먼저 맞아서 구멍이 벽면까지 못 닿는 문제가 있었음(building-c 등).
-    static Bounds BuildDoorSlot(Transform t, Bounds wb, float floorY, Bounds lb, MeshCollider probe, Vector3 triggerCenterLocal, int normalAxis, float sideSign, float gapMin, float gapMax)
+    static Bounds BuildDoorSlot(Transform t, Bounds wb, float floorY, Bounds lb, MeshCollider probe, Vector3 triggerCenterLocal, int normalAxis, float sideSign, float gapMin, float gapMax, bool cutFromOutside = false)
     {
         int along = normalAxis == 0 ? 2 : 0;
         float gapMid = (gapMin + gapMax) * 0.5f;
@@ -378,7 +444,29 @@ public static class TempFixBuildingWallColliders
         }
 
         float innerA;
-        if (nearest == float.MaxValue)
+        if (cutFromOutside)
+        {
+            // 바깥(문 바깥 1m)에서 안쪽으로 1.0/1.5/2.0m 세 높이로 쏴서, 세 높이 모두 같은 자리에서 막히는 첫 지점 = 진짜 벽(문).
+            // 울타리(가로대 사이 뚫림)나 비탈진 흙더미(높이마다 위치가 다름)는 건너뜀. 0.5m는 문턱/기단에 걸려서 제외.
+            float wallAt = -1f;
+            var hitsByHeight = new System.Collections.Generic.List<float[]>();
+            foreach (float h in new[] { 1.0f, 1.5f, 2.0f })
+            {
+                Vector3 o = new Vector3(edgeWorld.x, floorY + h, edgeWorld.z) + outward * DoorOutsideMargin;
+                hitsByHeight.Add(AllHitDistances(probe, o, -outward, maxDist));
+            }
+            foreach (float d0 in hitsByHeight[0])
+            {
+                bool solid = true;
+                for (int k = 1; k < hitsByHeight.Count && solid; k++)
+                    solid = System.Array.Exists(hitsByHeight[k], d => Mathf.Abs(d - d0) < 0.4f);
+                if (solid) { wallAt = d0; break; }
+            }
+            // 벽(문) 너머로 3m 더: 문틀/문턱 조각이 구멍 경계에 남아 문간에서 막히는 것 방지 (안쪽은 빈 실내라 영향 없음)
+            float depth = wallAt >= 0f ? wallAt - DoorOutsideMargin + 3f : 0f;
+            innerA = t.InverseTransformPoint(edgeWorld - outward * depth)[normalAxis];
+        }
+        else if (nearest == float.MaxValue)
         {
             innerA = edgeLocal[normalAxis]; // 막힌 게 없으면 자를 것도 없음
         }
@@ -396,6 +484,8 @@ public static class TempFixBuildingWallColliders
         max[along] = gapMax;
         min.y = lb.min.y - lb.size.y * 0.1f;
         max.y = lb.max.y + lb.size.y * 0.1f;
+        // 바깥 기준으로 깊게 뚫는 문은 바닥/문턱(0.35m 아래)은 남김 → 구멍 끝에서 높은 바닥 모서리에 걸리지 않고 스텝업으로 올라섬
+        if (cutFromOutside) min.y = t.InverseTransformPoint(new Vector3(edgeWorld.x, floorY + 0.35f, edgeWorld.z)).y;
 
         var slot = new Bounds();
         slot.SetMinMax(min, max);
