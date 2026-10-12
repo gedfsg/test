@@ -19,6 +19,55 @@ public static class TempFixBuildingWallColliders
     const float DoorOutsideMargin = 1.0f;  // 문 구멍을 건물 바깥쪽으로 이만큼(m) 더 늘림
     const float DoorInsideMargin = 1.5f;   // 보이는 벽면을 지나 실내 쪽으로 이만큼(m) 더 뚫음
     const float TriggerWallInset = 0.3f;   // 트리거를 실내 벽면에서 이만큼(m) 안쪽으로
+    const float MinDoorWidth = 1.8f;       // 문 구멍 최소 폭(m). 플레이어 지름 1m + 여유
+
+    // ── 모델별 실제 문 위치 표 (2026-10-12, 모델 33개 4면 정사영 스크린샷을 보고 하나씩 확인) ──
+    // 자동 감지(깊이/색)로는 Kenney 모델의 문과 창문이 구분되지 않아서 사람이 눈으로 정함.
+    // 값은 메시 로컬 좌표라 같은 모델이면 인스턴스 크기/회전이 달라도 그대로 적용됨.
+    // DoorDef(법선 축 0=X / 2=Z, 면 방향 +1/-1, 폭 축(법선이 X면 Z, Z면 X) 범위 min, max)
+    // 차고 문(넓고 손잡이가 낮은 셔터)은 제외. 문이 여러 개면 도로 쪽(기존 면)과 가까운 문을 씀.
+    struct DoorDef
+    {
+        public int axis; public float sign, min, max;
+        public DoorDef(int axis, float sign, float min, float max) { this.axis = axis; this.sign = sign; this.min = min; this.max = max; }
+    }
+
+    static readonly Dictionary<string, DoorDef[]> DoorTable = new Dictionary<string, DoorDef[]>
+    {
+        { "building-a", new[] { new DoorDef(2, -1, -0.32109f, -0.11994f) } },
+        { "building-b", new[] { new DoorDef(2, -1, 0.06819f, 0.20901f) } },
+        { "building-c", new[] { new DoorDef(2, -1, 0.11139f, 0.25220f) } },
+        { "building-e", new[] { new DoorDef(2, 1, -0.27129f, -0.13551f), new DoorDef(2, -1, -0.26681f, -0.13103f) } },
+        { "building-f", new[] { new DoorDef(2, -1, 0.09799f, 0.29916f) } },
+        { "building-g", new[] { new DoorDef(2, -1, 0.03299f, 0.23415f) } },
+        { "building-h", new[] { new DoorDef(2, -1, 0.11139f, 0.25220f) } },
+        { "building-i", new[] { new DoorDef(2, 1, -0.07229f, 0.06696f), new DoorDef(2, -1, -0.10277f, 0.10412f) } },
+        { "building-j", new[] { new DoorDef(2, 1, -0.12495f, 0.08627f), new DoorDef(2, -1, -0.12650f, 0.08471f) } },
+        { "building-k", new[] { new DoorDef(2, -1, -0.12380f, 0.08708f) } },
+        { "building-l", new[] { new DoorDef(2, 1, -0.13473f, 0.00609f), new DoorDef(2, -1, -0.16199f, 0.03415f) } },
+        { "building-m", new[] { new DoorDef(2, 1, -0.06963f, 0.06829f), new DoorDef(2, -1, -0.10075f, 0.09397f) } },
+        { "building-skyscraper-a", new[] { new DoorDef(2, 1, -0.07389f, 0.06846f), new DoorDef(2, -1, -0.06846f, 0.07389f) } },
+        { "building-skyscraper-b", new[] { new DoorDef(2, 1, -0.07389f, 0.06846f), new DoorDef(2, -1, -0.06846f, 0.07389f) } },
+        { "building-skyscraper-c", new[] { new DoorDef(2, 1, -0.07170f, 0.07064f), new DoorDef(2, -1, -0.10227f, 0.09806f) } },
+        { "building-skyscraper-d", new[] { new DoorDef(2, 1, -0.07431f, 0.06986f), new DoorDef(2, -1, -0.09607f, 0.10708f) } },
+        { "building-skyscraper-e", new[] { new DoorDef(2, 1, -0.10112f, 0.04123f), new DoorDef(2, -1, -0.12558f, 0.09057f) } },
+        { "building-type-d", new[] { new DoorDef(2, -1, -0.22871f, -0.08628f), new DoorDef(2, 1, -0.23276f, -0.09033f) } },
+        { "building-type-e", new[] { new DoorDef(2, 1, -0.07094f, 0.06888f), new DoorDef(2, -1, -0.06888f, 0.07094f) } },
+        { "building-type-g", new[] { new DoorDef(2, 1, 0.40463f, 0.54529f), new DoorDef(2, -1, 0.00561f, 0.14626f) } },
+        { "building-type-h", new[] { new DoorDef(2, 1, -0.07057f, 0.06153f), new DoorDef(2, -1, -0.06153f, 0.07057f) } },
+        { "building-type-k", new[] { new DoorDef(2, 1, -0.27372f, -0.13409f), new DoorDef(2, -1, 0.12508f, 0.26471f) } },
+        { "building-type-l", new[] { new DoorDef(2, 1, -0.21294f, -0.07360f), new DoorDef(2, -1, 0.20194f, 0.34129f) } },
+        { "building-type-n", new[] { new DoorDef(2, 1, 0.06855f, 0.20582f), new DoorDef(2, -1, 0.07510f, 0.21236f) } },
+        { "building-type-o", new[] { new DoorDef(2, -1, -0.45557f, -0.31601f) } },
+        { "building-type-p", new[] { new DoorDef(2, -1, -0.47271f, -0.33279f) } },
+        { "building-type-q", new[] { new DoorDef(2, -1, -0.06948f, 0.06977f), new DoorDef(2, 1, -0.46809f, -0.33532f) } },
+        { "building-type-r", new[] { new DoorDef(2, -1, 0.07209f, 0.21164f), new DoorDef(0, -1, 0.06975f, 0.21126f) } },
+        { "building-type-s", new[] { new DoorDef(2, -1, -0.02321f, 0.11922f), new DoorDef(0, -1, 0.23358f, 0.37069f) } },
+        { "building-type-t", new[] { new DoorDef(2, 1, -0.07444f, 0.06799f), new DoorDef(2, -1, -0.06736f, 0.07506f) } },
+        { "low-detail-building-i", new[] { new DoorDef(2, -1, -0.02357f, 0.02393f) } },
+        { "low-detail-building-l", new[] { new DoorDef(0, 1, -0.02674f, 0.02518f), new DoorDef(0, -1, -0.02518f, 0.02674f), new DoorDef(2, 1, -0.02594f, 0.02613f), new DoorDef(2, -1, -0.02613f, 0.02594f) } },
+        { "building_G", new[] { new DoorDef(2, 1, -0.00083f, 0.00083f) } },
+    };
 
     [MenuItem("Tools/Map/Fix Building Wall Colliders (Mesh + Door)")]
     static void Apply()
@@ -100,6 +149,7 @@ public static class TempFixBuildingWallColliders
         {
             // ── 1) 문 위치: 박스 2개로 나뉜 면 = 문 있는 면, 두 박스 사이 틈 = 문 ──
             bool hasDoor;
+            string warnNoTable = null;
             int normalAxis = 0;
             float sideSign = 1f, gapMin = 0f, gapMax = 0f;
             if (wallBoxes.Count > 0)
@@ -116,6 +166,40 @@ public static class TempFixBuildingWallColliders
             else
             {
                 return $"'{go.name}' — 벽 박스도 BuildingWallCollider도 없어 문 위치를 알 수 없음";
+            }
+
+            // ── 1-1) 모델별 실제 문 위치 표(DoorTable)가 있으면 그걸로 정함 ──
+            // 예전엔 '도로 쪽 면 가운데'에 무조건 구멍을 냈는데, 모델의 실제 문과 어긋나서
+            // 보이는 벽을 뚫고 지나가거나(구멍 자리) 진짜 문으로는 못 들어가는(막힘) 문제가 있었음.
+            // 문이 여러 개면 지금까지 쓰던 면(도로 쪽)과 가장 같은 방향의 문을 고름.
+            if (DoorTable.TryGetValue(mf.sharedMesh.name, out DoorDef[] doors))
+            {
+                Vector3 prefer = Vector3.zero;
+                if (hasDoor) prefer[normalAxis] = sideSign;
+                float bestScore = float.NegativeInfinity;
+                foreach (var d in doors)
+                {
+                    DoorToRoot(d, mf.sharedMesh.bounds, meshToRoot, lb, out int ax, out float sg, out float g0, out float g1);
+                    Vector3 dir = Vector3.zero;
+                    dir[ax] = sg;
+                    float score = Vector3.Dot(dir, prefer);
+                    if (score > bestScore) { bestScore = score; normalAxis = ax; sideSign = sg; gapMin = g0; gapMax = g1; }
+                }
+                hasDoor = true;
+
+                // 플레이어(지름 1m)가 여유 있게 지나가도록 최소 폭 보장
+                int alongAx = normalAxis == 0 ? 2 : 0;
+                float minLocal = MinDoorWidth / Mathf.Abs(t.lossyScale[alongAx]);
+                if (gapMax - gapMin < minLocal)
+                {
+                    float mid = (gapMin + gapMax) * 0.5f;
+                    gapMin = mid - minLocal * 0.5f;
+                    gapMax = mid + minLocal * 0.5f;
+                }
+            }
+            else
+            {
+                warnNoTable = $"'{go.name}' — 문 위치 표에 '{mf.sharedMesh.name}' 모델이 없어 기존 문 위치 유지";
             }
 
             // 실내 바닥 높이 (측정 레이/격자를 이 높이 기준으로 쏨)
@@ -139,7 +223,7 @@ public static class TempFixBuildingWallColliders
             wall.doorSlotSize = slot.size;
             EditorUtility.SetDirty(wall);
 
-            return triggerWarn;
+            return triggerWarn ?? warnNoTable;
         }
         finally
         {
@@ -208,6 +292,26 @@ public static class TempFixBuildingWallColliders
         tops.Sort();
         float median = tops[tops.Count / 2];
         return median - wb.min.y > PlinthThreshold ? median : wb.min.y;
+    }
+
+    // 메시 로컬 문 정의 → 건물 루트 로컬의 (법선 축, 방향, 폭 범위). 메시가 자식에 회전돼 있어도(마트) 맞게 변환
+    static void DoorToRoot(DoorDef d, Bounds meshLb, Matrix4x4 meshToRoot, Bounds lbRoot,
+        out int normalAxis, out float sideSign, out float gapMin, out float gapMax)
+    {
+        int along = d.axis == 0 ? 2 : 0;
+        Vector3 c = meshLb.center, size = Vector3.zero;
+        c[d.axis] = meshLb.center[d.axis] + d.sign * meshLb.extents[d.axis];
+        c[along] = (d.min + d.max) * 0.5f;
+        size[d.axis] = meshLb.size[d.axis] * 0.001f;
+        size[along] = d.max - d.min;
+        size.y = meshLb.size.y;
+        Bounds r = TransformBounds(new Bounds(c, size), meshToRoot);
+
+        normalAxis = r.size.x / lbRoot.size.x < r.size.z / lbRoot.size.z ? 0 : 2; // 얇은 쪽 = 법선
+        sideSign = Mathf.Sign(r.center[normalAxis] - lbRoot.center[normalAxis]);
+        int rootAlong = normalAxis == 0 ? 2 : 0;
+        gapMin = r.min[rootAlong];
+        gapMax = r.max[rootAlong];
     }
 
     // AABB를 행렬로 변환한 뒤 다시 AABB로 (8개 꼭짓점을 감쌈). 단위 행렬이면 그대로.

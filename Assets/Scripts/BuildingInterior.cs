@@ -18,8 +18,17 @@ public class BuildingInterior : MonoBehaviour
     [Header("실내 시야 제한 (좀보이드 스타일 - 안에 들어가면 주변이 어두워짐)")]
     public bool darkenSurroundings = true;
     public float indoorFogStartDistance = 2f;
-    public float indoorFogEndDistance = 14f;
+    public float indoorFogEndDistance = 8f;
     public Color indoorFogColor = Color.black;
+
+    [Header("실내에서 바깥 완전히 가리기 (검정 마스크)")]
+    [Tooltip("실내에 있는 동안 벽 잘린 높이에 '실내만 뚫린 검정 판 + 안쪽만 보이는 검정 벽'을 켬. " +
+             "벽에 바짝 붙어도 벽 너머 바깥이 안 보임")]
+    public bool hideOutsideWhenIndoor = true;
+    [Tooltip("마스크 구멍을 실내(트리거)보다 이만큼(m) 넓힘 → 벽 윗면(캡)까지는 보이게")]
+    public float outsideMaskMargin = 0.6f;
+    [Tooltip("구멍 둘레에서 위로 세우는 검정 벽 높이(m). 옆 고층 건물이 판 위로 솟아 보이는 것 방지")]
+    public float outsideMaskWallHeight = 60f;
 
     static readonly int CutHeightId = Shader.PropertyToID("_CutHeight");
     static readonly int CutEnabledId = Shader.PropertyToID("_CutEnabled");
@@ -35,6 +44,8 @@ public class BuildingInterior : MonoBehaviour
     static float originalFogStart, originalFogEnd;
 
     Renderer[] renderers;
+    float cutHeightWorld;
+    GameObject outsideMask;
     Material[][] instanceMats; // renderer별 인스턴스 머티리얼 슬롯
 
     void Awake()
@@ -44,6 +55,7 @@ public class BuildingInterior : MonoBehaviour
 
         renderers = GetComponentsInChildren<Renderer>(true);
         float cutHeightWorldY = ComputeCutHeight();
+        cutHeightWorld = cutHeightWorldY;
 
         Shader cutawayShader = Shader.Find("Custom/BuildingCutaway");
         if (cutawayShader == null)
@@ -110,11 +122,88 @@ public class BuildingInterior : MonoBehaviour
 
     void SetCut(bool cut)
     {
+        if (hideOutsideWhenIndoor)
+        {
+            if (cut && outsideMask == null) outsideMask = BuildOutsideMask();
+            if (outsideMask != null) outsideMask.SetActive(cut);
+        }
+
         if (instanceMats == null) return;
         float v = cut ? 1f : 0f;
         foreach (var mats in instanceMats)
             foreach (var m in mats)
                 if (m != null) m.SetFloat(CutEnabledId, v);
+    }
+
+    // 실내만 뚫린 검정 마스크 (건물 루트 로컬 좌표로 만들어 자식으로 붙임 → 건물 회전/스케일 그대로 따라감)
+    //  1) 벽 잘린 높이의 수평 판: 바깥쪽 아주 넓게, 가운데는 실내(트리거 + 여유) 크기로 뚫림
+    //  2) 구멍 둘레에서 위로 세운 벽: 안쪽 면만 그려짐(바깥에서 보면 투명) → 카메라 쪽 벽은 안 가리고,
+    //     반대편/옆 벽이 판 위로 솟은 옆 건물을 가림
+    // 위에서 내려다보는 카메라 기준, 실내 바닥은 구멍을 통해서만 보이고 벽 너머 바깥은 전부 검정.
+    GameObject BuildOutsideMask()
+    {
+        BoxCollider trigger = FindTriggerCollider() as BoxCollider;
+        if (trigger == null) return null;
+
+        Vector3 scale = transform.lossyScale;
+        float mx = outsideMaskMargin / Mathf.Abs(scale.x), mz = outsideMaskMargin / Mathf.Abs(scale.z);
+        float x0 = trigger.center.x - trigger.size.x / 2f - mx, x1 = trigger.center.x + trigger.size.x / 2f + mx;
+        float z0 = trigger.center.z - trigger.size.z / 2f - mz, z1 = trigger.center.z + trigger.size.z / 2f + mz;
+        float y = transform.InverseTransformPoint(new Vector3(0f, cutHeightWorld + 0.02f, 0f) + Vector3.ProjectOnPlane(transform.position, Vector3.up)).y;
+        float top = y + outsideMaskWallHeight / Mathf.Abs(scale.y);
+        float ox = 400f / Mathf.Abs(scale.x), oz = 400f / Mathf.Abs(scale.z);
+        float cx = (x0 + x1) / 2f, cz = (z0 + z1) / 2f;
+
+        var v = new System.Collections.Generic.List<Vector3>
+        {
+            // 0~3: 구멍(안쪽) 모서리, 4~7: 바깥 모서리  (순서: x0z0, x1z0, x1z1, x0z1)
+            new Vector3(x0, y, z0), new Vector3(x1, y, z0), new Vector3(x1, y, z1), new Vector3(x0, y, z1),
+            new Vector3(cx - ox, y, cz - oz), new Vector3(cx + ox, y, cz - oz), new Vector3(cx + ox, y, cz + oz), new Vector3(cx - ox, y, cz + oz),
+            // 8~11: 구멍 둘레 위쪽 (벽 꼭대기)
+            new Vector3(x0, top, z0), new Vector3(x1, top, z0), new Vector3(x1, top, z1), new Vector3(x0, top, z1),
+        };
+        var t = new System.Collections.Generic.List<int>();
+        // 수평 판 (위를 향함): 바깥 사각형 - 안쪽 사각형 = 4개 사다리꼴
+        for (int i = 0; i < 4; i++)
+        {
+            int a = i, b = (i + 1) % 4, A = 4 + i, B = 4 + (i + 1) % 4;
+            t.AddRange(new[] { A, a, b, A, b, B });
+        }
+        // 구멍 둘레 벽 (실내 쪽을 향함)
+        for (int i = 0; i < 4; i++)
+        {
+            int a = i, b = (i + 1) % 4, ta = 8 + i, tb = 8 + (i + 1) % 4;
+            t.AddRange(new[] { a, tb, ta, a, b, tb }); // 시계방향 = 앞면 → 안쪽(구멍 중심)을 향함
+        }
+
+        var mesh = new Mesh { name = name + "_OutsideMask" };
+        mesh.SetVertices(v);
+        mesh.SetTriangles(t, 0);
+        mesh.RecalculateBounds();
+        mesh.RecalculateNormals();
+
+        var go = new GameObject("OutsideMask");
+        go.transform.SetParent(transform, false);
+        go.AddComponent<MeshFilter>().sharedMesh = mesh;
+        var mr = go.AddComponent<MeshRenderer>();
+        mr.sharedMaterial = OutsideMaskMaterial;
+        mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        mr.receiveShadows = false;
+        go.SetActive(false);
+        return go;
+    }
+
+    static Material outsideMaskMaterial;
+    static Material OutsideMaskMaterial
+    {
+        get
+        {
+            if (outsideMaskMaterial != null) return outsideMaskMaterial;
+            // Resources에 둬서 빌드에도 셰이더가 포함되게 함 (없으면 Unlit/Color로 즉석 생성)
+            outsideMaskMaterial = Resources.Load<Material>("OutsideMask");
+            if (outsideMaskMaterial == null) outsideMaskMaterial = new Material(Shader.Find("Unlit/Color")) { color = Color.black };
+            return outsideMaskMaterial;
+        }
     }
 
     // 좀보이드 스타일: 실내에 있을 때 Fog로 멀리 있는 바깥/다른 방을 어둡게 가려서

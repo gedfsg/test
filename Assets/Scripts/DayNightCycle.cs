@@ -14,10 +14,10 @@ public class DayNightCycle : MonoBehaviour
 
     [Header("시간 설정 (초) - 실제 밸런스는 하루 15분(낮8+노을1+밤5+새벽1).")]
     [Tooltip("지금은 테스트하기 쉽게 하루 2분(낮1+노을15초+밤30초+새벽15초)으로 맞춰둠. 실제 플레이용 15분으로 쓰려면 480/60/300/60으로 바꿀 것.")]
-    public float dayDuration   = 60f;
-    public float duskDuration  = 15f;
-    public float nightDuration = 30f;
-    public float dawnDuration  = 15f;
+    public float dayDuration   = 150f;  // 하루 300초(5분): 낮 150 + 노을 37.5 + 밤 75 + 새벽 37.5 (기존 120초와 같은 비율)
+    public float duskDuration  = 37.5f;
+    public float nightDuration = 75f;
+    public float dawnDuration  = 37.5f;
     public int   totalDays     = 7;
 
     [Header("라이팅")]

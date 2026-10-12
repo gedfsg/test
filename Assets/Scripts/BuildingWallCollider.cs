@@ -12,9 +12,9 @@ using UnityEngine;
 ///
 /// 그래서 Awake에서 렌더 메시를 그대로 복사해 MeshCollider를 만들되,
 ///   1) doorSlot(로컬 AABB) 안에 들어오는 벽 삼각형은 잘라내서 문으로 드나들 수 있게 하고
-///   2) 삼각형을 뒤집은 사본을 하나 더 넣어 양면으로 만든다.
-///      (PhysX 레이캐스트는 기본적으로 뒷면을 못 맞춤 → 실내에서 쏜 총알/스텝업 레이가
-///       벽 안쪽 면을 통과해버리는 걸 막기 위함)
+///   2) 삼각형을 뒤집은 사본을 wallThickness만큼 실내 쪽으로 옮겨 넣어 "두께 있는 벽"으로 만든다.
+///      (PhysX는 메시 앞면끼리만 충돌/레이캐스트 → 실내에서도 앞면인 안쪽 면이 있어야
+///       캐릭터·총알·스텝업 레이가 막힘. 같은 자리에 겹치면 빠른 이동 시 뚫리므로 간격을 둠)
 ///
 /// 메시를 에셋으로 저장하지 않고 런타임에 만드는 이유: 건물 91개분 메시 에셋이 git에
 /// 10MB 가까이 쌓이는 걸 피하기 위함. 문 위치/트리거 크기는 에디터 툴
@@ -31,6 +31,9 @@ public class BuildingWallCollider : MonoBehaviour
 
     [Tooltip("문 구멍 영역 크기 (이 오브젝트 로컬 좌표). 이 안의 벽 삼각형은 잘라냄.")]
     public Vector3 doorSlotSize;
+
+    [Tooltip("콜라이더 벽 두께(m). 안쪽 면을 보이는 벽에서 이만큼 실내 쪽으로 둠.")]
+    public float wallThickness = 0.25f;
 
     MeshCollider wallCollider;
 
@@ -75,14 +78,12 @@ public class BuildingWallCollider : MonoBehaviour
                 AddClippedOutside(a, b, c, slot, verts, tris);             // 문 구멍과 겹치면 바깥 부분만 남김
         }
 
-        // 양면: 같은 정점으로 감는 순서만 뒤집은 삼각형을 추가
-        int oneSided = tris.Count;
-        for (int i = 0; i < oneSided; i += 3)
-        {
-            tris.Add(tris[i]);
-            tris.Add(tris[i + 2]);
-            tris.Add(tris[i + 1]);
-        }
+        // 두께 있는 벽: 각 삼각형을 안쪽(법선 반대)으로 wallThickness만큼 옮긴 뒤집힌 사본을 추가.
+        // 바깥 면은 바깥을, 안쪽 면은 실내를 향함 → 어느 쪽에서 부딪혀도 앞면 충돌이라 확실히 막힘.
+        // (예전엔 같은 자리에 뒤집힌 삼각형을 겹쳐 양면을 만들었는데, 달리기/구르기로 벽에 빠르게
+        //  파고들면 물리엔진이 겹친 두 면 중 어느 쪽이 바깥인지 헷갈려 반대편으로 밀어내는 일이 생겼음.
+        //  단면만 쓰면 실내에서는 뒷면이라 아예 안 막힘 → 둘 다 실측으로 확인됨)
+        AddInnerShell(verts, tris);
 
         Mesh m = new Mesh { name = src.name + "_WallCollider" };
         if (verts.Count > 65535) m.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
@@ -92,6 +93,34 @@ public class BuildingWallCollider : MonoBehaviour
 
         wallCollider = gameObject.AddComponent<MeshCollider>();
         wallCollider.sharedMesh = m;
+    }
+
+    // 현재 삼각형들(바깥 면) 각각에 대해, 법선 반대 방향으로 wallThickness(월드 m)만큼 옮기고
+    // 감는 순서를 뒤집은 사본(안쪽 면)을 추가한다. 건물 스케일이 축마다 달라서(예: 27 x 20 x 24)
+    // 법선/오프셋은 스케일을 반영한 공간에서 계산한 뒤 다시 로컬로 되돌림.
+    void AddInnerShell(List<Vector3> verts, List<int> tris)
+    {
+        Vector3 scale = transform.lossyScale;
+        Vector3 invScale = new Vector3(1f / scale.x, 1f / scale.y, 1f / scale.z);
+        int outerTriCount = tris.Count;
+
+        for (int i = 0; i < outerTriCount; i += 3)
+        {
+            Vector3 a = Vector3.Scale(verts[tris[i]], scale);
+            Vector3 b = Vector3.Scale(verts[tris[i + 1]], scale);
+            Vector3 c = Vector3.Scale(verts[tris[i + 2]], scale);
+            Vector3 n = Vector3.Cross(b - a, c - a);
+            if (n.sqrMagnitude < 1e-10f) continue; // 넓이 0인 삼각형
+            Vector3 offset = -n.normalized * wallThickness;
+
+            int baseIndex = verts.Count;
+            verts.Add(Vector3.Scale(a + offset, invScale));
+            verts.Add(Vector3.Scale(b + offset, invScale));
+            verts.Add(Vector3.Scale(c + offset, invScale));
+            tris.Add(baseIndex);
+            tris.Add(baseIndex + 2);
+            tris.Add(baseIndex + 1);
+        }
     }
 
     // 삼각형에서 box 바깥 부분만 남긴다 (Sutherland–Hodgman 방식).

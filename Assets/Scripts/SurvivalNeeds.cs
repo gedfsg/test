@@ -9,8 +9,8 @@ using UnityEngine;
 public class SurvivalNeeds : MonoBehaviour
 {
     [Header("100% → 0%까지 걸리는 게임 내 일수")]
-    [Min(0.1f)] public float waterDaysToEmpty = 4f;
-    [Min(0.1f)] public float foodDaysToEmpty = 7f;
+    [Min(0.1f)] public float waterDaysToEmpty = 6f;
+    [Min(0.1f)] public float foodDaysToEmpty = 10f;
 
     [Header("0%일 때 체력 감소 (수치 하나당, 초당)")]
     public float starvationDamagePerSecond = 1f;

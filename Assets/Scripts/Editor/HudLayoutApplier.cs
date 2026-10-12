@@ -16,9 +16,11 @@ public static class HudLayoutApplier
 {
     public static readonly Vector2 ReferenceResolution = new Vector2(1681f, 936f);
 
-    // 하단 HUD(상태 패널/핫바/손전등·탄약) 크기 배율. 레퍼런스 크기의 50%로 줄이되,
-    // 화면 가장자리와의 여백(레퍼런스 px)은 그대로 유지하도록 위치를 다시 계산함
-    const float BottomHudScale = 0.5f;
+    // 하단 HUD 크기 배율 (레퍼런스 크기 대비). 화면 가장자리와의 여백(레퍼런스 px)은 그대로 유지하도록
+    // 위치를 다시 계산함. 좌하단 상태 패널 50%, 핫바·우하단 손전등/탄약 75%
+    const float StatusPanelScale = 0.5f;
+    const float HotbarScale = 0.75f;
+    const float BottomRightScale = 0.75f;
 
     [MenuItem("Tools/HUD/Apply Layout/1. Minimap")]
     static void ApplyMinimap()
@@ -141,7 +143,7 @@ public static class HudLayoutApplier
         var rt = GetOrCreateChild(canvas.transform, "StatusPanelHUD");
         Undo.RecordObject(rt, "HUD Status");
         // 여백: 왼쪽 27, 아래 47 (레퍼런스) 유지
-        float s = BottomHudScale;
+        float s = StatusPanelScale;
         SetRect(rt, new Vector2(0f, 0f), new Vector2(27f + 431f * s / 2f, 47f + 228f * s / 2f), new Vector2(431f, 228f));
         rt.localScale = Vector3.one * s;
         if (rt.GetComponent<StatusPanelHUD>() == null) Undo.AddComponent<StatusPanelHUD>(rt.gameObject);
@@ -180,7 +182,7 @@ public static class HudLayoutApplier
         var rt = (RectTransform)hotbar.transform;
         Undo.RecordObject(rt, "HUD Hotbar");
         // 여백: 아래 46 (레퍼런스) 유지, 가로 중심은 그대로
-        float s = BottomHudScale;
+        float s = HotbarScale;
         SetRect(rt, new Vector2(0.5f, 0f), new Vector2(-11.5f, 46f + 90f * s / 2f), new Vector2(5 * 90f + 4 * 7f, 90f));
         rt.localScale = Vector3.one * s;
 
@@ -468,7 +470,7 @@ public static class HudLayoutApplier
         var fl = GetOrCreateChild(canvas.transform, "FlashlightHUD");
         Undo.RecordObject(fl, "HUD BottomRight");
         // 여백: 오른쪽 26, 아래 24, 두 패널 사이 7 (레퍼런스) → 크기와 간격만 배율 적용
-        float s = BottomHudScale;
+        float s = BottomRightScale;
         float panelX = -(26f + 222f * s / 2f);
         SetRect(fl, new Vector2(1f, 0f), new Vector2(panelX, 24f + 97f * s + 7f * s + 45f * s / 2f), new Vector2(222f, 45f));
         fl.localScale = Vector3.one * s;
