@@ -53,7 +53,8 @@ public class BuildingInterior : MonoBehaviour
         Collider triggerCol = FindTriggerCollider();
         if (triggerCol != null) triggerCol.isTrigger = true;
 
-        renderers = GetComponentsInChildren<Renderer>(true);
+        // 꺼진 렌더러(충돌용 숨김 메시 등)는 제외: 재질을 바꾸면 보이게 되고, 범위 계산(컷 높이)도 틀어짐
+        renderers = System.Array.FindAll(GetComponentsInChildren<Renderer>(true), r => r.enabled);
         float cutHeightWorldY = ComputeCutHeight();
         cutHeightWorld = cutHeightWorldY;
 

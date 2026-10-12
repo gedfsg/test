@@ -67,6 +67,8 @@ public static class TempFixBuildingWallColliders
         { "low-detail-building-i", new[] { new DoorDef(2, -1, -0.02357f, 0.02393f) } },
         { "low-detail-building-l", new[] { new DoorDef(0, 1, -0.02674f, 0.02518f), new DoorDef(0, -1, -0.02518f, 0.02674f), new DoorDef(2, 1, -0.02594f, 0.02613f), new DoorDef(2, -1, -0.02613f, 0.02594f) } },
         { "building_G", new[] { new DoorDef(2, 1, -0.00083f, 0.00083f) } },
+        // 경찰서 (Sketchfab low_poly_police_station): -X 면 파란 기둥 사이 정문 (2026-10-13 스크린샷 확인)
+        { "PublicBuilding_Police_Pack2_0", new[] { new DoorDef(0, -1, -0.72734f, 0.70013f) } },
     };
 
     [MenuItem("Tools/Map/Fix Building Wall Colliders (Mesh + Door)")]
@@ -109,9 +111,14 @@ public static class TempFixBuildingWallColliders
         if (mf == null || mf.sharedMesh == null)
         {
             var childFilters = go.GetComponentsInChildren<MeshFilter>(true);
-            if (childFilters.Length != 1)
-                return $"'{go.name}' — 메시가 {childFilters.Length}개라 건너뜀 (루트 또는 자식 메시 1개만 지원)";
-            mf = childFilters[0];
+            if (childFilters.Length == 1) mf = childFilters[0];
+            else
+            {
+                // 자식 메시가 여럿이면(경찰서: 보이는 메시 + 충돌용 메시) 문 위치 표에 있는 메시를 씀
+                mf = System.Array.Find(childFilters, f => f.sharedMesh != null && DoorTable.ContainsKey(f.sharedMesh.name));
+                if (mf == null)
+                    return $"'{go.name}' — 메시가 {childFilters.Length}개인데 문 위치 표에 있는 메시가 없어 건너뜀";
+            }
         }
         Renderer rend = mf.GetComponent<Renderer>();
         if (mf.sharedMesh == null || rend == null)
@@ -162,6 +169,10 @@ public static class TempFixBuildingWallColliders
                 // 재실행: 이미 변환된 건물은 저장된 문 구멍에서 문 면/폭을 다시 읽음
                 hasDoor = wall.hasDoor;
                 if (hasDoor) ReadDoorFromSlot(wall, lb, meshToRoot, out normalAxis, out sideSign, out gapMin, out gapMax);
+            }
+            else if (DoorTable.ContainsKey(mf.sharedMesh.name))
+            {
+                hasDoor = true; // 처음 들어갈 수 있게 만드는 건물: 문은 아래 문 위치 표에서 정해짐
             }
             else
             {
@@ -401,26 +412,45 @@ public static class TempFixBuildingWallColliders
         const int Grid = 24;
         float maxDist = wb.size.magnitude;
 
-        bool found = false;
-        Vector3 cellMin = Vector3.zero, cellMax = Vector3.zero;
         Vector3 cellHalf = new Vector3(lb.size.x / Grid * 0.5f, 0f, lb.size.z / Grid * 0.5f);
 
-        for (int ix = 0; ix < Grid; ix++)
+        // 바닥 위 sampleHeight 높이에서 실내 칸들을 감싸는 사각형
+        bool Scan(float sampleHeight, out Vector3 min, out Vector3 max)
         {
-            for (int iz = 0; iz < Grid; iz++)
+            bool any = false;
+            min = max = Vector3.zero;
+            for (int ix = 0; ix < Grid; ix++)
             {
-                Vector3 lp = new Vector3(
-                    Mathf.Lerp(lb.min.x, lb.max.x, (ix + 0.5f) / Grid),
-                    lb.center.y,
-                    Mathf.Lerp(lb.min.z, lb.max.z, (iz + 0.5f) / Grid));
-                Vector3 wp = t.TransformPoint(lp);
-                wp.y = floorY + 1.0f;
+                for (int iz = 0; iz < Grid; iz++)
+                {
+                    Vector3 lp = new Vector3(
+                        Mathf.Lerp(lb.min.x, lb.max.x, (ix + 0.5f) / Grid),
+                        lb.center.y,
+                        Mathf.Lerp(lb.min.z, lb.max.z, (iz + 0.5f) / Grid));
+                    Vector3 wp = t.TransformPoint(lp);
+                    wp.y = floorY + sampleHeight;
 
-                if (!IsInteriorCell(wp, t, probe, maxDist)) continue;
+                    if (!IsInteriorCell(wp, t, probe, maxDist)) continue;
 
-                Vector3 lo = lp - cellHalf, hi = lp + cellHalf;
-                if (!found) { cellMin = lo; cellMax = hi; found = true; }
-                else { cellMin = Vector3.Min(cellMin, lo); cellMax = Vector3.Max(cellMax, hi); }
+                    Vector3 lo = lp - cellHalf, hi = lp + cellHalf;
+                    if (!any) { min = lo; max = hi; any = true; }
+                    else { min = Vector3.Min(min, lo); max = Vector3.Max(max, hi); }
+                }
+            }
+            return any;
+        }
+
+        bool found = Scan(1.0f, out Vector3 cellMin, out Vector3 cellMax);
+
+        // 실내 바닥이 1m쯤 높은 건물(경찰서 등)은 1m 높이가 바닥 면에 걸려 "벽 속"으로 잘못 판정됨
+        // → 결과가 바닥 면적의 25% 미만이면 1.8m 높이로 다시 재서 더 넓은 쪽을 씀 (기존 91개 건물은 전부 29% 이상)
+        float footprint = lb.size.x * lb.size.z;
+        float Area(Vector3 a, Vector3 b) => (b.x - a.x) * (b.z - a.z);
+        if (!found || Area(cellMin, cellMax) < footprint * 0.25f)
+        {
+            if (Scan(1.8f, out Vector3 min2, out Vector3 max2) && (!found || Area(min2, max2) > Area(cellMin, cellMax)))
+            {
+                cellMin = min2; cellMax = max2; found = true;
             }
         }
 
