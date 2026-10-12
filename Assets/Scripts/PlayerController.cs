@@ -20,6 +20,9 @@ public class PlayerController : MonoBehaviour
     public GameObject rangedWeaponObject;
     public GameObject meleeWeaponObject;
 
+    [Tooltip("시작 시 핫바 1번에 자동 지급할 근접 무기 (도끼). 시작 총은 2번으로 감")]
+    public WeaponData startingMeleeWeapon;
+
     private Weapon rangedWeapon;
     private MeleeWeapon meleeWeapon;
 
@@ -60,10 +63,16 @@ public class PlayerController : MonoBehaviour
 
         weaponHandAttacher = FindAnyObjectByType<WeaponHandAttacher>();
 
+        // 1번 = 도끼, 2번 = 시작 총 (AddWeapon은 선택된 빈 슬롯 → 다음 빈 무기 슬롯 순서로 넣음)
+        var hotbar = WeaponHotbarUI.Instance;
+        if (hotbar != null && startingMeleeWeapon != null)
+            hotbar.AddWeapon(startingMeleeWeapon);
+
         if (rangedWeapon != null && rangedWeapon.weaponData != null)
-            WeaponHotbarUI.Instance?.AddWeapon(rangedWeapon.weaponData, rangedWeapon.GetCurrentAmmo());
+            hotbar?.AddWeapon(rangedWeapon.weaponData, rangedWeapon.GetCurrentAmmo());
 
         EquipWeapon(WeaponMode.Ranged);
+        if (hotbar != null && startingMeleeWeapon != null) hotbar.SelectSlot(0); // 도끼 들고 시작
     }
 
     void OnEnable()
@@ -291,6 +300,8 @@ public class PlayerController : MonoBehaviour
     public void UseConsumable(ConsumableData consumable)
     {
         PlayerBuffManager buffMgr = GetComponent<PlayerBuffManager>();
+        // 씬 플레이어에 PlayerBuffManager가 안 붙어 있으면 수분/포만감/지속 회복이 전부 무시됐음 → 없으면 붙임
+        if (buffMgr == null) buffMgr = gameObject.AddComponent<PlayerBuffManager>();
         Health health = GetComponent<Health>();
 
         if (buffMgr != null && health != null)
@@ -330,10 +341,15 @@ public class PlayerController : MonoBehaviour
 
         if (newData.type == WeaponType.Melee)
         {
+            // 핫바 1,2에 근접 무기가 있을 수 있음 → 근접 모드로 전환 + 손에 도끼 모델
+            EquipWeapon(WeaponMode.Melee);
             if (meleeWeapon != null) meleeWeapon.ChangeWeaponData(newData);
+            if (weaponHandAttacher != null && newData.weaponPrefab != null)
+                weaponHandAttacher.SwapVisual(newData.weaponPrefab, newData.positionOffset, newData.rotationOffset);
         }
         else
         {
+            EquipWeapon(WeaponMode.Ranged);
             if (rangedWeapon != null) rangedWeapon.ChangeWeaponData(newData, savedAmmo);
             if (weaponHandAttacher != null && newData.weaponPrefab != null)
                 weaponHandAttacher.SwapVisual(newData.weaponPrefab, newData.positionOffset, newData.rotationOffset);

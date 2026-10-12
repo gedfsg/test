@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3eb99a6aa2adbac41a16f2ce1a62f261, type: 3}
+  m_Name: Deagle
+  m_EditorClassIdentifier: Assembly-CSharp::WeaponData
+  itemName: Deagle
+  icon: {fileID: 21300000, guid: 6ff5897ce387a4c46817b38b95fb348c, type: 3}
+  itemType: 0
+  rarity: 2
+  isStackable: 0
+  maxStackSize: 1
+  weaponPrefab: {fileID: 4414250634858798000, guid: c23eb82c721d4ee4f8fc32ff70c34fc5, type: 3}
+  type: 1
+  damage: 20
+  attackRate: 0.25
+  maxAmmo: 15
+  reloadTime: 1.5
+  bulletSpeed: 80
+  recoil: 2
+  effectiveRange: 25
+  pelletCount: 8
+  spreadAngle: 15
+  penetrating: 0
+  autoFire: 0
+  positionOffset: {x: 0.01, y: 0.06, z: -0.2}
+  rotationOffset: {x: 30, y: 200, z: -20}

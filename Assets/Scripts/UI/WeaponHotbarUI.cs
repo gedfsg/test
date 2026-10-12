@@ -3,7 +3,7 @@ using UnityEngine.InputSystem;
 
 /// <summary>
 /// 5슬롯 핫바 (PUBG 스타일). G키로 현재 슬롯 버리기, 슬롯 우클릭으로도 버릴 수 있다.
-///  - 슬롯 1,2 (index 0,1): 총(WeaponData)만. 1/2 키로 선택해서 들고 다님
+///  - 슬롯 1,2 (index 0,1): 무기(WeaponData: 총 또는 근접)만. 1/2 키로 선택해서 들고 다님
 ///  - 슬롯 3,4,5 (index 2~4): 소비 아이템(ConsumableData: 음식/음료/의료)만. 3~5 키를 누르면 바로 사용
 ///  - 타입이 안 맞는 아이템은 거부 (SlotTypeFilter.CanPlace)
 /// UI 시각 요소는 SlotView 프리팹을 사용하며, 이 스크립트는 데이터/로직만 담당한다.
@@ -78,7 +78,8 @@ public class WeaponHotbarUI : MonoBehaviour
         if (index < 0 || index >= SLOT_COUNT) return;
         if (!SlotTypeFilter.IsWeaponSlot(index)) { UseConsumableSlot(index); return; }
 
-        if (activeSlot >= 0 && items[activeSlot] is WeaponData && playerController != null)
+        // 들고 있던 총의 남은 탄수 저장 (근접 무기는 탄수 없음)
+        if (activeSlot >= 0 && items[activeSlot] is WeaponData cur && cur.type != WeaponType.Melee && playerController != null)
             ammos[activeSlot] = playerController.GetCurrentAmmo();
 
         activeSlot = index;
@@ -267,7 +268,7 @@ public class WeaponHotbarUI : MonoBehaviour
 
     private static void LogReject(int index, ItemData item)
     {
-        string where = index < 0 ? "빈 슬롯 없음" : $"슬롯 {index + 1}은 {(SlotTypeFilter.IsWeaponSlot(index) ? "총" : "소비 아이템")} 전용";
+        string where = index < 0 ? "빈 슬롯 없음" : $"슬롯 {index + 1}은 {(SlotTypeFilter.IsWeaponSlot(index) ? "무기" : "소비 아이템")} 전용";
         Debug.Log($"[핫바] '{item?.itemName}' 거부 - {where}");
     }
 

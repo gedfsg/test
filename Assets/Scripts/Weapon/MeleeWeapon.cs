@@ -113,6 +113,7 @@ public class MeleeWeapon : MonoBehaviour
     public void ChangeWeaponData(WeaponData newData)
     {
         weaponData = newData;
+        if (newData.effectiveRange > 0f) attackRange = newData.effectiveRange; // 근접 사거리 (도끼 2m)
         Debug.Log("근접 무기가 [" + newData.itemName + "]으로 교체됨!");
     }
 }
