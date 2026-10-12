@@ -76,7 +76,7 @@ public class DayNightCycle : MonoBehaviour
 
     private float phaseTimer   = 0f;
     private bool  gameCleared  = false;
-    private bool  flashlightOn = true;
+    private bool  flashlightOn = false; // 게임 시작 시 손전등 꺼진 상태 (T키로 켬)
     private float debugLogTimer = 0f;
 
     void Awake()
@@ -94,6 +94,7 @@ public class DayNightCycle : MonoBehaviour
                 flashlight = player.GetComponentInChildren<Light>();
         }
         if (flashlightStatusText == null && buildLegacyFlashlightText) BuildFlashlightUI();
+        if (flashlight != null) flashlight.enabled = flashlightOn; // 씬에서 켜져 있어도 시작은 꺼짐
         Debug.Log($"[Flashlight] 초기화: flashlight={(flashlight != null ? flashlight.name : "NULL! 못 찾음")}" +
                    (flashlight != null ? $" localPos={flashlight.transform.localPosition} enabled={flashlight.enabled}" : ""));
 
