@@ -59,13 +59,13 @@ public static class LiberatorWeaponBuilder
         new Entry("H&K G3", "G3", Cat.AR, Rarity.Epic),
         new Entry("AS-762", "AS-762", Cat.AR, Rarity.Epic),
         new Entry("AAC Honey Badger", "Honey Badger", Cat.AR, Rarity.Epic),
-        // SMG (AR탄약 공유, 30발, 빠른 연사) 12/16
+        // SMG (AR탄약 공유, 30발, 빠른 연사) 12/16/20
         new Entry("Skorpion", "Skorpion", Cat.SMG, Rarity.Common),
         new Entry("H&K UMP45", "UMP45", Cat.SMG, Rarity.Common),
         new Entry("H&K MP7", "MP7", Cat.SMG, Rarity.Common),
         new Entry("KRISS VECTOR", "Vector", Cat.SMG, Rarity.Rare),
         new Entry("FN P90", "P90", Cat.SMG, Rarity.Rare),
-        new Entry("SR-3m", "SR-3M", Cat.SMG, Rarity.Rare),
+        new Entry("SR-3m", "SR-3M", Cat.SMG, Rarity.Epic),
         // 근접 (도끼 대신 팩에 있는 토마호크)
         new Entry("Tomahawk", "Axe", Cat.Melee, Rarity.Common),
     };
@@ -276,7 +276,7 @@ public static class LiberatorWeaponBuilder
                 break;
             case Cat.SMG:
                 d.type = WeaponType.AR; // AR 탄약 공유
-                d.damage = new[] { 12f, 16f, 16f }[t]; d.maxAmmo = 30;
+                d.damage = new[] { 12f, 16f, 20f }[t]; d.maxAmmo = 30;
                 d.attackRate = 0.06f; d.autoFire = true; d.reloadTime = 1.6f;
                 d.bulletSpeed = 120f; d.effectiveRange = 25f; d.recoil = 3f;
                 d.positionOffset = new Vector3(0.01f, 0.06f, -0.2f); d.rotationOffset = new Vector3(30f, 170f, 0f);

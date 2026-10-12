@@ -20,7 +20,7 @@ public class PlayerController : MonoBehaviour
     public GameObject rangedWeaponObject;
     public GameObject meleeWeaponObject;
 
-    [Tooltip("시작 시 핫바 1번에 자동 지급할 근접 무기 (도끼). 시작 총은 2번으로 감")]
+    [Tooltip("시작 시 핫바 1번에 자동 지급할 근접 무기 (도끼). 지정하면 시작 총은 지급 안 함 (2번 비움)")]
     public WeaponData startingMeleeWeapon;
 
     private Weapon rangedWeapon;
@@ -63,12 +63,11 @@ public class PlayerController : MonoBehaviour
 
         weaponHandAttacher = FindAnyObjectByType<WeaponHandAttacher>();
 
-        // 1번 = 도끼, 2번 = 시작 총 (AddWeapon은 선택된 빈 슬롯 → 다음 빈 무기 슬롯 순서로 넣음)
+        // 시작 지급: 도끼만 1번 (2번은 비움). 도끼가 지정 안 돼 있으면 예전처럼 시작 총 지급
         var hotbar = WeaponHotbarUI.Instance;
         if (hotbar != null && startingMeleeWeapon != null)
             hotbar.AddWeapon(startingMeleeWeapon);
-
-        if (rangedWeapon != null && rangedWeapon.weaponData != null)
+        else if (rangedWeapon != null && rangedWeapon.weaponData != null)
             hotbar?.AddWeapon(rangedWeapon.weaponData, rangedWeapon.GetCurrentAmmo());
 
         EquipWeapon(WeaponMode.Ranged);
@@ -87,8 +86,10 @@ public class PlayerController : MonoBehaviour
         inputActions.Player.Sprint.canceled += _ => locomotion.SetSprinting(false);
         inputActions.Player.Roll.performed += _ => locomotion.TryRoll(moveInput);
 
-        inputActions.Player.EquipRanged.performed += _ => EquipWeapon(WeaponMode.Ranged);
-        inputActions.Player.EquipMelee.performed += _ => EquipWeapon(WeaponMode.Melee);
+        // 1키(EquipRanged)/V키(EquipMelee): 핫바가 있으면 핫바가 무기 전환을 담당 → 무시
+        // (안 그러면 1번 슬롯 도끼를 고를 때 1키가 총 모드로 덮어써버림)
+        inputActions.Player.EquipRanged.performed += _ => { if (WeaponHotbarUI.Instance == null) EquipWeapon(WeaponMode.Ranged); };
+        inputActions.Player.EquipMelee.performed += _ => { if (WeaponHotbarUI.Instance == null) EquipWeapon(WeaponMode.Melee); };
 
         inputActions.Player.Restart.performed += OnRestartPerformed;
         inputActions.Player.Interact.performed += OnInteractPerformed;
