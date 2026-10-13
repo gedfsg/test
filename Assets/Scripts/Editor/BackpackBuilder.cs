@@ -3,7 +3,7 @@ using UnityEditor;
 using UnityEngine;
 
 /// <summary>
-/// 가방 GLB → 등에 붙일 프리팹 + 아이콘 + 가방 3종(BackpackData) 자동 생성.
+/// 가방 GLB → 등에 붙일 프리팹 + 아이콘 + 가방(BackpackData, 1종 24칸) 자동 생성.
 /// 메뉴: Tools/Items/Build Backpacks (다시 실행하면 덮어씀)
 /// 프리팹 규칙: 높이 1m, 끈(등에 닿는 면) = +Z, 원점 = 끈 면 가운데 → BackpackManager가 visualHeight로 스케일
 /// GLB 원본은 끈 면이 +X라서 Y축 -90° 회전.
@@ -26,11 +26,11 @@ public static class BackpackBuilder
 
         var prefab = BuildPrefab(glb);
         var icon = BuildIcon(prefab);
-        Make("Backpack_Small", "작은 가방", 15, 0.6f, Rarity.Common, prefab, icon);
-        Make("Backpack_Medium", "중간 가방", 24, 0.75f, Rarity.Rare, prefab, icon);
-        Make("Backpack_Large", "큰 가방", 40, 0.9f, Rarity.Epic, prefab, icon);
+        // 가방은 1종 (24칸). 예전 3종 중 작은/큰 가방 데이터는 삭제
+        Make("Backpack_Medium", "가방", 24, 0.75f, Rarity.Rare, prefab, icon);
+        foreach (var old in new[] { "Backpack_Small", "Backpack_Large" }) AssetDatabase.DeleteAsset($"{DataDir}/{old}.asset");
         AssetDatabase.SaveAssets();
-        Debug.Log("[BackpackBuilder] 완료 - 가방 3종 (15/24/40칸)");
+        Debug.Log("[BackpackBuilder] 완료 - 가방 1종 (24칸)");
     }
 
     static GameObject BuildPrefab(GameObject glb)

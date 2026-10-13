@@ -49,7 +49,7 @@ public static class LootTableBuilder
         // ── 상자 ──
         var wood = new List<E>(foods) { new E(C + "Bandage.asset", 10), PAmmo(10, 10, 20), ARAmmo(8, 15, 30), SGAmmo(6, 4, 8) };
         AddGuns(wood, new[] { "G17", "P9" }, 3f); AddGuns(wood, new[] { "Skorpion", "S12P8" }, 1f);
-        wood.Add(new E(B + "Backpack_Small.asset", 2));
+        wood.Add(new E(B + "Backpack_Medium.asset", 2)); // 가방 (1종)
         var crateWood = Table("Crate_Wood", 2, 5, wood);
 
         var metal = new List<E>
@@ -59,12 +59,12 @@ public static class LootTableBuilder
             PAmmo(8, 15, 30), ARAmmo(10, 30, 60), SGAmmo(6, 6, 12),
         };
         AddGuns(metal, new[] { "G17", "S12P8", "AK-556", "AR-15", "UMP45" }, 2f); AddGuns(metal, RareGuns, 1.5f);
-        metal.Add(new E(B + "Backpack_Medium.asset", 2)); metal.Add(new E(B + "Backpack_Large.asset", 1));
+        metal.Add(new E(B + "Backpack_Medium.asset", 3));
         var crateMetal = Table("Crate_Metal", 2, 5, metal);
 
         var military = new List<E> { new E(C + "MedKit.asset", 6), new E(C + "Painkiller.asset", 4), PAmmo(8, 20, 30), ARAmmo(12, 30, 60), SGAmmo(8, 8, 16) };
         AddGuns(military, RareGuns, 2f);
-        military.Add(new E(B + "Backpack_Large.asset", 3));
+        military.Add(new E(B + "Backpack_Medium.asset", 3));
         var crateMilitary = Table("Crate_Military", 1, 4, military);   // + 보장 1개 = 2~5개
         var epic = new List<E>(); AddGuns(epic, EpicGuns, 1f);
         var crateMilitaryG = Table("Crate_Military_Guaranteed", 1, 1, epic);
@@ -72,7 +72,7 @@ public static class LootTableBuilder
         // ── 건물 ──
         var house = new List<E>(foods) { new E(C + "Bandage.asset", 6), PAmmo(4, 8, 15) };
         AddGuns(house, new[] { "G17", "P9" }, 1.5f); // 권총 가끔 (~3%)
-        house.Add(new E(B + "Backpack_Small.asset", 1));
+        house.Add(new E(B + "Backpack_Medium.asset", 1));
         var police = new List<E> { ARAmmo(20, 30, 60), PAmmo(15, 20, 40), SGAmmo(12, 8, 16), new E(C + "Bandage.asset", 5), new E(C + "MedKit.asset", 3) };
         AddGuns(police, new[] { "AK-556", "AR-15", "G36K", "FAMAS", "S12P8" }, 4f); AddGuns(police, new[] { "L85A2", "AUG", "SAIGA-12", "XMA-10" }, 1.5f); AddGuns(police, new[] { "G17" }, 3f);
         var mart = new List<E>(foods);

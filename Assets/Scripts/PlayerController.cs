@@ -194,7 +194,13 @@ public class PlayerController : MonoBehaviour
 
         bool picked = false;
 
-        if (nearestItem.itemData is WeaponData wd)
+        if (nearestItem.itemData is BackpackData bag)
+        {
+            // 가방: 주우면 바로 등에 멤 (이미 있으면 무시 - 바닥에 그대로)
+            var bm = BackpackManager.Instance;
+            picked = bm != null && bm.TryPickup(bag);
+        }
+        else if (nearestItem.itemData is WeaponData wd)
         {
             var hotbar = WeaponHotbarUI.Instance;
             // 무기 슬롯(1,2)에 자리 있으면 핫바, 꽉 찼으면 인벤토리로

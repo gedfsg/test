@@ -2,9 +2,9 @@ using UnityEngine;
 
 /// <summary>
 /// 가방 + 등 캐리 비주얼 (플레이어에 자동으로 붙음 - PlayerController.Start)
-///  - 가방 장착: 인벤토리 칸 수 변경 + 인벤토리 창 크기 조정 + 등(가슴 본)에 가방 모델
-///    이전 가방은 바닥에 떨어뜨림. 새 가방 칸이 지금 아이템 수보다 적으면 거부
-///  - 시작 시 중간 가방(24칸) 지급 (Resources/Backpacks/Backpack_Medium)
+///  - 가방은 1종(24칸). 시작 시 없음(10칸). 바닥의 가방을 F로 주우면 바로 등에 멤 (TryPickup)
+///    이미 메고 있으면 무시, 벗을 수 없음
+///  - 장착 시: 인벤토리 칸 수 변경 + 인벤토리 창 크기 조정 + 등(가슴 본)에 가방 모델
 ///  - 등 무기: 핫바 1,2 중 "손에 안 든" 무기를 등에 멤. 가방 있으면 가방 위, 없으면 등 가운데.
 ///    슬롯 1↔2 전환하면 손↔등 즉시 교체 (애니메이션 없음)
 /// 장착점(BackpackSlot / WeaponHolsterSlot)은 시작할 때 캐릭터 기준 위치로 한 번 계산해서 가슴 본에 붙여둠
@@ -17,7 +17,8 @@ public class BackpackManager : MonoBehaviour
     [Header("가방")]
     [Tooltip("가방 없을 때 인벤토리 칸 수")]
     public int noBackpackCapacity = 10;
-    public string startingBackpackResource = "Backpacks/Backpack_Medium";
+    [Tooltip("시작 시 지급할 가방 (Resources 경로). 비우면 가방 없이 시작")]
+    public string startingBackpackResource = "";
 
     [Header("장착점 (캐릭터 기준, m)")]
     public string chestBoneName = "spine.002";
@@ -43,7 +44,7 @@ public class BackpackManager : MonoBehaviour
         inventoryUI = FindFirstObjectByType<InventoryUI>(FindObjectsInactive.Include);
         // 장착점은 애니메이션 포즈가 적용된 뒤(첫 LateUpdate)에 만듦 - Start 시점은 기본 자세라 본 방향이 다름
 
-        var start = Resources.Load<BackpackData>(startingBackpackResource);
+        var start = string.IsNullOrEmpty(startingBackpackResource) ? null : Resources.Load<BackpackData>(startingBackpackResource);
         if (start != null) Equip(start, null);
         else SetCapacity(noBackpackCapacity);
     }
@@ -99,7 +100,21 @@ public class BackpackManager : MonoBehaviour
         return true;
     }
 
-    /// <summary>가방 벗기 (바닥에 내려놓음). 아이템이 기본 칸 수보다 많으면 거부</summary>
+    /// <summary>바닥 가방 줍기: 가방이 없으면 바로 장착하고 true, 이미 있으면 무시(false, 바닥에 그대로)</summary>
+    public bool TryPickup(BackpackData bag)
+    {
+        if (bag == null) return false;
+        if (Current != null)
+        {
+            PickupFeedbackUI.Instance?.ShowWarning("이미 가방을 메고 있음");
+            return false;
+        }
+        bool ok = Equip(bag, null);
+        if (ok) PickupFeedbackUI.Instance?.Show($"{bag.itemName} 장착 ({bag.capacity}칸)");
+        return ok;
+    }
+
+    /// <summary>가방 벗기 (바닥에 내려놓음). 아이템이 기본 칸 수보다 많으면 거부. ※ 현재 게임 규칙상 호출하는 곳 없음(벗을 수 없음)</summary>
     public bool Unequip()
     {
         if (Current == null) return false;
