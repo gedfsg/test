@@ -44,6 +44,8 @@ public class WeaponHotbarUI : MonoBehaviour
 
     private SlotView[] slots = new SlotView[SLOT_COUNT];
     private UnityEngine.UI.Image[] weaponHints = new UnityEngine.UI.Image[SLOT_COUNT]; // 1,2번 빈 칸의 흐린 총 아이콘
+    [Tooltip("1,2번 빈 무기 칸에 흐린 총 실루엣 표시. 아이템이 있는 것처럼 보여서(유령 아이콘) 기본 끔")]
+    [SerializeField] private bool showWeaponHint = false;
 
     private PlayerController playerController;
 
@@ -374,7 +376,7 @@ public class WeaponHotbarUI : MonoBehaviour
         lr.anchoredPosition = new Vector2(0f, 4f); // 칸 바로 위
         label.raycastTarget = false;
 
-        var hintSprite = Resources.Load<Sprite>("HUD/Sprites/WeaponSilhouette");
+        var hintSprite = showWeaponHint ? Resources.Load<Sprite>("HUD/Sprites/WeaponSilhouette") : null;
         if (hintSprite != null)
         {
             var hint = new GameObject("WeaponHint", typeof(RectTransform), typeof(UnityEngine.UI.Image));
