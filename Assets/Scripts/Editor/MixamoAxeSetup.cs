@@ -14,7 +14,7 @@ using UnityEngine;
 ///       한 번 재생: MeleeAttack / Reload / UseItem / WeaponSwitch / Hit (Trigger) → 끝나면 현재 무기 대기 자세로
 ///     - Base Layer: Dead(Bool) → 사망 (전신)
 ///  3) 좀비 ZombieAnimator.controller
-///     - Attack(Trigger) + AttackIndex(Int 0/1) → 공격 / 물기 랜덤
+///     - Attack(Trigger) + AttackIndex(Int 0/1) → 공격 / 목 물기(neck bite) 랜덤
 ///     - IsRunning(Bool) → 달리기 (러너), Hit(Trigger) → 비틀거림, Die(Trigger) → 사망
 /// </summary>
 public static class MixamoAxeSetup
@@ -347,8 +347,10 @@ public static class MixamoAxeSetup
             a.AddCondition(AnimatorConditionMode.Equals, index, "AttackIndex");
             var b = s.AddTransition(idle); b.hasExitTime = true; b.exitTime = 0.9f; b.duration = 0.1f;
         }
-        Attack("Attack", "zombie attack.fbx", 0, 0, 0f);
-        Attack("Attack2", "zombie biting.fbx", 1, 80, 2.5f); // 원본 6.6초는 너무 길어서 2.5초로
+        // 두 공격 모두 1.3초 = 공격 쿨타임(1.5초)보다 짧게 → 동작 중간에 다음 공격이 끊고 들어오지 않음
+        // (zombie biting은 바닥에 엎드려 뜯어먹는 동작이라 머리를 땅에 박아서 서서 덤벼드는 neck bite로 교체)
+        Attack("Attack", "zombie attack.fbx", 0, 0, 1.3f);
+        Attack("Attack2", "zombie neck bite.fbx", 1, 80, 1.3f);
 
         // 달리기 (러너)
         var run = State(sm, "Run", Clip(ZombieDir + "/zombie run.fbx"), 0f, new Vector3(300, 250, 0));

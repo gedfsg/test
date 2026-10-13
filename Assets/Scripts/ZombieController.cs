@@ -40,6 +40,10 @@ public class ZombieController : MonoBehaviour
 
     // ─────────────────────────────────────────────
     private float attackTimer;
+    private bool  inAttackRange;     // 공격 범위 판정 (들어올 땐 attackRange, 나갈 땐 조금 더 멀어야 → 경계에서 떨림 방지)
+    private float attackLockUntil;   // 공격 동작 재생 중엔 쫓아가지 않고 제자리에서 바라보기만
+    [Tooltip("공격 애니메이션 재생 시간(초). 이 동안은 제자리에서 플레이어만 바라봄 (Animator의 공격 재생 시간과 맞출 것)")]
+    public float attackAnimDuration = 1.3f;
     private bool  isDead;
     private bool  isStunned;
     private float stunTimer;
@@ -226,12 +230,15 @@ public class ZombieController : MonoBehaviour
 
         float dist = Vector3.Distance(transform.position, target.position);
 
-        // 공격 범위 내: NavMesh와 상관없이 공격
-        if (dist <= attackRange)
+        // 공격 범위 내 (또는 공격 동작 재생 중): NavMesh와 상관없이 제자리에서 공격
+        // 들어올 땐 attackRange, 나갈 땐 1.25배 → 경계에서 매 프레임 추격/정지를 오가며 Idle↔Walk로 떨던 문제 방지
+        inAttackRange = inAttackRange ? dist <= attackRange * 1.25f : dist <= attackRange;
+        if (inAttackRange || Time.time < attackLockUntil)
         {
-            if (canMove) agent.ResetPath();
+            if (canMove) { agent.ResetPath(); agent.velocity = Vector3.zero; } // 미끄러지며 멈추지 않게 즉시 정지
             FacePlayer();
             SetAnimSpeed(0f);
+            if (!inAttackRange) return; // 동작 끝날 때까지 기다리기만
 
             attackTimer -= Time.deltaTime;
             if (attackTimer <= 0f)
@@ -358,8 +365,9 @@ public class ZombieController : MonoBehaviour
     {
         if (anim != null && anim.runtimeAnimatorController != null)
         {
-            if (HasParam(HashAttackIdx)) anim.SetInteger(HashAttackIdx, Random.Range(0, 2)); // 공격 / 물기 랜덤
+            if (HasParam(HashAttackIdx)) anim.SetInteger(HashAttackIdx, Random.Range(0, 2)); // 공격 / 목 물기 랜덤
             anim.SetTrigger(HashAttack);
+            attackLockUntil = Time.time + attackAnimDuration;
         }
 
         if (target == null) return;
