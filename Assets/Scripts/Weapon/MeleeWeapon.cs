@@ -8,6 +8,8 @@ public class MeleeWeapon : MonoBehaviour
     public float attackRange = 1.5f;
     public string shooterTag;
     public Transform slashPivot;
+    [Tooltip("예전 가짜 휘두르기 궤적(slashPivot을 180° 돌리는 하얀 트레일). 실제 휘두르기 애니메이션이 생겨서 경로가 안 맞아 기본 끔")]
+    public bool useSlashTrail = false;
 
     // 추가된 데이터 연동 변수임.
     [Header("Weapon Data")]
@@ -32,7 +34,7 @@ public class MeleeWeapon : MonoBehaviour
 
     private void Attack()
     {
-        if (slashPivot != null)
+        if (useSlashTrail && slashPivot != null)
         {
             StartCoroutine(SwingEffect());
         }

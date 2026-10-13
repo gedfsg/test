@@ -279,7 +279,10 @@ public class PlayerController : MonoBehaviour
         else if (currentMode == WeaponMode.Melee && meleeWeapon != null && isFireButtonPressed)
         {
             if (meleeWeapon.TryAttack() && animator != null)
+            {
                 animator.SetTrigger(MeleeAttackHash); // 도끼 휘두르기 (Upper Body 레이어)
+                UpperAction(0.8f);                    // 휘두르는 동안만 상체 레이어 켬
+            }
         }
 
         firePressed = false;
@@ -330,6 +333,7 @@ public class PlayerController : MonoBehaviour
         // 아이템 사용 동작 (마시기, 상체만 → 걸으면서 가능) - 그동안 왼손 IK 끔
         if (EnsureAnimRefs()) animator.SetTrigger(UseItemHash);
         ikBlockUntil = Time.time + 3.0f;
+        UpperAction(3.0f);
 
         PlayerBuffManager buffMgr = GetComponent<PlayerBuffManager>();
         // 씬 플레이어에 PlayerBuffManager가 안 붙어 있으면 수분/포만감/지속 회복이 전부 무시됐음 → 없으면 붙임
@@ -378,6 +382,11 @@ public class PlayerController : MonoBehaviour
     private bool isDead;
     private float reloadUntil;       // 재장전 중 (IK 끔 + 조준 멈춤)
     private float ikBlockUntil;      // 아이템 사용/무기 전환 중 (IK 끔)
+    private float upperActionUntil;  // 상체 동작(휘두르기/마시기/전환/피격) 재생 중 - 도끼일 때 이 동안만 상체 레이어 켬
+    private float upperWeight = 1f;
+
+    /// <summary>상체 레이어로 재생하는 동작 시작 (도끼 들었을 땐 이 시간 동안만 상체 레이어가 켜짐)</summary>
+    void UpperAction(float seconds) => upperActionUntil = Mathf.Max(upperActionUntil, Time.time + seconds);
 
     bool EnsureAnimRefs()
     {
@@ -408,6 +417,20 @@ public class PlayerController : MonoBehaviour
         bool reloading = Time.time < reloadUntil;
         bool ikOff = meleeHeld || isDead || reloading || Time.time < ikBlockUntil;
         if (handIKRig != null) handIKRig.weight = ikOff ? 0f : 1f;
+
+        // 상체 레이어: 총 = 항상 켬(권총/소총 자세), 도끼 = 평소 끔(맨손처럼 자연스럽게) + 상체 동작 중에만 켬, 사망 = 끔
+        float target = isDead ? 0f : (!meleeHeld || Time.time < upperActionUntil) ? 1f : 0f;
+        upperWeight = Mathf.MoveTowards(upperWeight, target, Time.deltaTime * (target > upperWeight ? 12f : 4f)); // 켤 땐 빠르게, 끌 땐 부드럽게
+        if (animator != null && upperBodyLayer >= 0) animator.SetLayerWeight(upperBodyLayer, upperWeight);
+
+        // 도끼 손 회전: 들고 다닐 때(carry) ↔ 휘두를 때(rotationOffset)를 상체 레이어 가중치에 맞춰 부드럽게 전환
+        if (meleeHeld && meleeWeapon != null && meleeWeapon.weaponData != null && weaponHandAttacher != null)
+        {
+            var wd = meleeWeapon.weaponData;
+            Quaternion swing = Quaternion.Euler(wd.rotationOffset);
+            Quaternion carry = wd.carryRotationOffset != Vector3.zero ? Quaternion.Euler(wd.carryRotationOffset) : swing;
+            weaponHandAttacher.SetVisualLocalRotation(Quaternion.Slerp(carry, swing, upperWeight));
+        }
         if (weaponHandAttacher == null) weaponHandAttacher = FindAnyObjectByType<WeaponHandAttacher>();
         if (weaponHandAttacher != null) weaponHandAttacher.aimAtTarget = !(meleeHeld || isDead || reloading);
     }
@@ -416,11 +439,12 @@ public class PlayerController : MonoBehaviour
     {
         if (EnsureAnimRefs()) animator.SetTrigger(ReloadHash);
         reloadUntil = Time.time + reloadTime;
+        UpperAction(1.8f);
     }
 
     void OnPlayerHurt()
     {
-        if (!isDead && EnsureAnimRefs()) animator.SetTrigger(HitHash);
+        if (!isDead && EnsureAnimRefs()) { animator.SetTrigger(HitHash); UpperAction(0.6f); }
     }
 
     void OnPlayerDied()
@@ -442,6 +466,7 @@ public class PlayerController : MonoBehaviour
         if (isDead) return;
         if (EnsureAnimRefs()) animator.SetTrigger(WeaponSwitchHash);
         ikBlockUntil = Time.time + 0.6f;
+        UpperAction(0.6f);
     }
 
     public void HideCurrentWeapon()

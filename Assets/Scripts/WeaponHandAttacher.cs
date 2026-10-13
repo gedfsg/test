@@ -62,6 +62,13 @@ public class WeaponHandAttacher : MonoBehaviour
     [SerializeField] private Transform currentLeftHandPoint;
     [SerializeField] private Transform currentMuzzlePoint;
     private Transform currentWeaponVisualRoot;
+    private Transform currentVisual; // 마지막으로 손에 붙인 무기 모델
+
+    /// <summary>손에 든 무기 모델의 로컬 회전 직접 지정 (도끼: 들고 다닐 때 ↔ 휘두를 때 전환용)</summary>
+    public void SetVisualLocalRotation(Quaternion rot)
+    {
+        if (currentVisual != null) currentVisual.localRotation = rot;
+    }
 
     // 총구가 무기 루트 기준으로 갖는 "고정된" 회전 오프셋. 무기 장착 시점에 한 번만 계산해서
     // 캐싱해두고, 매 프레임 이 값을 그대로 재사용한다. 매 프레임 currentMuzzlePoint.rotation을
@@ -151,6 +158,7 @@ public class WeaponHandAttacher : MonoBehaviour
         }
 
         GameObject newVisual = Instantiate(newWeaponPrefab, handBone);
+        currentVisual = newVisual.transform;
         newVisual.transform.localPosition = posOffset;
         newVisual.transform.localRotation = Quaternion.Euler(rotOffset);
 

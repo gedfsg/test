@@ -7,7 +7,7 @@ using UnityEngine;
 /// Mixamo 애니메이션 전체 설정 (플레이어 + 좀비).
 /// 메뉴: Tools/Animation/Setup Mixamo (All)  (다시 실행해도 같은 결과)
 ///  1) Character/Motion/Mixamo/**, Character/Zombie/Mixamo/** 의 FBX → Humanoid (Create From This Model)
-///     idle/walk/run/crawl/strafe 은 Loop, 전부 제자리(루트 고정). 캐릭터 모델 파일(Parasite L Starkie)은 삭제
+///     idle/walk/run/crawl/strafe/sprint 은 Loop, 수평 이동은 루트로 빼서 몸이 제자리. 캐릭터 모델 파일(Parasite L Starkie)은 삭제
 ///  2) 플레이어 PlayerAnimator.controller
 ///     - Upper Body 레이어(상체 마스크, 가중치 1):
 ///       대기 자세 WeaponPose(Int) 0=도끼 1=권총 2=소총  ← 무기 바꾸면 PlayerController가 설정
@@ -74,7 +74,7 @@ public static class MixamoAxeSetup
 
             // 이미 원하는 설정이면 재임포트 생략 (전체 실행이 빨라짐)
             if (imp.animationType == ModelImporterAnimationType.Human && imp.avatarSetup == ModelImporterAvatarSetup.CreateFromThisModel
-                && imp.clipAnimations.Length > 0 && System.Array.TrueForAll(imp.clipAnimations, c => c.loopTime == loop && c.lockRootPositionXZ && c.lockRootRotation))
+                && imp.clipAnimations.Length > 0 && System.Array.TrueForAll(imp.clipAnimations, c => c.loopTime == loop && !c.lockRootPositionXZ && c.lockRootRotation))
                 continue;
 
             imp.animationType = ModelImporterAnimationType.Human;
@@ -83,7 +83,9 @@ public static class MixamoAxeSetup
             foreach (var c in clips)
             {
                 c.loopTime = loop;
-                c.lockRootRotation = true; c.lockRootHeightY = true; c.lockRootPositionXZ = true; // 제자리 동작
+                // 수평 이동(XZ)은 포즈에 굽지 않음 → 이동량이 루트로 빠지고, 루트 이동은 안 쓰니(applyRootMotion 꺼짐) 몸이 항상 제자리.
+                // (굽으면 달리기 한 사이클 동안 몸이 앞으로 쭉 나갔다가 루프 때 원위치로 튀어서 미끄러지듯 어색했음)
+                c.lockRootRotation = true; c.lockRootHeightY = true; c.lockRootPositionXZ = false;
                 c.keepOriginalOrientation = true; c.keepOriginalPositionY = true; c.keepOriginalPositionXZ = true;
             }
             imp.clipAnimations = clips;
@@ -152,7 +154,7 @@ public static class MixamoAxeSetup
         // 대기 자세 3종 (WeaponPose로 선택)
         var idles = new[]
         {
-            State(sm, "AxeIdle", Clip(Axe + "standing block idle.fbx"), 0f, new Vector3(300, 0, 0)), // 도끼를 어깨 근처로 세워 든 대기 (standing idle은 팔을 축 늘어뜨림)
+            State(sm, "AxeIdle", Clip(Axe + "unarmed idle.fbx"), 0f, new Vector3(300, 0, 0)), // 도끼는 상체 레이어를 평소 끔(가중치 0) → 동작 끝나고 꺼지는 동안 섞여도 어색하지 않게 맨손 대기
             State(sm, "PistolIdle", Clip(Pistol + "pistol idle.fbx"), 0f, new Vector3(300, 80, 0)),
             State(sm, "RifleIdle", Clip(Rifle + "rifle aiming idle.fbx"), 0f, new Vector3(300, 160, 0)),
         };
@@ -225,9 +227,23 @@ public static class MixamoAxeSetup
             }
         if (unarmed != null) foreach (var t in unarmed.transitions) if (t.destinationState == null || t.destinationState.name.StartsWith("Loco_")) unarmed.RemoveTransition(t);
 
-        var axe = Tree(ac, sm, "Loco_Axe", Axe + "standing block idle.fbx",
-            new[] { Axe + "standing walk forward.fbx", Axe + "standing walk back.fbx", Axe + "standing walk left.fbx", Axe + "standing walk right.fbx" },
-            new[] { RunDir + "Sword And Shield Run.fbx", Axe + "standing run back.fbx" }, new Vector3(500, 300, 0));
+        // 도끼: 전투 자세 없이 맨손처럼 (상체 레이어 평소 꺼짐 → 팔도 이 트리가 결정). 발 미끄러짐 줄이려고 클립 보폭 속도에 맞춰 재생 속도 조절
+        // (캐릭터 humanScale 1.495 기준: unarmed run forward ≈ 4.1/s → 걷기 이동 5에 맞게 1.23배, Shift 대쉬 9에는 2배)
+        const string Ch17 = "Assets/Character/testmotioh/Ch17_nonPBR@";
+        var axe = TreeExplicit(ac, sm, "Loco_Axe", new Vector3(500, 300, 0), new (string, Vector2, float)[]
+        {
+            (Axe + "unarmed idle.fbx", Vector2.zero, 1f),
+            (Axe + "unarmed run forward.fbx", new Vector2(0f, 1f), 1.23f),
+            (Axe + "unarmed run back.fbx", new Vector2(0f, -1f), 1.5f),
+            (Ch17 + "Walk Left.fbx", new Vector2(-1f, 0f), 2.0f),
+            (Ch17 + "Walk Right.fbx", new Vector2(1f, 0f), 2.0f),
+            (Ch17 + "Walk Forward Left.fbx", new Vector2(-0.7f, 0.7f), 2.0f),
+            (Ch17 + "Walk Forward Right.fbx", new Vector2(0.7f, 0.7f), 2.0f),
+            (Ch17 + "Walk Backward Left.fbx", new Vector2(-0.7f, -0.7f), 2.0f),
+            (Ch17 + "Walk Backward Right.fbx", new Vector2(0.7f, -0.7f), 2.0f),
+            (Axe + "unarmed run forward.fbx", new Vector2(0f, 2f), 2.0f),
+            (Axe + "unarmed run back.fbx", new Vector2(0f, -2f), 2.2f),
+        });
         var pistol = Tree(ac, sm, "Loco_Pistol", Pistol + "pistol idle.fbx",
             // arc(방향 전환하며 걷기)는 대각선 이동이 아니라 제외. strafe = 왼쪽, strafe (2) = 오른쪽 (루트 커브로 확인)
             new[] { Pistol + "pistol walk.fbx", Pistol + "pistol walk backward.fbx", Pistol + "pistol strafe.fbx", Pistol + "pistol strafe (2).fbx" },
@@ -256,6 +272,21 @@ public static class MixamoAxeSetup
         var t = from.AddTransition(to);
         t.hasExitTime = false; t.duration = 0.2f;
         t.AddCondition(AnimatorConditionMode.Equals, pose, "WeaponPose");
+    }
+
+    // 위치/재생속도를 직접 지정하는 블렌드 트리 (제자리 클립은 루트 이동이 없어서 방향 자동 판별이 안 됨)
+    static AnimatorState TreeExplicit(AnimatorController ac, AnimatorStateMachine sm, string name, Vector3 pos, (string path, Vector2 at, float speed)[] entries)
+    {
+        var tree = new BlendTree { name = name, blendType = BlendTreeType.FreeformDirectional2D, blendParameter = "Horizontal", blendParameterY = "Vertical", hideFlags = HideFlags.HideInHierarchy };
+        AssetDatabase.AddObjectToAsset(tree, ac);
+        foreach (var (path, at, _) in entries) { var c = Clip(path); if (c != null) tree.AddChild(c, at); }
+        var children = tree.children;
+        int k = 0;
+        foreach (var (path, at, speed) in entries) { if (Clip(path) == null) continue; children[k].timeScale = speed; k++; }
+        tree.children = children;
+        var state = sm.AddState(name, pos);
+        state.motion = tree;
+        return state;
     }
 
     static AnimatorState Tree(AnimatorController ac, AnimatorStateMachine sm, string name, string idle, string[] walks, string[] runs, Vector3 pos)

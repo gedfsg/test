@@ -34,4 +34,5 @@ MonoBehaviour:
   autoFire: 0
   positionOffset: {x: 0, y: 0, z: 0}
   rotationOffset: {x: 0, y: -90, z: 0}
+  carryRotationOffset: {x: 90, y: 0, z: 0}
   holsterRotation: {x: 306.8699, y: 270, z: 90}

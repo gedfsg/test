@@ -32,6 +32,9 @@ public class WeaponData : ItemData
     public Vector3 positionOffset = new Vector3(0.01f, 0.06f, -0.2f);
     public Vector3 rotationOffset = new Vector3(30f, 200f, -20f);
 
+    [Header("근접 무기: 들고 다닐 때 손 회전 (휘두를 땐 rotationOffset). 0이면 rotationOffset 그대로")]
+    public Vector3 carryRotationOffset = Vector3.zero;
+
     [Header("Back Holster (등에 멜 때 회전, 캐릭터 기준. 0이면 기본 대각선)")]
     public Vector3 holsterRotation = Vector3.zero;
 }
