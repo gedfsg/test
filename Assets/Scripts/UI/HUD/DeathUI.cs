@@ -7,7 +7,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 사망 화면: 플레이어 체력 0 → Dying 모션 → showDelay초 뒤
-///  화면이 검게 fade in (fadeDuration) → "사망" 빨간 큰 글자 fade in (textFade) + 아래 "R to Restart"
+///  화면이 검게 fade in (fadeDuration) → "GAME OVER" 빨간 큰 글자 fade in (textFade) + 아래 "R - 다시 시작"
 ///  R키로 재시작 (씬 다시 로드)
 /// Health가 사망 4.5초 뒤 Time.timeScale = 0으로 멈추므로 전부 실제 시간(unscaled) 기준으로 동작.
 /// 씬에 따로 둘 필요 없음 - Player가 있는 씬이면 자동 생성.
@@ -71,9 +71,10 @@ public class DeathUI : MonoBehaviour
         black.color = new Color(0f, 0f, 0f, 0f);
         black.raycastTarget = false;
 
-        title = HudStyle.NewText(transform, "Title", "사망", HudStyle.Bold, 120f, new Color(0.85f, 0.1f, 0.1f, 0f),
-                                 TextAlignmentOptions.Center, new Vector2(0f, 30f), new Vector2(600f, 160f));
-        hint = HudStyle.NewText(transform, "Hint", "R to Restart", HudStyle.Regular, 28f, new Color(1f, 1f, 1f, 0f),
+        title = HudStyle.NewText(transform, "Title", "GAME OVER", HudStyle.Bold, 110f, new Color(0.85f, 0.1f, 0.1f, 0f),
+                                 TextAlignmentOptions.Center, new Vector2(0f, 30f), new Vector2(1000f, 160f));
+        title.characterSpacing = 4f;
+        hint = HudStyle.NewText(transform, "Hint", "R - 다시 시작", HudStyle.Regular, 28f, new Color(1f, 1f, 1f, 0f),
                                 TextAlignmentOptions.Center, new Vector2(0f, -80f), new Vector2(400f, 40f));
     }
 
