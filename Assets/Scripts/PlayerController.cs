@@ -75,6 +75,23 @@ public class PlayerController : MonoBehaviour
 
         EquipWeapon(WeaponMode.Ranged);
         if (hotbar != null && startingMeleeWeapon != null) hotbar.SelectSlot(0); // 도끼 들고 시작
+
+        // 애니메이션 연결: 피격 / 사망 / 재장전
+        var health = GetComponent<Health>();
+        if (health != null)
+        {
+            if (health.onHurt == null) health.onHurt = new UnityEngine.Events.UnityEvent();
+            if (health.onDeath == null) health.onDeath = new UnityEngine.Events.UnityEvent();
+            health.onHurt.AddListener(OnPlayerHurt);
+            health.onDeath.AddListener(OnPlayerDied);
+        }
+        if (rangedWeapon != null)
+        {
+            if (rangedWeapon.onReloadStart == null) rangedWeapon.onReloadStart = new UnityEngine.Events.UnityEvent<float>();
+            if (rangedWeapon.onReloadComplete == null) rangedWeapon.onReloadComplete = new UnityEngine.Events.UnityEvent();
+            rangedWeapon.onReloadStart.AddListener(OnReloadStarted);
+            rangedWeapon.onReloadComplete.AddListener(() => reloadUntil = 0f);
+        }
     }
 
     void OnEnable()
@@ -119,6 +136,8 @@ public class PlayerController : MonoBehaviour
     void Update()
     {
         if (inputActions == null) return;   // Awake 아직 실행 전 보호
+        RefreshIKAndAim();
+        if (isDead) { moveInput = Vector3.zero; return; } // 사망: 이동/조준/공격 입력 무시
 
         // === MAP DEV: 카메라 회전(Q/E) 대응 이동 로직 - 아래 CameraRelativeMove() 사용 ===
         Vector2 inputVector = inputActions.Player.Move.ReadValue<Vector2>();
@@ -308,6 +327,10 @@ public class PlayerController : MonoBehaviour
     /// <summary>소비 아이템 효과 적용 (핫바 3~5 키에서도 호출). 개수 차감은 호출하는 쪽에서</summary>
     public void UseConsumable(ConsumableData consumable)
     {
+        // 아이템 사용 동작 (상체) - 그동안 왼손 IK 끔
+        if (EnsureAnimRefs()) animator.SetTrigger(UseItemHash);
+        ikBlockUntil = Time.time + 1.0f;
+
         PlayerBuffManager buffMgr = GetComponent<PlayerBuffManager>();
         // 씬 플레이어에 PlayerBuffManager가 안 붙어 있으면 수분/포만감/지속 회복이 전부 무시됐음 → 없으면 붙임
         if (buffMgr == null) buffMgr = gameObject.AddComponent<PlayerBuffManager>();
@@ -344,8 +367,19 @@ public class PlayerController : MonoBehaviour
     private UnityEngine.Animations.Rigging.Rig handIKRig;
     private int upperBodyLayer = -1;
 
-    /// <summary>근접 무기 들면: 상체 레이어(도끼 대기/휘두르기) 켜고, 왼손 IK와 총구 조준 회전 끔. 총이면 반대로</summary>
-    private void ApplyMeleePose(bool melee)
+    static readonly int WeaponPoseHash = Animator.StringToHash("WeaponPose");
+    static readonly int ReloadHash = Animator.StringToHash("Reload");
+    static readonly int UseItemHash = Animator.StringToHash("UseItem");
+    static readonly int HitHash = Animator.StringToHash("Hit");
+    static readonly int DeadHash = Animator.StringToHash("Dead");
+    static readonly int WeaponSwitchHash = Animator.StringToHash("WeaponSwitch");
+
+    private bool meleeHeld;          // 도끼 들고 있음
+    private bool isDead;
+    private float reloadUntil;       // 재장전 중 (IK 끔 + 조준 멈춤)
+    private float ikBlockUntil;      // 아이템 사용/무기 전환 중 (IK 끔)
+
+    bool EnsureAnimRefs()
     {
         if (animator == null)
         {
@@ -353,10 +387,61 @@ public class PlayerController : MonoBehaviour
             handIKRig = GetComponentInChildren<UnityEngine.Animations.Rigging.Rig>();
             if (animator != null) upperBodyLayer = animator.GetLayerIndex("Upper Body");
         }
-        if (animator != null && upperBodyLayer >= 0) animator.SetLayerWeight(upperBodyLayer, melee ? 1f : 0f);
-        if (handIKRig != null) handIKRig.weight = melee ? 0f : 1f;
+        return animator != null;
+    }
+
+    /// <summary>근접 무기 들면 도끼 자세(WeaponPose 0)로. IK/조준은 RefreshIKAndAim에서 매 프레임 정리</summary>
+    private void ApplyMeleePose(bool melee)
+    {
+        meleeHeld = melee;
+        if (EnsureAnimRefs() && melee) animator.SetInteger(WeaponPoseHash, 0);
+        RefreshIKAndAim();
+    }
+
+    /// <summary>
+    /// 왼손 IK / 총구 조준 규칙 (한 곳에서 관리):
+    ///  IK 끔 = 도끼 / 재장전 / 아이템 사용 / 무기 전환 / 사망,  조준 멈춤 = 도끼 / 재장전 / 사망
+    /// </summary>
+    private void RefreshIKAndAim()
+    {
+        EnsureAnimRefs();
+        bool reloading = Time.time < reloadUntil;
+        bool ikOff = meleeHeld || isDead || reloading || Time.time < ikBlockUntil;
+        if (handIKRig != null) handIKRig.weight = ikOff ? 0f : 1f;
         if (weaponHandAttacher == null) weaponHandAttacher = FindAnyObjectByType<WeaponHandAttacher>();
-        if (weaponHandAttacher != null) weaponHandAttacher.aimAtTarget = !melee;
+        if (weaponHandAttacher != null) weaponHandAttacher.aimAtTarget = !(meleeHeld || isDead || reloading);
+    }
+
+    void OnReloadStarted(float reloadTime)
+    {
+        if (EnsureAnimRefs()) animator.SetTrigger(ReloadHash);
+        reloadUntil = Time.time + reloadTime;
+    }
+
+    void OnPlayerHurt()
+    {
+        if (!isDead && EnsureAnimRefs()) animator.SetTrigger(HitHash);
+    }
+
+    void OnPlayerDied()
+    {
+        if (isDead) return;
+        isDead = true;
+        isFireButtonPressed = false;
+        if (EnsureAnimRefs())
+        {
+            animator.SetBool(DeadHash, true);
+            if (upperBodyLayer >= 0) animator.SetLayerWeight(upperBodyLayer, 0f); // 전신 사망 동작이 보이게
+        }
+        RefreshIKAndAim();
+    }
+
+    /// <summary>핫바 1↔2 전환 시 (WeaponHotbarUI.SelectSlot) - 무기 꺼내는 동작, 그동안 IK 끔</summary>
+    public void PlayWeaponSwitch()
+    {
+        if (isDead) return;
+        if (EnsureAnimRefs()) animator.SetTrigger(WeaponSwitchHash);
+        ikBlockUntil = Time.time + 0.6f;
     }
 
     public void HideCurrentWeapon()
@@ -381,6 +466,8 @@ public class PlayerController : MonoBehaviour
         else
         {
             EquipWeapon(WeaponMode.Ranged);
+            // 상체 대기 자세: 권총 1, 나머지(AR/SMG/샷건) 소총 2
+            if (EnsureAnimRefs()) animator.SetInteger(WeaponPoseHash, newData.type == WeaponType.Pistol ? 1 : 2);
             if (rangedWeapon != null) rangedWeapon.ChangeWeaponData(newData, savedAmmo);
             if (weaponHandAttacher != null && newData.weaponPrefab != null)
                 weaponHandAttacher.SwapVisual(newData.weaponPrefab, newData.positionOffset, newData.rotationOffset);

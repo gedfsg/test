@@ -83,10 +83,14 @@ public class WeaponHotbarUI : MonoBehaviour
         if (activeSlot >= 0 && items[activeSlot] is WeaponData cur && cur.type != WeaponType.Melee && playerController != null)
             ammos[activeSlot] = playerController.GetCurrentAmmo();
 
+        int prevSlot = activeSlot;
         activeSlot = index;
 
         if (items[index] is WeaponData wd)
+        {
             playerController?.SwapWeaponData(wd, ammos[index]);
+            if (prevSlot != index) playerController?.PlayWeaponSwitch(); // 1↔2 전환 모션
+        }
 
         RefreshAllSlots();
     }
