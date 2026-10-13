@@ -24,6 +24,10 @@ public class ZombieController : MonoBehaviour
     public float wanderIntervalMax  = 5f;
     public float wanderSpeedFactor  = 0.5f;
 
+    [Header("애니메이션")]
+    [Tooltip("러너: 쫓아올 때 달리기 애니메이션 (IsRunning)")]
+    public bool isRunner = false;
+
     [Header("UI")]
     public GameObject damageTextPrefab;
     public bool showHealthBar = true;
@@ -52,6 +56,9 @@ public class ZombieController : MonoBehaviour
     private static readonly int HashSpeed     = Animator.StringToHash("Speed");
     private static readonly int HashAttack    = Animator.StringToHash("Attack");
     private static readonly int HashDie       = Animator.StringToHash("Die");
+    private static readonly int HashHit       = Animator.StringToHash("Hit");
+    private static readonly int HashIsRunning = Animator.StringToHash("IsRunning");
+    private static readonly int HashAttackIdx = Animator.StringToHash("AttackIndex");
 
     // ─────────────────────────────────────────────
     void Awake()
@@ -110,6 +117,8 @@ public class ZombieController : MonoBehaviour
         if (health.onHurt  == null) health.onHurt  = new UnityEngine.Events.UnityEvent();
         health.onDeath.RemoveListener(Die);
         health.onDeath.AddListener(Die);
+        health.onHurt.RemoveListener(OnHurtAnim);
+        health.onHurt.AddListener(OnHurtAnim); // 피격 비틀거림
         if (damageTextPrefab != null) health.damageTextPrefab = damageTextPrefab;
         Debug.Log($"[Zombie] {name} Health 세팅: max={health.maxHealth}, current={health.GetCurrentHealth()}");
 
@@ -318,6 +327,7 @@ public class ZombieController : MonoBehaviour
 
         bool walking = speed > 0.1f;
         anim.SetBool(HashIsWalking, walking);
+        if (HasParam(HashIsRunning)) anim.SetBool(HashIsRunning, isRunner && speed > 2f); // 러너가 쫓아올 때만 달리기
 
         // Speed 파라미터가 있으면 추가 전달
         foreach (var p in anim.parameters)
@@ -347,11 +357,26 @@ public class ZombieController : MonoBehaviour
     void DoAttack()
     {
         if (anim != null && anim.runtimeAnimatorController != null)
+        {
+            if (HasParam(HashAttackIdx)) anim.SetInteger(HashAttackIdx, Random.Range(0, 2)); // 공격 / 물기 랜덤
             anim.SetTrigger(HashAttack);
+        }
 
         if (target == null) return;
         Health playerHealth = target.GetComponent<Health>();
         if (playerHealth != null) playerHealth.TakeDamage(attackDamage);
+    }
+
+    bool HasParam(int hash)
+    {
+        if (anim == null || anim.runtimeAnimatorController == null) return false;
+        foreach (var p in anim.parameters) if (p.nameHash == hash) return true;
+        return false;
+    }
+
+    void OnHurtAnim()
+    {
+        if (!isDead && HasParam(HashHit)) anim.SetTrigger(HashHit);
     }
 
     // ── 외부 데미지 API ──────────────────────────────
@@ -393,17 +418,24 @@ public class ZombieController : MonoBehaviour
 
         if (agent != null) agent.enabled = false;
 
-        // Animator 끄기 (가짜 죽음 애니메이션과 충돌 방지)
-        if (anim != null) anim.enabled = false;
-
         Collider col = GetComponent<Collider>();
         if (col != null) col.enabled = false;
 
         Rigidbody rb = GetComponent<Rigidbody>();
         if (rb != null) rb.isKinematic = true;
 
-        // 죽는 클립이 컨트롤러에 있으면 사용, 없으면 가짜 죽음 코루틴
-        StartCoroutine(FakeDeathRoutine());
+        // 사망 애니메이션(Die)이 컨트롤러에 있으면 그걸 재생, 없으면 예전 코드 쓰러뜨리기
+        if (HasParam(HashDie))
+        {
+            if (HasParam(HashHit)) anim.ResetTrigger(HashHit); // 같은 프레임 피격 트리거가 남아 있으면 사망 후 다시 일어남
+            anim.SetTrigger(HashDie);
+            StartCoroutine(AnimDeathRoutine());
+        }
+        else
+        {
+            if (anim != null) anim.enabled = false; // 가짜 죽음 회전과 충돌 방지
+            StartCoroutine(FakeDeathRoutine());
+        }
     }
 
     void TryDropAmmo()
@@ -413,6 +445,21 @@ public class ZombieController : MonoBehaviour
 
         int amount = Random.Range(dropAmmoMin, dropAmmoMax + 1);
         AmmoDropSpawner.Spawn(transform.position, dropAmmoData, amount);
+    }
+
+    // 사망 애니메이션 재생 → 누워있다가 → 땅 밑으로 가라앉으며 사라짐
+    System.Collections.IEnumerator AnimDeathRoutine()
+    {
+        yield return new WaitForSeconds(3f);
+        float sinkDuration = 1f, sinkElapsed = 0f;
+        Vector3 sinkStart = transform.position, sinkEnd = sinkStart + Vector3.down * 1.5f;
+        while (sinkElapsed < sinkDuration)
+        {
+            sinkElapsed += Time.deltaTime;
+            transform.position = Vector3.Lerp(sinkStart, sinkEnd, sinkElapsed / sinkDuration);
+            yield return null;
+        }
+        Destroy(gameObject);
     }
 
     System.Collections.IEnumerator FakeDeathRoutine()

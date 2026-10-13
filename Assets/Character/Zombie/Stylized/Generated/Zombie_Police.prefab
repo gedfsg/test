@@ -130,6 +130,7 @@ MonoBehaviour:
   wanderIntervalMin: 2
   wanderIntervalMax: 5
   wanderSpeedFactor: 0.5
+  isRunner: 0
   damageTextPrefab: {fileID: 7267503375520356018, guid: 42cf94d8cfb66fd469143863a639bda9, type: 3}
   showHealthBar: 1
   dropAmmoData: {fileID: 11400000, guid: 0b1b7f57d9fbd0d4f89465ac7e6370f5, type: 2}
@@ -176,6 +177,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Health
   maxHealth: 80
+  playerDeathFreezeDelay: 2.5
   onDeath:
     m_PersistentCalls:
       m_Calls: []
