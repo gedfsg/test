@@ -51,6 +51,9 @@ public class WeaponHandAttacher : MonoBehaviour
     [Tooltip("초당 최대 회전 각도(도). 목표 방향으로 즉시 스냅하지 않고 이 속도로 서서히 따라가게 해서, 마우스 좌표의 미세한 프레임 단위 노이즈가 총에 그대로 반영되어 떠는 것을 막는다.")]
     public float aimRotationSpeed = 720f;
 
+    [Tooltip("false면 총구 조준 회전과 왼손 IK 위치 동기화를 멈춤 (도끼처럼 애니메이션 손을 그대로 따라가야 할 때)")]
+    public bool aimAtTarget = true;
+
     [Header("발사 위치 동기화")]
     [Tooltip("Weapon(Weapon.cs)의 Fire Point로 연결된 바로 그 오브젝트. 씬에 고정된 오브젝트를 연결할 것 (총의 자식 X)")]
     public Transform firePointTarget;
@@ -193,8 +196,11 @@ public class WeaponHandAttacher : MonoBehaviour
             if (handBone != null) CacheLeftHandPoint(handBone);
         }
 
-        AimMuzzleAtTarget();
-        SyncLeftHandIK();
+        if (aimAtTarget)
+        {
+            AimMuzzleAtTarget();
+            SyncLeftHandIK();
+        }
         SyncFirePoint();
     }
 

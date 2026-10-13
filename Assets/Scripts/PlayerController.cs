@@ -253,7 +253,8 @@ public class PlayerController : MonoBehaviour
         }
         else if (currentMode == WeaponMode.Melee && meleeWeapon != null && isFireButtonPressed)
         {
-            meleeWeapon.TryAttack();
+            if (meleeWeapon.TryAttack() && animator != null)
+                animator.SetTrigger(MeleeAttackHash); // 도끼 휘두르기 (Upper Body 레이어)
         }
 
         firePressed = false;
@@ -317,6 +318,7 @@ public class PlayerController : MonoBehaviour
     private void EquipWeapon(WeaponMode newMode)
     {
         currentMode = newMode;
+        ApplyMeleePose(newMode == WeaponMode.Melee);
 
         if (currentMode == WeaponMode.Ranged)
         {
@@ -328,6 +330,27 @@ public class PlayerController : MonoBehaviour
             if (rangedWeaponObject != null) rangedWeaponObject.SetActive(false);
             if (meleeWeaponObject != null) meleeWeaponObject.SetActive(true);
         }
+    }
+
+    // ── 도끼 자세 (Mixamo Pro Melee Axe) ──
+    static readonly int MeleeAttackHash = Animator.StringToHash("MeleeAttack");
+    private Animator animator;
+    private UnityEngine.Animations.Rigging.Rig handIKRig;
+    private int upperBodyLayer = -1;
+
+    /// <summary>근접 무기 들면: 상체 레이어(도끼 대기/휘두르기) 켜고, 왼손 IK와 총구 조준 회전 끔. 총이면 반대로</summary>
+    private void ApplyMeleePose(bool melee)
+    {
+        if (animator == null)
+        {
+            animator = GetComponentInChildren<Animator>();
+            handIKRig = GetComponentInChildren<UnityEngine.Animations.Rigging.Rig>();
+            if (animator != null) upperBodyLayer = animator.GetLayerIndex("Upper Body");
+        }
+        if (animator != null && upperBodyLayer >= 0) animator.SetLayerWeight(upperBodyLayer, melee ? 1f : 0f);
+        if (handIKRig != null) handIKRig.weight = melee ? 0f : 1f;
+        if (weaponHandAttacher == null) weaponHandAttacher = FindAnyObjectByType<WeaponHandAttacher>();
+        if (weaponHandAttacher != null) weaponHandAttacher.aimAtTarget = !melee;
     }
 
     public void HideCurrentWeapon()

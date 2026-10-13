@@ -15,7 +15,8 @@ public class MeleeWeapon : MonoBehaviour
 
     private float lastAttackTime;
 
-    public void TryAttack()
+    /// <summary>쿨타임이 지났으면 공격하고 true (PlayerController가 휘두르기 애니메이션 트리거)</summary>
+    public bool TryAttack()
     {
         // 무기 데이터의 공격 주기를 참조함.
         float currentAttackRate = (weaponData != null) ? weaponData.attackRate : 0.5f;
@@ -24,7 +25,9 @@ public class MeleeWeapon : MonoBehaviour
         {
             Attack();
             lastAttackTime = Time.time;
+            return true;
         }
+        return false;
     }
 
     private void Attack()
