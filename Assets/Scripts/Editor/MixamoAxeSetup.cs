@@ -117,6 +117,15 @@ public static class MixamoAxeSetup
     }
 
     // ── 플레이어 ──
+    /// <summary>FBX 재임포트 없이 플레이어 Animator만 다시 구성 (클립 교체 시)</summary>
+    [MenuItem("Tools/Animation/Rebuild Player Animator Only")]
+    public static void SetupPlayerOnly()
+    {
+        SetupImports(PlayerDir + "/Drinking"); SetupImports(PlayerDir + "/Dying");
+        SetupPlayer();
+        Debug.Log("[MixamoSetup] 플레이어 Animator 재구성 완료");
+    }
+
     static void SetupPlayer()
     {
         var ac = AssetDatabase.LoadAssetAtPath<AnimatorController>(PlayerControllerPath);
@@ -165,16 +174,16 @@ public static class MixamoAxeSetup
         }
         OneShot("MeleeAttack", AttackTrigger, Clip(Axe + "standing melee attack horizontal.fbx"), 0.8f, true, 0);  // 원본 2.4초 → 0.8초 (쿨타임 0.5초)
         OneShot("Reload", "Reload", Clip(Rifle + "reloading.fbx"), 1.8f, false, 80);
-        OneShot("UseItem", "UseItem", Clip(Axe + "standing disarm underarm.fbx"), 1.0f, false, 160);              // 전용 동작이 없어 허리춤에 손 가는 동작
+        OneShot("UseItem", "UseItem", Clip(PlayerDir + "/Drinking/Drinking.fbx"), 3.0f, false, 160);             // 마시기 (원본 8.9초 → 3초, 상체만 → 걸으면서 사용 가능)
         OneShot("WeaponSwitch", "WeaponSwitch", Clip(PlayerDir + "/WeaponSwitch/Draw A Great Sword 1.fbx"), 0.6f, false, 240);
         OneShot("Hit", "Hit", Clip(Rifle + "hit reaction.fbx"), 0.6f, true, 320);
 
         layers[li].defaultWeight = 1f; // 무기 자세를 상체 레이어가 담당 (사망 시만 0)
 
-        // Base Layer: 사망 (전신). 플레이어 전용 사망 동작이 없어서 뒤로 쓰러지는 zombie death 사용
+        // Base Layer: 사망 (전신, Dying)
         var baseSm = layers[0].stateMachine;
         ClearStates(baseSm, "Dead");
-        var dead = State(baseSm, "Dead", Clip(ZombieDir + "/zombie death.fbx"), 0f, new Vector3(300, 250, 0));
+        var dead = State(baseSm, "Dead", Clip(PlayerDir + "/Dying/Dying.fbx"), 0f, new Vector3(300, 250, 0));
         var toDead = baseSm.AddAnyStateTransition(dead);
         toDead.hasExitTime = false; toDead.duration = 0.1f; toDead.canTransitionToSelf = false;
         toDead.AddCondition(AnimatorConditionMode.If, 0, "Dead");

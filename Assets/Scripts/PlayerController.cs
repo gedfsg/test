@@ -327,9 +327,9 @@ public class PlayerController : MonoBehaviour
     /// <summary>소비 아이템 효과 적용 (핫바 3~5 키에서도 호출). 개수 차감은 호출하는 쪽에서</summary>
     public void UseConsumable(ConsumableData consumable)
     {
-        // 아이템 사용 동작 (상체) - 그동안 왼손 IK 끔
+        // 아이템 사용 동작 (마시기, 상체만 → 걸으면서 가능) - 그동안 왼손 IK 끔
         if (EnsureAnimRefs()) animator.SetTrigger(UseItemHash);
-        ikBlockUntil = Time.time + 1.0f;
+        ikBlockUntil = Time.time + 3.0f;
 
         PlayerBuffManager buffMgr = GetComponent<PlayerBuffManager>();
         // 씬 플레이어에 PlayerBuffManager가 안 붙어 있으면 수분/포만감/지속 회복이 전부 무시됐음 → 없으면 붙임

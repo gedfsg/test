@@ -8,7 +8,7 @@ public class Health : MonoBehaviour
     private bool dead; // 사망 처리 한 번만 (죽은 뒤 추가 피해로 onDeath가 반복 호출되던 것 방지)
 
     [Tooltip("플레이어 사망 후 게임을 멈출 때까지 기다리는 시간(초, 실제 시간). 사망 애니메이션이 보이게")]
-    public float playerDeathFreezeDelay = 2.5f;
+    public float playerDeathFreezeDelay = 4.5f; // Dying 애니메이션(4.4초)이 끝까지 보이게
 
     public UnityEvent onDeath;
     public UnityEvent onHurt;
