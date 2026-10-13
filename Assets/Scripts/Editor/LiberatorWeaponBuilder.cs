@@ -289,7 +289,9 @@ public static class LiberatorWeaponBuilder
                 // Mixamo 도끼 애니메이션 손 기준: 손잡이가 주먹을 관통. block idle에서 어깨 쪽으로 서고,
                 // 휘두르기 젖힘(20%)에서 머리가 위/뒤, 휘두른 뒤(35%) 아래로 향하는 방향 (Play 촬영 비교로 확인)
                 d.positionOffset = Vector3.zero; d.rotationOffset = new Vector3(0f, -90f, 0f);
-                d.carryRotationOffset = new Vector3(90f, 0f, 0f); // 들고 다닐 때: 맨손 대기/달리기에서 손 아래로 자연스럽게 늘어뜨림 (Play 촬영 비교)
+                // 들고 다닐 때 (Play 촬영 비교): 서 있을 땐 다리 옆으로 곧게 늘어뜨려 날이 아래, 움직일 땐 손 아래로 매달림
+                d.carryRotationOffset = new Vector3(0f, 180f, 90f);
+                d.carryMoveRotationOffset = new Vector3(90f, 0f, 0f);
                 break;
         }
         if (isNew) AssetDatabase.CreateAsset(d, path); else EditorUtility.SetDirty(d);

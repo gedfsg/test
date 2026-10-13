@@ -384,6 +384,7 @@ public class PlayerController : MonoBehaviour
     private float ikBlockUntil;      // 아이템 사용/무기 전환 중 (IK 끔)
     private float upperActionUntil;  // 상체 동작(휘두르기/마시기/전환/피격) 재생 중 - 도끼일 때 이 동안만 상체 레이어 켬
     private float upperWeight = 1f;
+    private float moveBlend;          // 도끼 손 방향: 0 = 서 있을 때, 1 = 움직일 때
 
     /// <summary>상체 레이어로 재생하는 동작 시작 (도끼 들었을 땐 이 시간 동안만 상체 레이어가 켜짐)</summary>
     void UpperAction(float seconds) => upperActionUntil = Mathf.Max(upperActionUntil, Time.time + seconds);
@@ -428,7 +429,12 @@ public class PlayerController : MonoBehaviour
         {
             var wd = meleeWeapon.weaponData;
             Quaternion swing = Quaternion.Euler(wd.rotationOffset);
-            Quaternion carry = wd.carryRotationOffset != Vector3.zero ? Quaternion.Euler(wd.carryRotationOffset) : swing;
+            Quaternion carryIdle = wd.carryRotationOffset != Vector3.zero ? Quaternion.Euler(wd.carryRotationOffset) : swing;
+            Quaternion carryMove = wd.carryMoveRotationOffset != Vector3.zero ? Quaternion.Euler(wd.carryMoveRotationOffset) : carryIdle;
+            // 서 있을 때(팔 늘어뜨림)와 움직일 때(팔 굽혀 흔듦)는 손 방향이 달라서 하나로는 둘 다 자연스럽게 안 됨 → 이동 속도로 섞음
+            float planar = rb != null ? new Vector2(rb.linearVelocity.x, rb.linearVelocity.z).magnitude : 0f;
+            moveBlend = Mathf.MoveTowards(moveBlend, Mathf.Clamp01(planar / 3f), Time.deltaTime * 4f);
+            Quaternion carry = Quaternion.Slerp(carryIdle, carryMove, moveBlend);
             weaponHandAttacher.SetVisualLocalRotation(Quaternion.Slerp(carry, swing, upperWeight));
         }
         if (weaponHandAttacher == null) weaponHandAttacher = FindAnyObjectByType<WeaponHandAttacher>();
