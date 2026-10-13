@@ -69,6 +69,7 @@ public class InventoryUI : MonoBehaviour
         for (int i = 0; i < inventoryManager.maxCapacity; i++)
         {
             SlotView slot = Instantiate(slotPrefab, slotGrid);
+            slot.Owner = SlotView.SlotOwner.Inventory; slot.Index = i; // 드래그 앤 드롭용
             Debug.Log($"[생성] i={i}, 형제순번={slot.transform.GetSiblingIndex()}");
             if (i < inventoryManager.inventory.Count)
             {
@@ -76,7 +77,8 @@ public class InventoryUI : MonoBehaviour
                 slot.SetItem(slotData.item, slotData.amount, theme);
 
                 var captured = slotData; // 클로저 캡처
-                slot.RightClicked += _ => OpenContextMenu(captured);
+                var view = slot;
+                slot.RightClicked += _ => OpenContextMenu(captured, view);
             }
             else
             {
@@ -93,12 +95,14 @@ public class InventoryUI : MonoBehaviour
 
     // ── 컨텍스트 메뉴 ─────────────────────────────
 
-    private void OpenContextMenu(InventorySlot slot)
+    private void OpenContextMenu(InventorySlot slot, SlotView view = null)
     {
         var actions = ItemActionProvider.GetActions(slot);
         Vector2 mousePos = Mouse.current.position.ReadValue();
 
-        ContextMenuUI.Instance?.Show(mousePos, actions, actionType => ExecuteAction(actionType, slot));
+        // 슬롯 오른쪽 옆에 띄워서 아이템을 가리지 않게
+        ContextMenuUI.Instance?.Show(mousePos, actions, actionType => ExecuteAction(actionType, slot),
+                                     view != null ? (RectTransform)view.transform : null);
     }
 
     /// <summary>액션 실행. 새 ActionType 추가 시 여기에 케이스 추가.</summary>

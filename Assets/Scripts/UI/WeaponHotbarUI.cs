@@ -43,6 +43,7 @@ public class WeaponHotbarUI : MonoBehaviour
     private int activeSlot = 0; // 기본값 0 (항상 선택 가능)
 
     private SlotView[] slots = new SlotView[SLOT_COUNT];
+    private UnityEngine.UI.Image[] weaponHints = new UnityEngine.UI.Image[SLOT_COUNT]; // 1,2번 빈 칸의 흐린 총 아이콘
 
     private PlayerController playerController;
 
@@ -114,6 +115,66 @@ public class WeaponHotbarUI : MonoBehaviour
     }
 
     public ItemData GetItem(int index) => index >= 0 && index < SLOT_COUNT ? items[index] : null;
+
+    // ── 드래그 앤 드롭용 API (SlotDragDrop) ──
+
+    /// <summary>들고 있는 총의 현재 탄수를 슬롯 데이터에 저장 (슬롯 내용 옮기기 전에 호출)</summary>
+    void SaveActiveAmmo()
+    {
+        if (items[activeSlot] is WeaponData cur && cur.type != WeaponType.Melee && playerController != null)
+            ammos[activeSlot] = playerController.GetCurrentAmmo();
+    }
+
+    /// <summary>선택된 슬롯 내용이 바뀌었을 때 손에 든 무기 갱신</summary>
+    void ReequipActive()
+    {
+        if (playerController == null) return;
+        if (items[activeSlot] is WeaponData wd) playerController.SwapWeaponData(wd, ammos[activeSlot]);
+        else playerController.HideCurrentWeapon();
+    }
+
+    /// <summary>핫바 두 칸 교환 (타입이 안 맞으면 false)</summary>
+    public bool SwapSlots(int a, int b)
+    {
+        if (a == b || !SlotTypeFilter.CanPlace(a, items[b]) || !SlotTypeFilter.CanPlace(b, items[a])) return false;
+        SaveActiveAmmo();
+        (items[a], items[b]) = (items[b], items[a]);
+        (ammos[a], ammos[b]) = (ammos[b], ammos[a]);
+        if (a == activeSlot || b == activeSlot) ReequipActive();
+        RefreshAllSlots();
+        return true;
+    }
+
+    /// <summary>핫바 칸 비우고 (아이템, 탄수/개수) 반환</summary>
+    public (ItemData item, int count) TakeSlot(int index)
+    {
+        if (index < 0 || index >= SLOT_COUNT || items[index] == null) return (null, 0);
+        SaveActiveAmmo();
+        var r = (items[index], ammos[index]);
+        items[index] = null; ammos[index] = 0;
+        if (index == activeSlot) ReequipActive();
+        RefreshAllSlots();
+        return r;
+    }
+
+    /// <summary>핫바 칸에 아이템 넣기 (선택된 칸이면 바로 손에 듦). 타입 안 맞으면 false</summary>
+    public bool PutSlot(int index, ItemData item, int count)
+    {
+        if (!SlotTypeFilter.CanPlace(index, item)) { LogReject(index, item); return false; }
+        if (index == activeSlot) SaveActiveAmmo();
+        items[index] = item; ammos[index] = count;
+        if (index == activeSlot) ReequipActive();
+        RefreshAllSlots();
+        return true;
+    }
+
+    /// <summary>들고 있는 총이면 현재 탄수, 아니면 저장된 값</summary>
+    public int GetLiveAmmo(int index)
+    {
+        if (index == activeSlot && items[index] is WeaponData w && w.type != WeaponType.Melee && playerController != null)
+            return playerController.GetCurrentAmmo();
+        return GetAmmo(index);
+    }
     public int GetAmmo(int index) => index >= 0 && index < SLOT_COUNT ? ammos[index] : 0;
 
     public bool AddWeapon(WeaponData weapon, int ammo = -1)
@@ -283,7 +344,44 @@ public class WeaponHotbarUI : MonoBehaviour
             SlotView slot = Instantiate(slotPrefab, slotContainer);
             int capturedIndex = i;
             slot.RightClicked += _ => DropSlot(capturedIndex);
+            slot.Owner = SlotView.SlotOwner.Hotbar; slot.Index = i; // 드래그 앤 드롭용
             slots[i] = slot;
+            if (SlotTypeFilter.IsWeaponSlot(i)) DecorateWeaponSlot(slot, i);
+        }
+    }
+
+    // 1,2번 무기 전용 칸 표시: 두꺼운 어두운 빨강 테두리 + 위에 "무기" 라벨 + 빈 칸엔 흐린 총 아이콘
+    static readonly Color WeaponFrameColor = new Color(0.62f, 0.15f, 0.12f, 1f);
+    static readonly Color WeaponLabelColor = new Color(0.95f, 0.42f, 0.36f, 1f);
+
+    private void DecorateWeaponSlot(SlotView slot, int i)
+    {
+        var frame = slot.transform.Find("Frame")?.GetComponent<UnityEngine.UI.Image>();
+        if (frame != null)
+        {
+            if (HudStyle.RoundedFrameThick != null) frame.sprite = HudStyle.RoundedFrameThick;
+            frame.color = WeaponFrameColor;
+        }
+
+        var label = HudStyle.NewText(slot.transform, "WeaponLabel", "무기", HudStyle.SemiBold, 13f, WeaponLabelColor,
+                                     TMPro.TextAlignmentOptions.Center, Vector2.zero, new Vector2(80f, 18f));
+        var lr = label.rectTransform;
+        lr.anchorMin = lr.anchorMax = new Vector2(0.5f, 1f); lr.pivot = new Vector2(0.5f, 0f);
+        lr.anchoredPosition = new Vector2(0f, 4f); // 칸 바로 위
+        label.raycastTarget = false;
+
+        var hintSprite = Resources.Load<Sprite>("HUD/Sprites/WeaponSilhouette");
+        if (hintSprite != null)
+        {
+            var hint = new GameObject("WeaponHint", typeof(RectTransform), typeof(UnityEngine.UI.Image));
+            var hr = (RectTransform)hint.transform;
+            hr.SetParent(slot.transform, false);
+            hr.SetSiblingIndex(0); // 아이콘/테두리보다 뒤
+            hr.anchorMin = new Vector2(0.1f, 0.25f); hr.anchorMax = new Vector2(0.9f, 0.75f); hr.offsetMin = hr.offsetMax = Vector2.zero;
+            var img = hint.GetComponent<UnityEngine.UI.Image>();
+            img.sprite = hintSprite; img.preserveAspect = true; img.raycastTarget = false;
+            img.color = new Color(1f, 1f, 1f, 0.16f);
+            weaponHints[i] = img;
         }
     }
 
@@ -292,6 +390,7 @@ public class WeaponHotbarUI : MonoBehaviour
         if (slots == null || i >= slots.Length || slots[i] == null) return;
 
         bool has = items[i] != null;
+        if (weaponHints[i] != null) weaponHints[i].enabled = !has;
         bool isActive = i == activeSlot;
         bool showCount = has && (items[i] is ThrowableData || items[i] is ConsumableData);
 
