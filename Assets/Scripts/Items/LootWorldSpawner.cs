@@ -14,7 +14,16 @@ public class LootWorldSpawner : MonoBehaviour
     const float CrateMinSpacing = 10f;
     const float StartSafeRadius = 15f;
 
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    // 씬이 로드될 때마다 자동 생성 (재시작으로 씬을 다시 로드해도 상자/루팅이 다시 깔리게)
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    static void Register()
+    {
+        UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnSceneLoaded;
+        UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoaded;
+    }
+
+    static void OnSceneLoaded(UnityEngine.SceneManagement.Scene scene, UnityEngine.SceneManagement.LoadSceneMode mode) => AutoCreate();
+
     static void AutoCreate()
     {
         if (LootDatabase.Instance == null || GameObject.FindWithTag("Player") == null) return;

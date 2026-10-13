@@ -43,6 +43,20 @@ public class BuildingInterior : MonoBehaviour
     // 실외 원래 안개 설정은 맨 처음 건물에 들어갈 때 한 번만 저장해뒀다가 마지막에 나갈 때 복원.
     static int globalInsideCount = 0;
     public static bool IsAnyoneIndoors => globalInsideCount > 0;
+
+    /// <summary>씬 다시 로드(재시작) 전에 호출 - static 카운터/저장값이 다음 판으로 넘어가 실내 안개가 남는 것 방지</summary>
+    public static void ResetStatics()
+    {
+        globalInsideCount = 0;
+        if (originalFogSaved)
+        {
+            RenderSettings.fog = originalFogEnabled; RenderSettings.fogMode = originalFogMode; RenderSettings.fogColor = originalFogColor;
+            RenderSettings.fogStartDistance = originalFogStart; RenderSettings.fogEndDistance = originalFogEnd;
+        }
+        originalFogSaved = false;
+        hiddenCount.Clear();
+        fogPlayer = null;
+    }
     static bool originalFogSaved = false;
     static bool originalFogEnabled;
     static FogMode originalFogMode;
