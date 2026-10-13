@@ -253,6 +253,7 @@ public static class LiberatorWeaponBuilder
         d.isStackable = false; d.maxStackSize = 1;
         d.weaponPrefab = prefab;
         d.penetrating = false;
+        d.holsterRotation = BackpackManager.DefaultHolsterRotation; // 등에 멜 때: 총구 왼쪽 위 대각선
         switch (e.cat)
         {
             case Cat.Pistol:

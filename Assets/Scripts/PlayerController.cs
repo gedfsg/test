@@ -63,6 +63,9 @@ public class PlayerController : MonoBehaviour
 
         weaponHandAttacher = FindAnyObjectByType<WeaponHandAttacher>();
 
+        // 가방(인벤토리 칸 수 + 등 모델) + 등 무기 비주얼 - 씬에 없으면 자동으로 붙임
+        if (GetComponent<BackpackManager>() == null) gameObject.AddComponent<BackpackManager>();
+
         // 시작 지급: 도끼만 1번 (2번은 비움). 도끼가 지정 안 돼 있으면 예전처럼 시작 총 지급
         var hotbar = WeaponHotbarUI.Instance;
         if (hotbar != null && startingMeleeWeapon != null)

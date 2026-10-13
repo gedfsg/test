@@ -111,6 +111,7 @@ public class InventoryUI : MonoBehaviour
                 break;
             case ActionType.Equip:
                 if (slot.item is WeaponData wd) EquipWeapon(wd, slot.slotId);
+                else if (slot.item is BackpackData bag) BackpackManager.Instance?.Equip(bag, slot); // 가방 교체
                 break;
             case ActionType.EquipToHotbar:
                 EquipToHotbar(slot);

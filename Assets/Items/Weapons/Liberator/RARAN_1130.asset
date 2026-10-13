@@ -33,3 +33,4 @@ MonoBehaviour:
   autoFire: 0
   positionOffset: {x: 0.01, y: 0.06, z: -0.2}
   rotationOffset: {x: 30, y: 200, z: -20}
+  holsterRotation: {x: 306.8699, y: 270, z: 90}
