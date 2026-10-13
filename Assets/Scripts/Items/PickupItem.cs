@@ -7,6 +7,9 @@ public class PickupItem : MonoBehaviour
     public ItemData itemData;
     public int amount = 1;
 
+    [Tooltip("바닥 아이템 파란 테두리/둥실 효과(ItemOutlineGlow). 앞면을 하늘색으로 덮어버려서 기본 끔")]
+    public bool addGlow = false;
+
     private GameObject promptObj;
     private TextMeshPro promptText;
     private PlayerController nearbyPlayer;
@@ -21,7 +24,7 @@ public class PickupItem : MonoBehaviour
         if (playerCollider != null && boxCollider != null)
             Physics.IgnoreCollision(playerCollider, boxCollider);
 
-        if (GetComponent<ItemOutlineGlow>() == null)
+        if (addGlow && GetComponent<ItemOutlineGlow>() == null)
             gameObject.AddComponent<ItemOutlineGlow>();
 
         CreatePrompt();

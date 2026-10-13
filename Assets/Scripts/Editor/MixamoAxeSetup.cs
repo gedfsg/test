@@ -144,7 +144,7 @@ public static class MixamoAxeSetup
         // 대기 자세 3종 (WeaponPose로 선택)
         var idles = new[]
         {
-            State(sm, "AxeIdle", Clip(Axe + "standing idle.fbx"), 0f, new Vector3(300, 0, 0)),
+            State(sm, "AxeIdle", Clip(Axe + "standing block idle.fbx"), 0f, new Vector3(300, 0, 0)), // 도끼를 어깨 근처로 세워 든 대기 (standing idle은 팔을 축 늘어뜨림)
             State(sm, "PistolIdle", Clip(Pistol + "pistol idle.fbx"), 0f, new Vector3(300, 80, 0)),
             State(sm, "RifleIdle", Clip(Rifle + "rifle aiming idle.fbx"), 0f, new Vector3(300, 160, 0)),
         };

@@ -286,8 +286,9 @@ public static class LiberatorWeaponBuilder
                 // 도끼: 데미지 35, 사거리 2m, 쿨타임 0.5초
                 d.type = WeaponType.Melee; d.damage = 35f; d.attackRate = 0.5f; d.effectiveRange = 2f; d.maxAmmo = 0;
                 d.autoFire = false;
-                // Mixamo 도끼 애니메이션 손 기준: 손잡이가 주먹을 관통, 도끼 머리가 엄지 쪽 (Play 촬영으로 확인)
-                d.positionOffset = Vector3.zero; d.rotationOffset = new Vector3(0f, 90f, 0f);
+                // Mixamo 도끼 애니메이션 손 기준: 손잡이가 주먹을 관통. block idle에서 어깨 쪽으로 서고,
+                // 휘두르기 젖힘(20%)에서 머리가 위/뒤, 휘두른 뒤(35%) 아래로 향하는 방향 (Play 촬영 비교로 확인)
+                d.positionOffset = Vector3.zero; d.rotationOffset = new Vector3(0f, -90f, 0f);
                 break;
         }
         if (isNew) AssetDatabase.CreateAsset(d, path); else EditorUtility.SetDirty(d);

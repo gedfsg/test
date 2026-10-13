@@ -16,6 +16,7 @@ MonoBehaviour:
   icon: {fileID: 21300000, guid: c5c7b107e22c9914db9b37edb45e7e7c, type: 3}
   itemType: 0
   rarity: 0
+  worldModel: {fileID: 0}
   isStackable: 0
   maxStackSize: 1
   weaponPrefab: {fileID: 7604709324787054852, guid: 96a5902f28b26d345887696a59d4cace, type: 3}
@@ -32,5 +33,5 @@ MonoBehaviour:
   penetrating: 0
   autoFire: 0
   positionOffset: {x: 0, y: 0, z: 0}
-  rotationOffset: {x: 0, y: 90, z: 0}
+  rotationOffset: {x: 0, y: -90, z: 0}
   holsterRotation: {x: 306.8699, y: 270, z: 90}

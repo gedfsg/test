@@ -51,11 +51,7 @@ public static class WorldItemDrop
             icon.AddComponent<FaceCamera>();
         }
 
-        // 3D 모델(음식/무기)은 글로우 끔: ItemOutlineGlow는 Standard 셰이더에 없는 _Cull 값을 써서 앞면이 그려지고,
-        // 6% 키운 발광 복사본이 모델 전체를 하늘색으로 덮어버림. 꺼진 컴포넌트를 먼저 붙이면 PickupItem이 새로 안 붙이고 Start도 안 돌아감
-        if (go.GetComponentInChildren<MeshRenderer>() != null)
-            go.AddComponent<ItemOutlineGlow>().enabled = false;
-
+        // 글로우는 PickupItem.addGlow(기본 끔)에서 일괄로 꺼짐
         var pickup = go.AddComponent<PickupItem>();
         pickup.itemData = item;
         pickup.amount = item is WeaponData ? 1 : amount;

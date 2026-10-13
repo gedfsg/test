@@ -17,8 +17,8 @@ public class LootCrate : MonoBehaviour
     public Transform lidHinge;
     [Tooltip("열면 주변에 스폰할 좀비 수 (최소~최대)")]
     public int zombiesOnOpenMin = 2, zombiesOnOpenMax = 3;
-    [Tooltip("둥실거리는 글로우(ItemOutlineGlow) 붙이기. 바닥에 놓인 큰 상자는 끔")]
-    public bool addGlow = true;
+    [Tooltip("둥실거리는 글로우(ItemOutlineGlow) 붙이기. 파란 효과 제거로 기본 끔")]
+    public bool addGlow = false;
 
     private GameObject promptObj;
     private TextMeshPro promptText;
