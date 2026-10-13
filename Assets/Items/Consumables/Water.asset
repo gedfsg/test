@@ -16,6 +16,7 @@ MonoBehaviour:
   icon: {fileID: 21300000, guid: 0d7e7961d4295d94dbdef92aaf09e26a, type: 3}
   itemType: 2
   rarity: 0
+  worldModel: {fileID: 7315752287443412023, guid: 79c0a35e4b466ea488850b6469ea6243, type: 3}
   isStackable: 1
   maxStackSize: 10
   healAmount: 0
