@@ -36,6 +36,8 @@ public class SurvivalDayHUD : MonoBehaviour
 
     TextMeshProUGUI titleText, clockText, phaseText, goalText;
     Image phaseIcon;
+    Image weatherIcon; // 낮/밤 글자 옆 날씨 아이콘 (WeatherManager)
+    WeatherManager.Weather shownWeather = (WeatherManager.Weather)(-1);
     Image[] dayFills, dayBorders;
     TextMeshProUGUI[] dayNumbers;
     int shownDay = -1;
@@ -94,7 +96,10 @@ public class SurvivalDayHUD : MonoBehaviour
             TextAlignmentOptions.Left, new Vector2(-138.5f + 50f, BottomY), new Vector2(100f, 40f));
         HudStyle.NewImage(root, "Divider1", null, dividerColor, new Vector2(-26.5f, BottomY), new Vector2(1.5f, 30f));
         phaseText = HudStyle.NewText(root, "Phase", "낮", HudStyle.SemiBold, 22f, dayPhaseColor,
-            TextAlignmentOptions.Center, new Vector2(12.5f, BottomY), new Vector2(60f, 34f));
+            TextAlignmentOptions.Center, new Vector2(4f, BottomY), new Vector2(50f, 34f));
+        weatherIcon = HudStyle.NewImage(root, "WeatherIcon", Resources.Load<Sprite>("HUD/Sprites/Weather_Clear"), Color.white,
+            new Vector2(36f, BottomY), new Vector2(24f, 24f));
+        weatherIcon.preserveAspect = true;
         HudStyle.NewImage(root, "Divider2", null, dividerColor, new Vector2(50.5f, BottomY), new Vector2(1.5f, 30f));
         goalText = HudStyle.NewText(root, "Goal", $"생존 목표 · {totalDays}일", HudStyle.Regular, 17f, Color.white,
             TextAlignmentOptions.Left, new Vector2(75.5f + 80f, BottomY), new Vector2(160f, 30f));
@@ -104,6 +109,12 @@ public class SurvivalDayHUD : MonoBehaviour
     {
         var dnc = DayNightCycle.Instance;
         if (dnc == null || clockText == null) return;
+
+        if (weatherIcon != null && (force || WeatherManager.Current != shownWeather))
+        {
+            shownWeather = WeatherManager.Current;
+            weatherIcon.sprite = Resources.Load<Sprite>("HUD/Sprites/Weather_" + shownWeather);
+        }
 
         var (hour, minute) = dnc.GetVirtualClock();
         clockText.text = $"{hour:00}:{minute:00}";

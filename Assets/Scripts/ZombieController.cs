@@ -250,7 +250,7 @@ public class ZombieController : MonoBehaviour
         }
 
         // 플레이어 감지 범위 내: 추적
-        if (dist <= detectionRange)
+        if (dist <= detectionRange * WeatherManager.DetectionMultiplier) // 비 오면 20% 감소
         {
             if (isWandering)
             {
