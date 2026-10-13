@@ -24,15 +24,23 @@ public class DayNightCycle : MonoBehaviour
     public Light directionalLight;
 
     public Color  dayLightColor      = new Color(1f, 0.95f, 0.8f);
-    public float  dayLightIntensity  = 1.2f;
+    public float  dayLightIntensity  = 1.1f;
     public float  dayLightAngle      = 50f;
 
     public Color  duskColor          = new Color(1f, 0.45f, 0.1f);
-    public float  duskLightIntensity = 0.6f;
+    public float  duskLightIntensity = 0.5f;
 
     public Color  nightLightColor    = new Color(0.1f, 0.15f, 0.35f);
     public float  nightLightIntensity = 0.08f;
     public float  nightLightAngle    = -30f;
+
+    [Header("환경광 (Ambient) - 낮은 밝게, 밤은 기존 값 유지")]
+    public bool  controlAmbient = true;
+    public Color dayAmbient   = new Color(0.45f, 0.47f, 0.52f);
+    public Color nightAmbient = new Color(0.188f, 0.204f, 0.243f); // 예전 씬 값 (밤 분위기 유지)
+
+    [Tooltip("날씨(흐림/비)가 조명 강도에 곱하는 값 (WeatherManager가 설정)")]
+    [HideInInspector] public float weatherLightMultiplier = 1f;
 
     [Header("안개 (실내에 있는 동안은 BuildingInterior가 안개를 따로 관리하니 건드리지 않음)")]
     public bool  controlFog = true;
@@ -227,7 +235,14 @@ public class DayNightCycle : MonoBehaviour
         }
 
         directionalLight.color     = targetColor;
-        directionalLight.intensity = targetIntensity;
+        directionalLight.intensity = targetIntensity * weatherLightMultiplier;
+
+        // 환경광: 해 밝기 비율(밤 0 ~ 낮 1)로 밤/낮 색을 섞음
+        if (controlAmbient)
+        {
+            float day01 = Mathf.InverseLerp(nightLightIntensity, dayLightIntensity, targetIntensity);
+            RenderSettings.ambientLight = Color.Lerp(nightAmbient, dayAmbient, day01) * Mathf.Lerp(1f, weatherLightMultiplier, day01);
+        }
         directionalLight.transform.rotation = Quaternion.Euler(targetAngle, -30f, 0f);
     }
 
