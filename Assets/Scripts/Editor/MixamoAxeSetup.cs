@@ -37,6 +37,7 @@ public static class MixamoAxeSetup
         int removed = RemoveCharacterModels();
         int n = SetupImports(PlayerDir) + SetupImports(ZombieDir);
         SetupPlayer();
+        SetupLocomotion();
         SetupZombie();
         Debug.Log($"[MixamoSetup] 모델 파일 {removed}개 삭제, FBX {n}개 Humanoid 설정, 플레이어/좀비 Animator 구성 완료");
     }
@@ -68,7 +69,13 @@ public static class MixamoAxeSetup
             var imp = AssetImporter.GetAtPath(p) as ModelImporter;
             if (imp == null) continue;
             string lower = Path.GetFileNameWithoutExtension(p).ToLowerInvariant();
-            bool loop = lower.Contains("idle") || lower.Contains("walk") || lower.Contains("run") || lower.Contains("crawl") || lower.Contains("strafe");
+            bool loop = lower.Contains("idle") || lower.Contains("walk") || lower.Contains("run") || lower.Contains("crawl")
+                     || lower.Contains("strafe") || lower.Contains("sprint");
+
+            // 이미 원하는 설정이면 재임포트 생략 (전체 실행이 빨라짐)
+            if (imp.animationType == ModelImporterAnimationType.Human && imp.avatarSetup == ModelImporterAvatarSetup.CreateFromThisModel
+                && imp.clipAnimations.Length > 0 && System.Array.TrueForAll(imp.clipAnimations, c => c.loopTime == loop && c.lockRootPositionXZ && c.lockRootRotation))
+                continue;
 
             imp.animationType = ModelImporterAnimationType.Human;
             imp.avatarSetup = ModelImporterAvatarSetup.CreateFromThisModel;
@@ -121,8 +128,9 @@ public static class MixamoAxeSetup
     [MenuItem("Tools/Animation/Rebuild Player Animator Only")]
     public static void SetupPlayerOnly()
     {
-        SetupImports(PlayerDir + "/Drinking"); SetupImports(PlayerDir + "/Dying");
+        SetupImports(PlayerDir + "/Drinking"); SetupImports(PlayerDir + "/Dying"); SetupImports(PlayerDir + "/MeleeRun");
         SetupPlayer();
+        SetupLocomotion();
         Debug.Log("[MixamoSetup] 플레이어 Animator 재구성 완료");
     }
 
@@ -191,6 +199,90 @@ public static class MixamoAxeSetup
         ac.layers = layers;
         EditorUtility.SetDirty(ac);
         AssetDatabase.SaveAssets();
+    }
+
+    // ── 하체 이동 블렌드 트리 (무기별) ──
+    // Base Layer: 기존 "Blend Tree"(맨손) + Loco_Axe / Loco_Pistol / Loco_Rifle 을 WeaponPose로 전환 (3 = 맨손)
+    // 블렌드 위치(Horizontal, Vertical)는 각 클립의 실제 루트 이동 방향으로 자동 배치: 걷기 = 반경 1, Shift 대쉬 = 반경 2
+    // (Locomotion.cs가 걷기 ±1, 스프린트 ±2를 넣음)
+    const string RunDir = PlayerDir + "/MeleeRun/"; // 소총 8방향 walk/run/sprint + 도끼용 Sword And Shield Run 이 섞여 있음 (파일명으로 구분)
+
+    static void SetupLocomotion()
+    {
+        var ac = AssetDatabase.LoadAssetAtPath<AnimatorController>(PlayerControllerPath);
+        if (ac == null) return;
+        var layers = ac.layers;
+        var sm = layers[0].stateMachine;
+
+        AnimatorState unarmed = null;
+        foreach (var cs in sm.states) if (cs.state.name == "Blend Tree") unarmed = cs.state;
+        // 다시 실행 시 예전 트리 정리 (블렌드 트리는 컨트롤러 안의 하위 에셋이라 같이 지움)
+        foreach (var cs in sm.states)
+            if (cs.state.name.StartsWith("Loco_"))
+            {
+                if (cs.state.motion is BlendTree old) AssetDatabase.RemoveObjectFromAsset(old);
+                sm.RemoveState(cs.state);
+            }
+        if (unarmed != null) foreach (var t in unarmed.transitions) if (t.destinationState == null || t.destinationState.name.StartsWith("Loco_")) unarmed.RemoveTransition(t);
+
+        var axe = Tree(ac, sm, "Loco_Axe", Axe + "standing block idle.fbx",
+            new[] { Axe + "standing walk forward.fbx", Axe + "standing walk back.fbx", Axe + "standing walk left.fbx", Axe + "standing walk right.fbx" },
+            new[] { RunDir + "Sword And Shield Run.fbx", Axe + "standing run back.fbx" }, new Vector3(500, 300, 0));
+        var pistol = Tree(ac, sm, "Loco_Pistol", Pistol + "pistol idle.fbx",
+            // arc(방향 전환하며 걷기)는 대각선 이동이 아니라 제외. strafe = 왼쪽, strafe (2) = 오른쪽 (루트 커브로 확인)
+            new[] { Pistol + "pistol walk.fbx", Pistol + "pistol walk backward.fbx", Pistol + "pistol strafe.fbx", Pistol + "pistol strafe (2).fbx" },
+            new[] { Pistol + "pistol run.fbx", Pistol + "pistol run backward.fbx" }, new Vector3(500, 380, 0));
+        string[] dirs = { "forward", "backward", "left", "right", "forward left", "forward right", "backward left", "backward right" };
+        var rifle = Tree(ac, sm, "Loco_Rifle", RunDir + "idle aiming.fbx",
+            System.Array.ConvertAll(dirs, d => RunDir + "walk " + d + ".fbx"),
+            System.Array.ConvertAll(dirs, d => RunDir + "sprint " + d + ".fbx"), new Vector3(500, 460, 0));
+
+        var locos = new[] { axe, pistol, rifle };
+        for (int i = 0; i < 3; i++)
+        {
+            if (unarmed != null) Link(unarmed, locos[i], i);
+            for (int j = 0; j < 3; j++) if (i != j) Link(locos[i], locos[j], j);
+            if (unarmed != null) Link(locos[i], unarmed, 3); // 맨손(3) → 기존 트리
+        }
+        sm.defaultState = axe; // 시작 무기 = 도끼
+
+        ac.layers = layers;
+        EditorUtility.SetDirty(ac);
+        AssetDatabase.SaveAssets();
+    }
+
+    static void Link(AnimatorState from, AnimatorState to, int pose)
+    {
+        var t = from.AddTransition(to);
+        t.hasExitTime = false; t.duration = 0.2f;
+        t.AddCondition(AnimatorConditionMode.Equals, pose, "WeaponPose");
+    }
+
+    static AnimatorState Tree(AnimatorController ac, AnimatorStateMachine sm, string name, string idle, string[] walks, string[] runs, Vector3 pos)
+    {
+        var tree = new BlendTree { name = name, blendType = BlendTreeType.FreeformDirectional2D, blendParameter = "Horizontal", blendParameterY = "Vertical", hideFlags = HideFlags.HideInHierarchy };
+        AssetDatabase.AddObjectToAsset(tree, ac);
+        var idleClip = Clip(idle); if (idleClip != null) tree.AddChild(idleClip, Vector2.zero);
+        foreach (var f in walks) { var c = Clip(f); if (c != null) tree.AddChild(c, MoveDir(c) * 1f); }
+        foreach (var f in runs) { var c = Clip(f); if (c != null) tree.AddChild(c, MoveDir(c) * 2f); }
+        var state = sm.AddState(name, pos);
+        state.motion = tree;
+        return state;
+    }
+
+    // 클립의 실제 이동 방향 (루트 커브 시작→끝, 수평면). 캐릭터 기준 x = 오른쪽, z = 앞
+    static Vector2 MoveDir(AnimationClip c)
+    {
+        float dx = 0f, dz = 0f;
+        foreach (var b in AnimationUtility.GetCurveBindings(c))
+        {
+            if (b.propertyName != "RootT.x" && b.propertyName != "RootT.z") continue;
+            var cv = AnimationUtility.GetEditorCurve(c, b);
+            float d = cv.Evaluate(c.length) - cv.Evaluate(0f);
+            if (b.propertyName == "RootT.x") dx = d; else dz = d;
+        }
+        var v = new Vector2(dx, dz);
+        return v.sqrMagnitude > 1e-4f ? v.normalized : Vector2.up;
     }
 
     // ── 좀비 ──
