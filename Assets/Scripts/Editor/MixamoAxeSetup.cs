@@ -244,16 +244,23 @@ public static class MixamoAxeSetup
         var axe = TreeExplicit(ac, sm, "Loco_Axe", new Vector3(500, 300, 0), new (string, Vector2, float)[]
         {
             (Axe + "unarmed idle.fbx", Vector2.zero, 1f),
-            (Axe + "unarmed run forward.fbx", new Vector2(0f, 1f), 1.23f),
-            (Axe + "unarmed run back.fbx", new Vector2(0f, -1f), 1.5f),
+            // 달리기: unarmed run은 좌우로 뒤뚱(머리 좌우 0.19m, 몸통 기울기 11°, 뒤로는 16°) → 도끼 들고 뛰는 standing run (0.07m, 3° / 뒤 7°)
+            // 재생 속도는 클립 보폭(standing run forward 평균속도가 unarmed의 0.91배)에 맞춰 다시 계산
+            // (Axe + "unarmed run forward.fbx", new Vector2(0f, 1f), 1.23f),
+            // (Axe + "unarmed run back.fbx", new Vector2(0f, -1f), 1.5f),
+            (Axe + "standing run forward.fbx", new Vector2(0f, 1f), 1.35f),
+            (Axe + "standing run back.fbx", new Vector2(0f, -1f), 1.7f),
             (Ch17 + "Walk Left.fbx", new Vector2(-1f, 0f), 2.0f),
             (Ch17 + "Walk Right.fbx", new Vector2(1f, 0f), 2.0f),
             (Ch17 + "Walk Forward Left.fbx", new Vector2(-0.7f, 0.7f), 2.0f),
             (Ch17 + "Walk Forward Right.fbx", new Vector2(0.7f, 0.7f), 2.0f),
             (Ch17 + "Walk Backward Left.fbx", new Vector2(-0.7f, -0.7f), 2.0f),
             (Ch17 + "Walk Backward Right.fbx", new Vector2(0.7f, -0.7f), 2.0f),
-            (Axe + "unarmed run forward.fbx", new Vector2(0f, 2f), 2.0f),
-            (Axe + "unarmed run back.fbx", new Vector2(0f, -2f), 2.2f),
+            // Shift 대쉬: 보폭대로면 2.2배인데 다리가 너무 빨라 보여서 2.0배 (약간 미끄러짐 허용)
+            // (Axe + "unarmed run forward.fbx", new Vector2(0f, 2f), 2.0f),
+            // (Axe + "unarmed run back.fbx", new Vector2(0f, -2f), 2.2f),
+            (Axe + "standing run forward.fbx", new Vector2(0f, 2f), 2.0f),
+            (Axe + "standing run back.fbx", new Vector2(0f, -2f), 2.2f),
         });
         var pistol = Tree(ac, sm, "Loco_Pistol", Pistol + "pistol idle.fbx",
             // arc(방향 전환하며 걷기)는 대각선 이동이 아니라 제외. strafe = 왼쪽, strafe (2) = 오른쪽 (루트 커브로 확인)
