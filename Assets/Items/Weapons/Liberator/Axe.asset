@@ -21,13 +21,13 @@ MonoBehaviour:
   maxStackSize: 1
   weaponPrefab: {fileID: 7604709324787054852, guid: 96a5902f28b26d345887696a59d4cace, type: 3}
   type: 0
-  damage: 35
+  damage: 40
   attackRate: 0.5
   maxAmmo: 0
   reloadTime: 0
   bulletSpeed: 0
   recoil: 0
-  effectiveRange: 2
+  effectiveRange: 2.9
   pelletCount: 8
   spreadAngle: 15
   penetrating: 0
@@ -37,5 +37,6 @@ MonoBehaviour:
   carryRotationOffset: {x: 0, y: 180, z: 90}
   carryMoveRotationOffset: {x: 90, y: 0, z: 0}
   swingPositionOffset: {x: 0.035, y: -0.06, z: -0.09}
+  staminaCost: 20
   rigidGrip: 1
   holsterRotation: {x: 306.8699, y: 270, z: 90}

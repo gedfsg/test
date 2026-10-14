@@ -360,7 +360,9 @@ public class PlayerController : MonoBehaviour
         }
         else if (currentMode == WeaponMode.Melee && meleeWeapon != null && isFireButtonPressed)
         {
-            if (meleeWeapon.TryAttack() && animator != null)
+            // if (meleeWeapon.TryAttack() && animator != null)   // (이전) 스테미나 없이 무한 휘두르기
+            float staminaCost = meleeWeapon.weaponData != null ? meleeWeapon.weaponData.staminaCost : 0f;
+            if (meleeWeapon.IsReady && locomotion.TryUseStamina(staminaCost) && meleeWeapon.TryAttack() && animator != null)
             {
                 animator.SetTrigger(MeleeAttackHash); // 도끼 휘두르기 (Upper Body 레이어)
                 // UpperAction(0.8f);                  // (이전) 가로 베기 0.8초

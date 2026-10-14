@@ -283,8 +283,11 @@ public static class LiberatorWeaponBuilder
                 d.positionOffset = new Vector3(0.01f, 0.06f, -0.2f); d.rotationOffset = new Vector3(30f, 170f, 0f);
                 break;
             case Cat.Melee:
-                // 도끼: 데미지 35, 사거리 2m, 쿨타임 0.5초
-                d.type = WeaponType.Melee; d.damage = 35f; d.attackRate = 0.5f; d.effectiveRange = 2f; d.maxAmmo = 0;
+                // 도끼: 데미지 40, 사거리 2.9m(부채꼴 90°, 2m 안은 160°), 쿨타임 0.5초, 스테미나 20
+                // d.type = WeaponType.Melee; d.damage = 35f; d.attackRate = 0.5f; d.effectiveRange = 2f; d.maxAmmo = 0;   // (이전)
+                // 사거리 2.9m: 좀비 공격 범위(1.8m, 뚱뚱이 2.5m)보다 길어 먼저 때릴 수 있게 (MeleeWeapon 부채꼴 90° 판정 반경으로 씀)
+                d.type = WeaponType.Melee; d.damage = 40f; d.attackRate = 0.5f; d.effectiveRange = 2.9f; d.maxAmmo = 0;
+                d.staminaCost = 20f; // 한 번에 20: 씬의 스테미나 회복이 초당 30이라 쿨타임 0.5초로 계속 휘두르면 초당 10씩 줄어 약 10초 뒤 못 휘두름
                 d.autoFire = false;
                 // 휘두를 때 (손 뼈 측정: 손가락 -Z, 엄지 +Y, 손바닥 +X / 도끼: 손잡이 +Z, 날 +Y):
                 // 주먹 쥔 방향 = 손잡이가 엄지 쪽으로 서고 날이 손가락(앞) 쪽. 이전 (0,-90,0)은 손잡이가 팔 연장선이라 끝을 쥔 것처럼 보였음

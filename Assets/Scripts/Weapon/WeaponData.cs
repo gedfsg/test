@@ -39,6 +39,8 @@ public class WeaponData : ItemData
     public Vector3 carryMoveRotationOffset = Vector3.zero;
     [Tooltip("휘두를 때 손 위치 (손 뼈 로컬). 손 뼈 원점은 손목이라, 손바닥 중심 + 손잡이 중간쯤을 쥐도록 옮김")]
     public Vector3 swingPositionOffset = Vector3.zero;
+    [Tooltip("근접 무기 한 번 휘두를 때 드는 스테미나 (0이면 안 듦). 모자라면 못 휘두름 → 무한 휘두르기 방지")]
+    public float staminaCost = 0f;
     [Tooltip("켜면 들고 다닐 때도 휘두를 때와 같은 쥐는 방식(rotationOffset + swingPositionOffset)으로 고정. 이동 속도/공격에 따라 손 안에서 도끼가 돌지 않음 (carry 값은 무시)")]
     public bool rigidGrip = false;
 

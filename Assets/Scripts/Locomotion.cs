@@ -171,4 +171,13 @@ public class Locomotion : MonoBehaviour
     public void SetSprinting(bool state) => isSprinting = state;
     public void RecoverStamina(float amount) => currentStamina = Mathf.Min(currentStamina + amount, maxStamina);
     public float GetStaminaNormalized() => currentStamina / maxStamina;
+
+    /// <summary>스테미나가 amount 이상이면 쓰고 true, 모자라면 안 쓰고 false (근접 공격용)</summary>
+    public bool TryUseStamina(float amount)
+    {
+        if (amount <= 0f) return true;
+        if (currentStamina < amount) return false;
+        currentStamina -= amount;
+        return true;
+    }
 }
