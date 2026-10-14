@@ -256,12 +256,29 @@ public static class WorldDecorTextures
 
     // ── 유리 ───────────────────────────────────
 
-    /// <summary>금 간 유리 (충격점에서 방사형 + 동심원 금, 흰 선). 칸 전체가 창문 한 장</summary>
+    /// <summary>
+    /// 깨진 유리 (칸 전체가 창문 한 장).
+    ///  변형 0,1 = 금 간 유리 (충격점에서 방사형 + 동심원 금, 흰 선)
+    ///  변형 2,3 = 완전히 깨진 창 (안은 어둡고 가장자리에 들쭉날쭉한 유리 조각만 남음)
+    /// </summary>
     public static Texture2D GlassCrack(int seed)
     {
         var lines = new float[4][];
         return Atlas("Decal_GlassCrack", (x, y, v, rng) =>
         {
+            if (v >= 2)
+            {
+                // 가장자리에서 안쪽으로 뾰족하게 남은 유리: 테두리까지 거리 < 들쭉날쭉한 깊이
+                float edgeDist = 1f - Mathf.Max(Mathf.Abs(x), Mathf.Abs(y));
+                float along = Mathf.Abs(x) > Mathf.Abs(y) ? y : x;
+                // 불규칙한 조각: 넓은 덩어리(저주파) + 뾰족한 끝(고주파), 변마다 다르게 (규칙적인 톱니는 이빨처럼 보였음)
+                float sideSeed = (Mathf.Abs(x) > Mathf.Abs(y) ? (x > 0 ? 1f : 2f) : (y > 0 ? 3f : 4f)) * 7.3f + v * 13f;
+                float chunk = Mathf.Clamp01(Fbm(along * 1.6f + sideSeed, sideSeed, seed, 3) * 1.8f - 0.45f);
+                float spike = Mathf.Pow(Mathf.Clamp01(Fbm(along * 7f + sideSeed, sideSeed * 0.5f, seed + 3f, 2) * 1.6f - 0.3f), 2f);
+                float teeth = 0.05f + chunk * 0.45f + spike * 0.25f;
+                if (edgeDist < teeth) return C(0.72f, 0.82f, 0.9f, 0.75f * EdgeFade(x, y)); // 남은 유리 조각
+                return C(0.04f, 0.045f, 0.05f, 0.88f * EdgeFade(x, y));                    // 뚫린 창 안쪽 (어두움)
+            }
             if (lines[v] == null)
             {
                 var c = new Vector2(((float)rng.NextDouble() - 0.5f) * 0.8f, ((float)rng.NextDouble() - 0.5f) * 0.8f);
