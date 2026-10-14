@@ -20,6 +20,11 @@ public class ZombieMLBrain : ZombieBrain
     [Tooltip("공격 행동이 켜져도 사거리 밖이면 무시할지 (true 권장)")]
     public bool requireRangeForAttack = true;
 
+    [Tooltip("타겟이 보이고 사거리 안이면 정책과 상관없이 공격한다.\n" +
+             "학습장의 더미는 체력이 없어서 공격에는 보상이 없었다 → 정책의 공격 출력은 사실상 무작위.\n" +
+             "게임에서는 이걸 켜서 FSM과 같은 규칙으로 때리게 한다. 이동 판단은 그대로 정책이 한다.")]
+    public bool autoAttackInRange = true;
+
     // ── Agent ↔ Brain 사이의 캐시 ────────────────────
     // Agent는 자기 주기(DecisionRequester)로 돌고 Brain은 매 프레임 호출되므로,
     // 둘을 직접 호출로 엮지 않고 최신 값만 주고받는다.
@@ -43,9 +48,9 @@ public class ZombieMLBrain : ZombieBrain
             if (!hasObs) return ZombieState.Idle;
             if (lastObs.isStunned) return ZombieState.Stunned;
             if (!lastObs.hasTarget) return ZombieState.Wander;
-            if (lastObs.InAttackRange) return ZombieState.Attack;
+            if (lastObs.targetVisible && lastObs.InAttackRange) return ZombieState.Attack;
             if (lastObs.targetVisible) return ZombieState.Chase;
-            if (lastObs.hasLastKnown && lastObs.timeSinceSeen < 6f) return ZombieState.Investigate;
+            if (lastObs.hasBelief && lastObs.timeSinceSeen < 6f) return ZombieState.Investigate;
             return ZombieState.Wander;
         }
     }
@@ -57,16 +62,32 @@ public class ZombieMLBrain : ZombieBrain
 
         if (obs.isStunned) return ZombieAction.Stand();
 
-        if (attackAction && (!requireRangeForAttack || obs.InAttackRange))
-            return ZombieAction.Strike();
+        bool attack = (attackAction && (!requireRangeForAttack || obs.InAttackRange))
+                   || (autoAttackInRange && obs.targetVisible && obs.InAttackRange);
+
+        // ⚠ 공격해도 이동은 멈추지 않는다.
+        // 예전에는 공격 = Strike() = 제자리 정지였다. 공격 사거리(1.8m)가 포획 거리(1.6m)보다
+        // 넓어서, 1.8m에 닿으면 멈춰 휘두름 → 더미가 멀어짐 → 다시 쫓음 → 또 멈춤이 반복됐다
+        // (바로 뒤에서 움찔움찔하며 못 잡는 '제논의 역설' 현상). 휴리스틱은 사거리 안이면
+        // 항상 공격하므로 매번 걸렸고, RL도 탐색(entropy) 때문에 수시로 걸렸다.
+        // 멈추고 싶으면 정책이 이동 크기를 0으로 내면 된다 —— 정지는 이동 행동의 몫이다.
 
         // 행동은 좀비 로컬 기준 (관측의 toTargetLocal과 같은 좌표계)
         Vector3 localDir = new Vector3(moveAction.x, 0f, moveAction.y);
         float magnitude  = Mathf.Clamp01(localDir.magnitude);
-        if (magnitude < 0.05f) return ZombieAction.Stand();
 
-        Vector3 worldDir = transform.TransformDirection(localDir.normalized);
-        return ZombieAction.FromDirection(transform.position, worldDir, magnitude, stepDistance);
+        ZombieAction action;
+        if (magnitude < 0.05f)
+        {
+            action = attack ? ZombieAction.Strike() : ZombieAction.Stand();
+        }
+        else
+        {
+            Vector3 worldDir = transform.TransformDirection(localDir.normalized);
+            action = ZombieAction.FromDirection(transform.position, worldDir, magnitude, stepDistance);
+            action.attack = attack;
+        }
+        return action;
     }
 
     /// <summary>ZombieAgent.OnActionReceived에서 호출.</summary>

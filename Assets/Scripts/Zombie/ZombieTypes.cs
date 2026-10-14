@@ -37,6 +37,14 @@ public struct ZombieObservation
     public float   detectionRange;
     public float   attackRange;
 
+    // ── 믿음(belief) ───────────────────────────────
+    // 위의 distance/toTargetLocal은 차폐와 무관한 "진짜" 값이라, 그대로 관측에 넣으면
+    // 에이전트가 벽을 투시하게 된다. 아래 값들은 보일 때만 진짜 위치를,
+    // 안 보일 때는 마지막 목격 지점을 기준으로 계산한 것 —— 관측에는 이쪽만 쓴다.
+    public bool    hasBelief;
+    public float   believedDistance;
+    public Vector3 believedDirLocal;
+
     public bool InAttackRange => hasTarget && distance <= attackRange;
 
     // ── ML-Agents 브릿지 ────────────────────────────────
@@ -46,24 +54,33 @@ public struct ZombieObservation
     //   foreach (var v in buf) sensor.AddObservation(v);
     // 이렇게만 하면 FSM과 RL이 "똑같은 것을 본다"가 보장된다.
     // 관측 항목을 늘릴 땐 VectorLength도 같이 올릴 것 (안 그러면 학습된 모델과 shape 불일치).
-    public const int VectorLength = 10;
+    /// <summary>자기 자신 + 타겟에 대한 관측 길이. 동료 관측은 ZombieAgent가 따로 덧붙인다.</summary>
+    public const int SelfVectorLength = 10;
+
+    /// <summary>
+    /// 관측에서 거리를 0~1로 바꿀 때 나누는 고정 기준(m). 학습장 좀비의 시야 거리(30)와 같다.
+    /// 예전에는 좀비 자신의 detectionRange로 나눴는데, 게임에선 프로필마다 시야 거리가 달라서
+    /// 같은 10m도 좀비마다 다른 숫자로 들어갔다 → 학습된 모델이 거리를 잘못 읽는다.
+    /// 학습 때 값이 30이었으므로 이미 학습된 모델과도 그대로 호환된다.
+    /// </summary>
+    public const float ObservationRange = 30f;
 
     public void ToVector(float[] buffer)
     {
-        if (buffer == null || buffer.Length < VectorLength) return;
+        if (buffer == null || buffer.Length < SelfVectorLength) return;
 
-        float range = Mathf.Max(detectionRange, 0.01f);
+        float range = ObservationRange;
 
-        buffer[0] = hasTarget      ? 1f : 0f;
-        buffer[1] = targetVisible  ? 1f : 0f;
-        buffer[2] = Mathf.Clamp01(distance / range);
-        buffer[3] = toTargetLocal.x;
-        buffer[4] = toTargetLocal.z;
-        buffer[5] = Mathf.Clamp01(timeSinceSeen / 5f);
+        buffer[0] = hasBelief      ? 1f : 0f;
+        buffer[1] = targetVisible  ? 1f : 0f;   // 지금 직접 보고 있는가
+        buffer[2] = Mathf.Clamp01(believedDistance / range);
+        buffer[3] = believedDirLocal.x;
+        buffer[4] = believedDirLocal.z;
+        buffer[5] = Mathf.Clamp01(timeSinceSeen / 5f);   // 믿음이 얼마나 낡았는가
         buffer[6] = healthNormalized;
         buffer[7] = canMove        ? 1f : 0f;
         buffer[8] = attackReady    ? 1f : 0f;
-        buffer[9] = InAttackRange  ? 1f : 0f;
+        buffer[9] = targetVisible && InAttackRange ? 1f : 0f;
     }
 }
 

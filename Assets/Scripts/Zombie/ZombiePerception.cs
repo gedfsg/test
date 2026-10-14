@@ -46,14 +46,14 @@ public class ZombiePerception
     protected readonly ZombieController body;
 
     private Transform target;
-    private float retargetTimer;
+    private float     retargetTimer;
 
     private Vector3 lastKnownPosition;
-    private bool hasLastKnown;
-    private float timeSinceSeen = 999f;
+    private bool    hasLastKnown;
+    private float   timeSinceSeen = 999f;
 
     // 시야 판정 캐시 (매 프레임 레이캐스트 안 하려고)
-    private bool visibleCached;
+    private bool  visibleCached;
     private float visionCheckTimer;
 
     // 레이캐스트 결과 버퍼 (GC 방지)
@@ -75,11 +75,27 @@ public class ZombiePerception
     public void Tick(float dt)
     {
         // 타겟 재탐색 (씬 로드 직후 / 플레이어 리스폰 대비)
-        retargetTimer -= dt;
-        if (target == null && retargetTimer <= 0f)
+        //
+        // targetOverride는 매 틱 확인한다. Awake 실행 순서는 오브젝트 간에 보장되지 않으므로,
+        // Perception이 생성되는 시점엔 Arena가 아직 배선을 안 했을 수 있다. 그 틈에
+        // FindGameObjectWithTag로 남의 구역 더미를 잡아버리면 영영 교정되지 않는다.
+        if (body.targetOverride != null)
         {
-            FindPlayer();
-            retargetTimer = body.retargetInterval;
+            if (target != body.targetOverride)
+            {
+                target        = body.targetOverride;
+                visibleCached = false;
+                timeSinceSeen = 999f;
+            }
+        }
+        else
+        {
+            retargetTimer -= dt;
+            if (target == null && retargetTimer <= 0f)
+            {
+                FindPlayer();
+                retargetTimer = body.retargetInterval;
+            }
         }
 
         timeSinceSeen += dt;
@@ -94,9 +110,9 @@ public class ZombiePerception
 
         if (visibleCached && target != null)
         {
-            timeSinceSeen = 0f;
+            timeSinceSeen     = 0f;
             lastKnownPosition = target.position;
-            hasLastKnown = true;
+            hasLastKnown      = true;
         }
     }
 
@@ -104,36 +120,73 @@ public class ZombiePerception
     {
         var obs = new ZombieObservation
         {
-            detectionRange = body.detectionRange,
-            attackRange = body.attackRange,
-            healthNormalized = body.HealthNormalized,
-            canMove = body.CanMove,
-            isStunned = body.IsStunned,
-            attackReady = body.AttackReady,
+            detectionRange    = body.detectionRange,
+            attackRange       = body.attackRange,
+            healthNormalized  = body.HealthNormalized,
+            canMove           = body.CanMove,
+            isStunned         = body.IsStunned,
+            attackReady       = body.AttackReady,
             lastKnownPosition = lastKnownPosition,
-            hasLastKnown = hasLastKnown,
-            timeSinceSeen = timeSinceSeen,
+            hasLastKnown      = hasLastKnown,
+            timeSinceSeen     = timeSinceSeen,
         };
 
         if (target == null)
         {
             obs.hasTarget = false;
-            obs.distance = float.MaxValue;
+            obs.distance  = float.MaxValue;
             return obs;
         }
 
         Vector3 delta = target.position - self.position;
         delta.y = 0f;
 
-        obs.hasTarget = true;
+        obs.hasTarget      = true;
         obs.targetPosition = target.position;
-        obs.distance = delta.magnitude;
-        obs.targetVisible = visibleCached;
-        obs.toTargetLocal = delta.sqrMagnitude > 0.0001f
+        obs.distance       = delta.magnitude;
+        obs.targetVisible  = visibleCached;
+        obs.toTargetLocal  = delta.sqrMagnitude > 0.0001f
             ? self.InverseTransformDirection(delta.normalized)
             : Vector3.zero;
 
+        FillBelief(ref obs);
         return obs;
+    }
+
+    /// <summary>
+    /// 관측에 들어갈 "믿음" 값. 보이면 진짜 위치, 안 보이면 마지막 목격 지점 기준.
+    /// 이걸 거치지 않으면 에이전트가 벽 너머 플레이어 위치를 그대로 알게 되어
+    /// 차폐 시스템이 RL 쪽에만 무력화된다.
+    /// </summary>
+    private void FillBelief(ref ZombieObservation obs)
+    {
+        Vector3 believedPos;
+
+        if (obs.targetVisible)
+        {
+            believedPos   = obs.targetPosition;
+            obs.hasBelief = true;
+        }
+        else if (hasLastKnown)
+        {
+            believedPos   = lastKnownPosition;
+            obs.hasBelief = true;
+        }
+        else
+        {
+            obs.hasBelief        = false;
+            // 관측에서 '모름 = 최대 거리(1.0)'로 읽히도록 고정 기준을 쓴다 (학습 때와 같은 값)
+            obs.believedDistance = ZombieObservation.ObservationRange;
+            obs.believedDirLocal = Vector3.zero;
+            return;
+        }
+
+        Vector3 d = believedPos - self.position;
+        d.y = 0f;
+        obs.believedDistance = d.magnitude;
+        obs.believedDirLocal = d.sqrMagnitude > 0.0001f
+            ? self.InverseTransformDirection(d.normalized)
+            : Vector3.zero;
     }
 
     // ── 시야 판정 ─────────────────────────────────────
@@ -173,9 +226,9 @@ public class ZombiePerception
         var v = body.vision;
 
         Vector3 eye = self.position + Vector3.up * v.eyeHeight;
-        Vector3 aim = t.position + Vector3.up * v.targetHeight;
+        Vector3 aim = t.position    + Vector3.up * v.targetHeight;
         Vector3 dir = aim - eye;
-        float len = dir.magnitude;
+        float   len = dir.magnitude;
         if (len < 0.01f) return false;
         dir /= len;
 
@@ -188,7 +241,7 @@ public class ZombiePerception
             Transform h = hitBuffer[i].transform;
 
             if (h == self || h.IsChildOf(self)) continue;                      // 자기 자신
-            if (h == t || h.IsChildOf(t)) continue;                      // 타겟 본인
+            if (h == t    || h.IsChildOf(t))    continue;                      // 타겟 본인
             if (h.GetComponentInParent<ZombieController>() != null) continue;  // 다른 좀비
 
             blocked = true;
@@ -206,8 +259,8 @@ public class ZombiePerception
     public void NotifyDisturbance(Vector3 position)
     {
         lastKnownPosition = position;
-        hasLastKnown = true;
-        timeSinceSeen = 0.5f;   // 목격은 아니지만 "방금 뭔가 있었다" 수준
+        hasLastKnown      = true;
+        timeSinceSeen     = 0.5f;   // 목격은 아니지만 "방금 뭔가 있었다" 수준
     }
 
     /// <summary>
@@ -221,13 +274,20 @@ public class ZombiePerception
 
     public void ForgetTarget()
     {
-        target = null;
+        target        = null;
         retargetTimer = 0f;
         visibleCached = false;
     }
 
     private void FindPlayer()
     {
+        // 학습 씬에서 구역별로 자기 더미를 지정하는 경로
+        if (body.targetOverride != null)
+        {
+            target = body.targetOverride;
+            return;
+        }
+
         GameObject p = GameObject.FindGameObjectWithTag("Player");
         if (p != null) target = p.transform;
     }

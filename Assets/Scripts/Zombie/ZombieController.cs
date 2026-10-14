@@ -44,6 +44,11 @@ public class ZombieController : MonoBehaviour
     [Header("시야")]
     public ZombieVision vision = new ZombieVision();
 
+    [Header("학습용")]
+    [Tooltip("지정하면 Player 태그 대신 이 대상을 쫓는다. 학습 구역을 여러 개 복제할 때 필수 —\n" +
+             "비워두면 모든 구역의 좀비가 씬에서 처음 찾은 플레이어 하나를 공유하게 된다.")]
+    public Transform targetOverride;
+
     [Header("Brain")]
     [Tooltip("비워두면 ZombieFSMBrain을 자동 장착. ML-Agents 도입 시 여기에 ZombieMLBrain을 넣는다.")]
     public ZombieBrain brain;
