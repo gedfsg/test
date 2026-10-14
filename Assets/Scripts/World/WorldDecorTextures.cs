@@ -286,6 +286,29 @@ public static class WorldDecorTextures
         }, seed);
     }
 
+    /// <summary>불꽃 한 장 (아래가 넓고 위로 가늘어지는 물방울 + 일렁임, 가운데 더 밝음). 색은 파티클 색으로</summary>
+    public static Texture2D Flame()
+    {
+        const int S = 64; var px = new Color32[S * S];
+        for (int j = 0; j < S; j++)
+            for (int i = 0; i < S; i++)
+            {
+                float x = (i + 0.5f) / S * 2f - 1f, y = (j + 0.5f) / S * 2f - 1f; // y: 아래 -1 → 위 +1
+                float h = (y + 1f) * 0.5f;
+                float wobble = (Fbm(h * 3f, 0.5f, 21f, 3) - 0.5f) * 0.35f * h;
+                float width = 0.62f * Mathf.Pow(1f - h, 0.8f) * Mathf.Clamp01(h * 6f + 0.3f);
+                float d = Mathf.Abs(x - wobble);
+                float a = Mathf.Clamp01((width - d) / Mathf.Max(0.05f, width * 0.6f));
+                a *= Mathf.Clamp01((1f - h) * 4f);
+                float core = Mathf.Clamp01(1f - d / Mathf.Max(0.01f, width * 0.5f)) * (1f - h);
+                float v = Mathf.Clamp01(0.7f + core * 0.6f);
+                px[j * S + i] = new Color(v, v, v, a);
+            }
+        var t = new Texture2D(S, S, TextureFormat.RGBA32, false) { name = "FX_FlameShape", wrapMode = TextureWrapMode.Clamp };
+        t.SetPixels32(px); t.Apply(false, true);
+        return t;
+    }
+
     /// <summary>파티클용 부드러운 동그라미 (가운데 밝고 가장자리 투명)</summary>
     public static Texture2D SoftDot(string name, bool noisy)
     {
