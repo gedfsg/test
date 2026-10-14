@@ -49,8 +49,13 @@ public class PlayerController : MonoBehaviour
     public float meleeTorsoMaxTwist = 60f;
     [Tooltip("보정 각도 부드럽게 따라가는 시간(초). 달릴 때 어깨가 좌우로 흔들리는 자연스러운 움직임은 남기고 평균 틀어짐만 지움")]
     public float meleeTorsoSmoothTime = 0.25f;
-    [Tooltip("휘두르는 동안 상체를 더 돌리는 각도. 가로 베기 애니의 궤적이 몸 오른쪽으로 치우쳐서(-32°~119°, 가장 멀리 뻗는 순간 +65°) 마우스 방향이 궤적 가운데 오도록 왼쪽(-)으로 돌림")]
-    public float meleeSwingYawOffset = -45f;
+    [Tooltip("휘두르는 동안 상체를 더 돌리는 각도 (+ 오른쪽). 내려찍기가 가장 멀리 뻗는 순간(클릭 후 약 0.35초) 도끼 머리가 마우스 방향을 지나도록 Play 실측으로 맞춤. (이전 가로 베기용 meleeSwingYawOffset = -45는 씬에 저장된 값이 남아 덮어써서 이름을 바꿈)")]
+    public float meleeChopYawOffset = -10f;
+    [Tooltip("공격 애니(상체 레이어) 재생 시간. MixamoAxeSetup의 MeleeAttack 재생 시간과 같게")]
+    public float meleeSwingDuration = 0.59f;
+    [Tooltip("공격 등 상체 동작 중 골반이 돌아가면(휴머노이드 마스크의 Body에 골반 포함) 다리까지 돌아감 → 골반만 루트 정면으로 되돌리고 상체는 애니 그대로 유지")]
+    public bool meleeStabilizeHips = true;
+    private Vector3 hipsNeutralLocal;  // 상체 동작 없을 때 골반의 루트 기준 수평 위치
     private float meleeTorsoTwist;
     private float meleeSwingUntil;   // 휘두르기 재생 중 (상체 추가 회전 적용 구간)
 
@@ -169,13 +174,41 @@ public class PlayerController : MonoBehaviour
         Transform ls = animator.GetBoneTransform(HumanBodyBones.LeftUpperArm), rs = animator.GetBoneTransform(HumanBodyBones.RightUpperArm);
         if (ls == null || rs == null) return;
 
+        // 하체 안정: 상체 레이어(공격/피격/마시기)가 켜진 만큼 골반 방향을 루트 정면으로 되돌림.
+        // 골반을 돌리면 자식인 척추도 같이 돌아가므로 척추는 반대로 돌려 상체는 애니 그대로(월드 기준) 유지
+        Transform hips = animator.GetBoneTransform(HumanBodyBones.Hips), spineRoot = animator.GetBoneTransform(HumanBodyBones.Spine);
+        Transform lul = animator.GetBoneTransform(HumanBodyBones.LeftUpperLeg), rul = animator.GetBoneTransform(HumanBodyBones.RightUpperLeg);
+        if (meleeStabilizeHips && upperWeight > 0.01f && hips != null && spineRoot != null && lul != null && rul != null)
+        {
+            Vector3 pelvisForward = Vector3.Cross(rul.position - lul.position, Vector3.up); pelvisForward.y = 0f;
+            if (pelvisForward.sqrMagnitude > 1e-4f)
+            {
+                Quaternion fix = Quaternion.AngleAxis(Vector3.SignedAngle(pelvisForward, transform.forward, Vector3.up) * upperWeight, Vector3.up);
+                Quaternion spineWorld = spineRoot.rotation;
+                hips.rotation = fix * hips.rotation;
+                spineRoot.rotation = spineWorld;
+            }
+            // 골반 수평 위치도 평소 위치로 (내려찍기 클립은 골반이 0.2m 앞으로 나가서 다리째 끌려가 발이 0.4m 미끄러졌음)
+            Vector3 local = transform.InverseTransformPoint(hips.position);
+            Vector3 delta = new Vector3(hipsNeutralLocal.x - local.x, 0f, hipsNeutralLocal.z - local.z) * upperWeight;
+            hips.position = transform.TransformPoint(local + delta);
+        }
+        else if (hips != null)
+        {
+            // 상체 동작이 없을 때의 골반 위치(루트 기준 수평)를 기억 (달릴 때 좌우 흔들림은 평균으로)
+            Vector3 local = transform.InverseTransformPoint(hips.position);
+            hipsNeutralLocal = Vector3.Lerp(hipsNeutralLocal, new Vector3(local.x, 0f, local.z), 1f - Mathf.Exp(-Time.deltaTime / 0.3f));
+        }
+
         // 이번 프레임 애니 포즈의 어깨 정면 vs 루트 정면(= 마우스 방향, AimAtMouse가 맞춤)
         Vector3 bodyForward = Vector3.Cross(rs.position - ls.position, Vector3.up);
         bodyForward.y = 0f;
         if (bodyForward.sqrMagnitude < 1e-4f) return;
         float error = Mathf.Clamp(Vector3.SignedAngle(bodyForward, transform.forward, Vector3.up), -meleeTorsoMaxTwist, meleeTorsoMaxTwist);
         bool swinging = Time.time < meleeSwingUntil;
-        float target = (error + (swinging ? meleeSwingYawOffset : 0f)) * meleeTorsoAimWeight;
+        // 휘두르는 동안엔 상체 회전(올려치기 비틀기)이 공격 동작 자체라 오차를 따라가지 않고 고정 보정만
+        // float target = (error + (swinging ? meleeSwingYawOffset : 0f)) * meleeTorsoAimWeight;   // (이전) 가로 베기 (meleeSwingYawOffset = -45)
+        float target = (swinging ? meleeChopYawOffset : error) * meleeTorsoAimWeight;
         // 휘두를 땐 빨리 따라가야 궤적이 바로 마우스 쪽으로 감
         float smooth = swinging ? 0.06f : meleeTorsoSmoothTime;
         meleeTorsoTwist = Mathf.Lerp(meleeTorsoTwist, target, 1f - Mathf.Exp(-Time.deltaTime / Mathf.Max(0.01f, smooth)));
@@ -319,8 +352,12 @@ public class PlayerController : MonoBehaviour
             if (meleeWeapon.TryAttack() && animator != null)
             {
                 animator.SetTrigger(MeleeAttackHash); // 도끼 휘두르기 (Upper Body 레이어)
-                UpperAction(0.8f);                    // 휘두르는 동안만 상체 레이어 켬
-                meleeSwingUntil = Time.time + 0.8f;   // 휘두르는 동안 궤적이 마우스 쪽 가운데로 오게 상체 추가 회전
+                // UpperAction(0.8f);                  // (이전) 가로 베기 0.8초
+                // meleeSwingUntil = Time.time + 0.8f;
+                UpperAction(meleeSwingDuration);       // 휘두르는 동안만 상체 레이어 켬 (내려찍기 0.59초)
+                meleeSwingUntil = Time.time + meleeSwingDuration; // 휘두르는 동안: 몸 회전 고정 + 하체 안정 + 궤적 마우스 쪽
+                ikBlockUntil = Mathf.Max(ikBlockUntil, Time.time + 1f); // 왼손 IK 1초간 확실히 끔 (도끼는 원래 꺼져 있지만 무기 전환 직후 공격 대비)
+                FaceMouseNow();                        // 공격 시작 순간 마우스 방향으로 즉시 회전
             }
         }
 
@@ -617,6 +654,17 @@ public class PlayerController : MonoBehaviour
             ? meleeWeapon?.weaponData
             : rangedWeapon?.weaponData;
 
+    /// <summary>마우스 방향으로 즉시 회전 (부드럽게 돌지 않고 바로) - 공격 시작용</summary>
+    void FaceMouseNow()
+    {
+        if (Mouse.current == null || mainCamera == null) return;
+        if (!GameUtils.GetMouseWorldPosition(mainCamera, transform.position.y + aimHeightOffset, out Vector3 targetPoint)) return;
+        Vector3 lookDir = targetPoint - transform.position; lookDir.y = 0f;
+        if (lookDir.sqrMagnitude < 0.01f) return;
+        transform.rotation = Quaternion.LookRotation(lookDir.normalized);
+        if (rb != null) rb.rotation = transform.rotation;
+    }
+
     void AimAtMouse()
     {
         if (Mouse.current == null || mainCamera == null) return;
@@ -633,10 +681,12 @@ public class PlayerController : MonoBehaviour
             lookDir.y = 0f;
             if (lookDir.sqrMagnitude < 0.01f) return;
 
-            transform.rotation = Quaternion.Slerp(
-                transform.rotation,
-                Quaternion.LookRotation(lookDir),
-                rotationSpeed * Time.deltaTime);
+            // 도끼 휘두르는 동안은 몸 방향 고정 (공격 시작 때 FaceMouseNow로 이미 맞춤) → 내려찍는 중 몸이 돌지 않게
+            if (!(meleeHeld && Time.time < meleeSwingUntil))
+                transform.rotation = Quaternion.Slerp(
+                    transform.rotation,
+                    Quaternion.LookRotation(lookDir),
+                    rotationSpeed * Time.deltaTime);
 
             // aimTarget은 실제 마우스가 가리키는 정확한 월드 좌표를 그대로 담는다.
             // Weapon.cs를 포함해 이 값을 참조하는 모든 곳이 정확히 같은 값을 보게 되므로

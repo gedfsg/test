@@ -10,6 +10,8 @@ public class MeleeWeapon : MonoBehaviour
     public Transform slashPivot;
     [Tooltip("예전 가짜 휘두르기 궤적(slashPivot을 180° 돌리는 하얀 트레일). 실제 휘두르기 애니메이션이 생겨서 경로가 안 맞아 기본 끔")]
     public bool useSlashTrail = false;
+    [Tooltip("클릭 후 데미지가 들어가기까지(초). 내려찍기 애니에서 도끼가 내려와 맞는 순간(Play 실측 약 0.35초)에 맞춤. 0이면 예전처럼 클릭 즉시")]
+    public float hitDelay = 0.35f;
 
     // 추가된 데이터 연동 변수임.
     [Header("Weapon Data")]
@@ -25,11 +27,19 @@ public class MeleeWeapon : MonoBehaviour
 
         if (Time.time >= lastAttackTime + currentAttackRate)
         {
-            Attack();
+            // Attack();   // (이전) 클릭 즉시 판정 → 도끼가 아직 머리 위인데 맞아서 타격감 없음
+            if (hitDelay > 0f && isActiveAndEnabled) StartCoroutine(AttackAfterDelay(hitDelay));
+            else Attack();
             lastAttackTime = Time.time;
             return true;
         }
         return false;
+    }
+
+    private IEnumerator AttackAfterDelay(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        Attack();
     }
 
     private void Attack()

@@ -95,6 +95,21 @@ public static class MixamoAxeSetup
         return n;
     }
 
+    /// <summary>FBX 클립을 [startSec, endSec] 구간만 쓰도록 임포트 설정 (원본 파일은 그대로, .meta만 바뀜). 이미 같으면 재임포트 안 함</summary>
+    static void TrimClip(string fbx, float startSec, float endSec)
+    {
+        var imp = AssetImporter.GetAtPath(fbx) as ModelImporter;
+        if (imp == null) return;
+        var clips = imp.clipAnimations.Length > 0 ? imp.clipAnimations : imp.defaultClipAnimations;
+        if (clips.Length == 0) return;
+        var src = Clip(fbx); float fps = src != null ? src.frameRate : 30f;
+        float first = Mathf.Round(startSec * fps), last = Mathf.Round(endSec * fps);
+        if (Mathf.Approximately(clips[0].firstFrame, first) && Mathf.Approximately(clips[0].lastFrame, last)) return;
+        clips[0].firstFrame = first; clips[0].lastFrame = last;
+        imp.clipAnimations = clips;
+        imp.SaveAndReimport();
+    }
+
     static AnimationClip Clip(string fbx)
     {
         foreach (var o in AssetDatabase.LoadAllAssetsAtPath(fbx))
@@ -182,7 +197,11 @@ public static class MixamoAxeSetup
             var x = s.AddExitTransition();
             x.hasExitTime = true; x.exitTime = 0.9f; x.duration = 0.1f;
         }
-        OneShot("MeleeAttack", AttackTrigger, Clip(Axe + "standing melee attack horizontal.fbx"), 0.8f, true, 0);  // 원본 2.4초 → 0.8초 (쿨타임 0.5초)
+        // OneShot("MeleeAttack", AttackTrigger, Clip(Axe + "standing melee attack horizontal.fbx"), 0.8f, true, 0);  // (이전) 가로 베기 2.4초 → 0.8초: 3배속 + 왼팔이 크게 휘둘러져 흐물거림
+        // 내려찍기(downward): 공격 클립 8개 비교에서 골반 회전·왼팔 움직임이 가장 적고 도끼 머리가 2.9m → 1.1m로 떨어지는 확실한 타격
+        //  원본 2.27초 중 0.3~1.3초만 사용(앞 대기/뒤 복귀 자름) → 0.59초에 재생(1.7배): 올려치기 0.2초 → 내려찍기 → 클릭 후 약 0.34초에 임팩트
+        TrimClip(Axe + "standing melee attack downward.fbx", 0.30f, 1.30f);
+        OneShot("MeleeAttack", AttackTrigger, Clip(Axe + "standing melee attack downward.fbx"), 0.59f, true, 0);
         OneShot("Reload", "Reload", Clip(Rifle + "reloading.fbx"), 1.8f, false, 80);
         OneShot("UseItem", "UseItem", Clip(PlayerDir + "/Drinking/Drinking.fbx"), 3.0f, false, 160);             // 마시기 (원본 8.9초 → 3초, 상체만 → 걸으면서 사용 가능)
         OneShot("WeaponSwitch", "WeaponSwitch", Clip(PlayerDir + "/WeaponSwitch/Draw A Great Sword 1.fbx"), 0.6f, false, 240);
@@ -190,12 +209,18 @@ public static class MixamoAxeSetup
 
         layers[li].defaultWeight = 1f; // 무기 자세를 상체 레이어가 담당 (사망 시만 0)
 
-        // 상체 레이어 마스크 = 팔(어깨~손)만. 몸통/머리/하체는 이동 트리 그대로 → 공격할 때 몸 전체가 돌아가지 않고 팔만 움직임
+        // 상체 레이어 마스크 = 몸통(척추)+머리+양팔. 하체(다리)는 이동 트리 그대로
+        //  (이전엔 팔만 → 몸통이 안 따라와서 공격 때 반대쪽 팔이 혼자 흐물거렸음. 휴머노이드 Body엔 골반도 들어 있어서
+        //   공격 중 골반이 도는 건 PlayerController.LateUpdate에서 골반만 루트 정면으로 되돌림 → 다리는 안 돌아감)
         var mask = layers[li].avatarMask;
         if (mask != null)
         {
-            mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.Body, false);
-            mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.Head, false);
+            // mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.Body, false);   // (이전) 팔만
+            // mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.Head, false);
+            mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.Body, true);
+            mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.Head, true);
+            mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.LeftLeg, false);
+            mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.RightLeg, false);
             foreach (var part in new[] { AvatarMaskBodyPart.LeftArm, AvatarMaskBodyPart.RightArm, AvatarMaskBodyPart.LeftFingers, AvatarMaskBodyPart.RightFingers, AvatarMaskBodyPart.LeftHandIK, AvatarMaskBodyPart.RightHandIK })
                 mask.SetHumanoidBodyPartActive(part, true);
             EditorUtility.SetDirty(mask);
