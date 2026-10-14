@@ -42,6 +42,18 @@ public class PlayerController : MonoBehaviour
 
     private WeaponHandAttacher weaponHandAttacher;
 
+    [Header("도끼: 상체를 마우스 쪽으로")]
+    [Tooltip("도끼 들었을 때 옆/대각선 이동 애니는 상체를 이동 방향으로 틀어서(최대 40°) 마우스를 안 보는 것처럼 보임 → 척추를 돌려 어깨가 조준 방향(루트 정면)을 보게. 0이면 끔")]
+    [Range(0f, 1f)] public float meleeTorsoAimWeight = 1f;
+    [Tooltip("척추로 돌려주는 최대 각도")]
+    public float meleeTorsoMaxTwist = 60f;
+    [Tooltip("보정 각도 부드럽게 따라가는 시간(초). 달릴 때 어깨가 좌우로 흔들리는 자연스러운 움직임은 남기고 평균 틀어짐만 지움")]
+    public float meleeTorsoSmoothTime = 0.25f;
+    [Tooltip("휘두르는 동안 상체를 더 돌리는 각도. 가로 베기 애니의 궤적이 몸 오른쪽으로 치우쳐서(-32°~119°, 가장 멀리 뻗는 순간 +65°) 마우스 방향이 궤적 가운데 오도록 왼쪽(-)으로 돌림")]
+    public float meleeSwingYawOffset = -45f;
+    private float meleeTorsoTwist;
+    private float meleeSwingUntil;   // 휘두르기 재생 중 (상체 추가 회전 적용 구간)
+
     // ── Unity 생명주기 ────────────────────────────
 
     void Awake()
@@ -149,6 +161,32 @@ public class PlayerController : MonoBehaviour
     }
 
     void FixedUpdate() => locomotion.Move(moveInput);
+
+    // 애니메이션 적용 뒤: 도끼 들었을 때 상체(어깨)를 조준 방향으로 비틀어 줌 (총은 상체 레이어 조준 자세가 담당)
+    void LateUpdate()
+    {
+        if (!meleeHeld || isDead || meleeTorsoAimWeight <= 0f || !EnsureAnimRefs()) { meleeTorsoTwist = 0f; return; }
+        Transform ls = animator.GetBoneTransform(HumanBodyBones.LeftUpperArm), rs = animator.GetBoneTransform(HumanBodyBones.RightUpperArm);
+        if (ls == null || rs == null) return;
+
+        // 이번 프레임 애니 포즈의 어깨 정면 vs 루트 정면(= 마우스 방향, AimAtMouse가 맞춤)
+        Vector3 bodyForward = Vector3.Cross(rs.position - ls.position, Vector3.up);
+        bodyForward.y = 0f;
+        if (bodyForward.sqrMagnitude < 1e-4f) return;
+        float error = Mathf.Clamp(Vector3.SignedAngle(bodyForward, transform.forward, Vector3.up), -meleeTorsoMaxTwist, meleeTorsoMaxTwist);
+        bool swinging = Time.time < meleeSwingUntil;
+        float target = (error + (swinging ? meleeSwingYawOffset : 0f)) * meleeTorsoAimWeight;
+        // 휘두를 땐 빨리 따라가야 궤적이 바로 마우스 쪽으로 감
+        float smooth = swinging ? 0.06f : meleeTorsoSmoothTime;
+        meleeTorsoTwist = Mathf.Lerp(meleeTorsoTwist, target, 1f - Mathf.Exp(-Time.deltaTime / Mathf.Max(0.01f, smooth)));
+
+        // 척추 → 가슴 → 윗가슴에 나눠서 돌림 (한 뼈만 돌리면 허리가 꺾여 보임)
+        var spine = new[] { animator.GetBoneTransform(HumanBodyBones.Spine), animator.GetBoneTransform(HumanBodyBones.Chest), animator.GetBoneTransform(HumanBodyBones.UpperChest) };
+        int count = 0; foreach (var b in spine) if (b != null) count++;
+        if (count == 0) return;
+        Quaternion step = Quaternion.AngleAxis(meleeTorsoTwist / count, Vector3.up);
+        foreach (var b in spine) if (b != null) b.rotation = step * b.rotation;
+    }
 
     // === MAP DEV: 카메라 관련 - 병합 시 이 메서드 삭제/수정 전 카메라 회전 기능 영향 확인 ===
     /// <summary>
@@ -282,6 +320,7 @@ public class PlayerController : MonoBehaviour
             {
                 animator.SetTrigger(MeleeAttackHash); // 도끼 휘두르기 (Upper Body 레이어)
                 UpperAction(0.8f);                    // 휘두르는 동안만 상체 레이어 켬
+                meleeSwingUntil = Time.time + 0.8f;   // 휘두르는 동안 궤적이 마우스 쪽 가운데로 오게 상체 추가 회전
             }
         }
 
