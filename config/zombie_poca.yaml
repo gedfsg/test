@@ -1,0 +1,59 @@
+# Zombie multi-agent coordination training (MA-POCA)
+#
+# NOTE: comments are ASCII-only on purpose.
+# ml-agents opens this file without specifying an encoding, so on a Korean
+# Windows it is read as cp949 and any UTF-8 Hangul here crashes the loader.
+
+behaviors:
+  Zombie:
+    # MA-POCA: multi-agent trainer.
+    # It learns how to split a shared group reward among teammates, so a zombie
+    # that merely blocked an escape route still gets credit. Plain PPO cannot do
+    # this credit assignment, and coordination barely emerges.
+    trainer_type: poca
+
+    hyperparameters:
+      batch_size: 2048
+      buffer_size: 20480
+      learning_rate: 3.0e-4
+      learning_rate_schedule: linear
+
+      # --- Diversity lever ---
+      # beta keeps policy entropy up. At the default 5.0e-3 the policy collapses
+      # to "run straight at the target", which is nearly deterministic. Since the
+      # thesis claim is "RL is more varied", this is raised on purpose.
+      #
+      # Suggested experiment: train at 5.0e-3 / 1.5e-2 / 3.0e-2 and plot capture
+      # rate (performance) against path variance (diversity). That trade-off
+      # curve is a results section on its own.
+      beta: 1.5e-2
+      beta_schedule: constant
+
+      epsilon: 0.2
+      lambd: 0.95
+      num_epoch: 3
+
+    network_settings:
+      normalize: true
+      hidden_units: 256     # raised from 128: input is 20-dim with teammate obs
+      num_layers: 2
+      vis_encode_type: simple
+
+    reward_signals:
+      extrinsic:
+        gamma: 0.99
+        strength: 1.0
+
+      # Curiosity helps discover strategies with no immediate reward, such as
+      # circling around cover. It also destabilises training, so get a baseline
+      # with it off first, then compare.
+      # curiosity:
+      #   gamma: 0.99
+      #   strength: 0.02
+      #   learning_rate: 3.0e-4
+
+    keep_checkpoints: 5
+    checkpoint_interval: 200000
+    max_steps: 6000000      # coordination takes longer than solo pursuit
+    time_horizon: 128
+    summary_freq: 20000

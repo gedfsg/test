@@ -732,17 +732,27 @@ MonoBehaviour:
   attackCooldown: 1.5
   detectionRange: 30
   retargetInterval: 1
-  enableWander: 1
-  wanderRadius: 8
-  wanderIntervalMin: 2
-  wanderIntervalMax: 5
-  wanderSpeedFactor: 0.5
   damageTextPrefab: {fileID: 7267503375520356018, guid: 42cf94d8cfb66fd469143863a639bda9, type: 3}
   showHealthBar: 1
   dropAmmoData: {fileID: 11400000, guid: 0b1b7f57d9fbd0d4f89465ac7e6370f5, type: 2}
   dropChance: 0.7
   dropAmmoMin: 6
   dropAmmoMax: 12
+  profile: {fileID: 11400000, guid: 5a6d9b27f80e0ae45aab237d9c3060ab, type: 2}
+  vision:
+    viewAngle: 110
+    nearSenseRadius: 4
+    occlusionMask:
+      serializedVersion: 2
+      m_Bits: 4294967295
+    eyeHeight: 1.6
+    targetHeight: 1
+    hearingSensitivity: 1
+    checkInterval: 0.2
+    debugDrawSight: 0
+  brain: {fileID: 0}
+  repathInterval: 0.15
+  drawGizmos: 1
 --- !u!1 &8173518883804971211
 GameObject:
   m_ObjectHideFlags: 0

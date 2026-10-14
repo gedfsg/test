@@ -1,0 +1,6 @@
+﻿brain,evader_speed,episodes,capture_rate,capture_sec_mean,escape_gap_mean,encircle_mean,evader_flee_speed_mean,zombie_speed_mean,prediction_error_mean
+RLDeterministic,3.50,50,0.940,30.652,197.970,0.111,3.415,2.780,1.526
+RLDeterministic,3.80,50,0.680,34.692,188.932,0.132,3.713,2.822,1.520
+RLDeterministic,4.00,50,0.900,33.310,200.036,0.086,3.883,2.802,1.524
+RLDeterministic,4.20,50,0.760,43.825,175.981,0.104,4.089,2.837,1.532
+RLDeterministic,4.50,50,0.840,40.840,188.781,0.120,4.331,2.826,1.526

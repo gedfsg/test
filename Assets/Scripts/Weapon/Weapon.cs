@@ -74,6 +74,10 @@ public class Weapon : MonoBehaviour
     {
         currentAmmo--;
 
+        // 좀비에게 총성을 전파. 반경은 무기별로 다르다 (WeaponData.GetNoiseRadius).
+        if (weaponData != null)
+            NoiseSystem.Emit(firePoint.position, weaponData.GetNoiseRadius());
+
         if (muzzleFlashLight != null)
             StartCoroutine(MuzzleFlash());
 

@@ -34,8 +34,12 @@ public class MeleeWeapon : MonoBehaviour
             StartCoroutine(SwingEffect());
         }
 
+        // 근접 무기도 소음을 낸다. 다만 반경이 아주 작아서(기본 4m) 사실상 무음에 가깝다.
+        if (weaponData != null)
+            NoiseSystem.Emit(transform.position, weaponData.GetNoiseRadius());
+
         Collider[] hitColliders = Physics.OverlapSphere(attackPoint.position, attackRange);
-        
+
         // 무기 데이터의 타격 데미지를 참조함.
         float currentDamage = (weaponData != null) ? weaponData.damage : 50f;
 
@@ -74,13 +78,13 @@ public class MeleeWeapon : MonoBehaviour
         TrailRenderer trail = slashPivot.GetComponentInChildren<TrailRenderer>();
         if (trail != null)
         {
-            trail.Clear(); 
-            trail.emitting = true; 
+            trail.Clear();
+            trail.emitting = true;
         }
 
         float duration = 0.15f;
         float elapsed = 0f;
-        
+
         Quaternion startRotation = Quaternion.Euler(0, -90f, 0);
         Quaternion endRotation = Quaternion.Euler(0, 90f, 0);
 
@@ -98,7 +102,7 @@ public class MeleeWeapon : MonoBehaviour
 
         if (trail != null)
         {
-            trail.emitting = false; 
+            trail.emitting = false;
         }
     }
 
