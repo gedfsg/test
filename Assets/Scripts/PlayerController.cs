@@ -189,15 +189,26 @@ public class PlayerController : MonoBehaviour
                 spineRoot.rotation = spineWorld;
             }
             // 골반 수평 위치도 평소 위치로 (내려찍기 클립은 골반이 0.2m 앞으로 나가서 다리째 끌려가 발이 0.4m 미끄러졌음)
+            // [버그 수정] 휘두르는 동안에만, 그리고 골반이 루트 근처(1m 안)일 때만 보정.
+            //  예전엔 상체 동작 때마다 + 범위 제한 없이 적용 → 게임 시작 첫 프레임(모델이 아직 엉뚱한 위치)의 값을 기억해서
+            //  골반을 236m 밖으로 옮김 → 화면 밖이라 Animator가 갱신을 멈춰(CullUpdateTransforms) 캐릭터가 영영 사라졌음
             Vector3 local = transform.InverseTransformPoint(hips.position);
-            Vector3 delta = new Vector3(hipsNeutralLocal.x - local.x, 0f, hipsNeutralLocal.z - local.z) * upperWeight;
-            hips.position = transform.TransformPoint(local + delta);
+            if (Time.time < meleeSwingUntil && local.x * local.x + local.z * local.z < 1f)
+            {
+                Vector3 delta = new Vector3(hipsNeutralLocal.x - local.x, 0f, hipsNeutralLocal.z - local.z) * upperWeight;
+                hips.position = transform.TransformPoint(local + delta);
+            }
         }
         else if (hips != null)
         {
             // 상체 동작이 없을 때의 골반 위치(루트 기준 수평)를 기억 (달릴 때 좌우 흔들림은 평균으로)
+            // 정상 범위(1m 안)일 때만 배우고, 기억값도 0.5m 안으로 제한 (이상한 프레임 값이 섞여도 캐릭터가 날아가지 않게)
             Vector3 local = transform.InverseTransformPoint(hips.position);
-            hipsNeutralLocal = Vector3.Lerp(hipsNeutralLocal, new Vector3(local.x, 0f, local.z), 1f - Mathf.Exp(-Time.deltaTime / 0.3f));
+            if (local.x * local.x + local.z * local.z < 1f)
+            {
+                hipsNeutralLocal = Vector3.Lerp(hipsNeutralLocal, new Vector3(local.x, 0f, local.z), 1f - Mathf.Exp(-Time.deltaTime / 0.3f));
+                hipsNeutralLocal = Vector3.ClampMagnitude(hipsNeutralLocal, 0.5f);
+            }
         }
 
         // 이번 프레임 애니 포즈의 어깨 정면 vs 루트 정면(= 마우스 방향, AimAtMouse가 맞춤)
