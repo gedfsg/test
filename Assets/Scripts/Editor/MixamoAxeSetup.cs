@@ -240,28 +240,46 @@ public static class MixamoAxeSetup
 
         // 도끼: 전투 자세 없이 맨손처럼 (상체 레이어 평소 꺼짐 → 팔도 이 트리가 결정). 발 미끄러짐 줄이려고 클립 보폭 속도에 맞춰 재생 속도 조절
         // (캐릭터 humanScale 1.495 기준: unarmed run forward ≈ 4.1/s → 걷기 이동 5에 맞게 1.23배, Shift 대쉬 9에는 2배)
-        const string Ch17 = "Assets/Character/testmotioh/Ch17_nonPBR@";
-        var axe = TreeExplicit(ac, sm, "Loco_Axe", new Vector3(500, 300, 0), new (string, Vector2, float)[]
+        // const string Ch17 = "Assets/Character/testmotioh/Ch17_nonPBR@"; // 이전 구성 전용 (아래 주석)
+        // (이전 구성 - 2·3방향만 있고 팩이 섞여 몸통이 40~50° 틀어진 전투 자세라 마우스 쪽을 안 보는 것처럼 보였음. 보관용 주석)
+        // var axe = TreeExplicit(ac, sm, "Loco_Axe", new Vector3(500, 300, 0), new (string, Vector2, float)[]
+        // {
+        //     (Axe + "unarmed idle.fbx", Vector2.zero, 1f),
+        //     // 달리기: unarmed run은 좌우로 뒤뚱(머리 좌우 0.19m, 몸통 기울기 11°, 뒤로는 16°) → 도끼 들고 뛰는 standing run (0.07m, 3° / 뒤 7°)
+        //     // 재생 속도는 클립 보폭(standing run forward 평균속도가 unarmed의 0.91배)에 맞춰 다시 계산
+        //     // (Axe + "unarmed run forward.fbx", new Vector2(0f, 1f), 1.23f),
+        //     // (Axe + "unarmed run back.fbx", new Vector2(0f, -1f), 1.5f),
+        //     (Axe + "standing run forward.fbx", new Vector2(0f, 1f), 1.35f),
+        //     (Axe + "standing run back.fbx", new Vector2(0f, -1f), 1.7f),
+        //     (Ch17 + "Walk Left.fbx", new Vector2(-1f, 0f), 2.0f),
+        //     (Ch17 + "Walk Right.fbx", new Vector2(1f, 0f), 2.0f),
+        //     (Ch17 + "Walk Forward Left.fbx", new Vector2(-0.7f, 0.7f), 2.0f),
+        //     (Ch17 + "Walk Forward Right.fbx", new Vector2(0.7f, 0.7f), 2.0f),
+        //     (Ch17 + "Walk Backward Left.fbx", new Vector2(-0.7f, -0.7f), 2.0f),
+        //     (Ch17 + "Walk Backward Right.fbx", new Vector2(0.7f, -0.7f), 2.0f),
+        //     // Shift 대쉬: 보폭대로면 2.2배인데 다리가 너무 빨라 보여서 2.0배 (약간 미끄러짐 허용)
+        //     // (Axe + "unarmed run forward.fbx", new Vector2(0f, 2f), 2.0f),
+        //     // (Axe + "unarmed run back.fbx", new Vector2(0f, -2f), 2.2f),
+        //     (Axe + "standing run forward.fbx", new Vector2(0f, 2f), 2.0f),
+        //     (Axe + "standing run back.fbx", new Vector2(0f, -2f), 2.2f),
+        // });
+        // 도끼 이동: Kevin Iglesias Human Animations (Walk01/Run01 8방향, 같은 길이라 방향 섞을 때 발이 맞음)
+        //  클립 분석(플레이어 아바타에 샘플링): 앞으로 갈 때 몸통 정면 1°, 머리 좌우 2~5cm, 달리기 무릎 125° 굽힘
+        //  실제 속도(humanScale 반영): Walk01 2.84m/s, Run01 5.67m/s → 보폭 맞춰 재생 속도 결정 (발 미끄러짐 없게)
+        //   - 반경 2.84/5 = 0.57 : Walk01 x1   (출발/정지 중간, 패드 살짝 기울임 = 진짜 걷기)
+        //   - 반경 1 (이동 5m/s) : Run01 x0.88 (조깅, 초당 2.9걸음)
+        //   - 반경 2 (대쉬 9m/s) : Run01 x1.59 (전력 질주, 초당 5.3걸음)
+        const string KI = "Assets/Kevin Iglesias/Human Animations/Animations/Male/Movement/";
+        var axeEntries = new System.Collections.Generic.List<(string, Vector2, float)> { (Axe + "unarmed idle.fbx", Vector2.zero, 1f) };
+        var dirs8 = new (string name, Vector2 dir)[]
         {
-            (Axe + "unarmed idle.fbx", Vector2.zero, 1f),
-            // 달리기: unarmed run은 좌우로 뒤뚱(머리 좌우 0.19m, 몸통 기울기 11°, 뒤로는 16°) → 도끼 들고 뛰는 standing run (0.07m, 3° / 뒤 7°)
-            // 재생 속도는 클립 보폭(standing run forward 평균속도가 unarmed의 0.91배)에 맞춰 다시 계산
-            // (Axe + "unarmed run forward.fbx", new Vector2(0f, 1f), 1.23f),
-            // (Axe + "unarmed run back.fbx", new Vector2(0f, -1f), 1.5f),
-            (Axe + "standing run forward.fbx", new Vector2(0f, 1f), 1.35f),
-            (Axe + "standing run back.fbx", new Vector2(0f, -1f), 1.7f),
-            (Ch17 + "Walk Left.fbx", new Vector2(-1f, 0f), 2.0f),
-            (Ch17 + "Walk Right.fbx", new Vector2(1f, 0f), 2.0f),
-            (Ch17 + "Walk Forward Left.fbx", new Vector2(-0.7f, 0.7f), 2.0f),
-            (Ch17 + "Walk Forward Right.fbx", new Vector2(0.7f, 0.7f), 2.0f),
-            (Ch17 + "Walk Backward Left.fbx", new Vector2(-0.7f, -0.7f), 2.0f),
-            (Ch17 + "Walk Backward Right.fbx", new Vector2(0.7f, -0.7f), 2.0f),
-            // Shift 대쉬: 보폭대로면 2.2배인데 다리가 너무 빨라 보여서 2.0배 (약간 미끄러짐 허용)
-            // (Axe + "unarmed run forward.fbx", new Vector2(0f, 2f), 2.0f),
-            // (Axe + "unarmed run back.fbx", new Vector2(0f, -2f), 2.2f),
-            (Axe + "standing run forward.fbx", new Vector2(0f, 2f), 2.0f),
-            (Axe + "standing run back.fbx", new Vector2(0f, -2f), 2.2f),
-        });
+            ("Forward", new Vector2(0f, 1f)), ("ForwardRight", new Vector2(0.7071f, 0.7071f)), ("Right", new Vector2(1f, 0f)), ("BackwardRight", new Vector2(0.7071f, -0.7071f)),
+            ("Backward", new Vector2(0f, -1f)), ("BackwardLeft", new Vector2(-0.7071f, -0.7071f)), ("Left", new Vector2(-1f, 0f)), ("ForwardLeft", new Vector2(-0.7071f, 0.7071f)),
+        };
+        foreach (var (name, dir) in dirs8) axeEntries.Add((KI + "Walk/RootMotion/HumanM@Walk01_" + name + " [RM].fbx", dir * 0.57f, 1f));
+        foreach (var (name, dir) in dirs8) axeEntries.Add((KI + "Run/RootMotion/HumanM@Run01_" + name + " [RM].fbx", dir, 0.88f));
+        foreach (var (name, dir) in dirs8) axeEntries.Add((KI + "Run/RootMotion/HumanM@Run01_" + name + " [RM].fbx", dir * 2f, 1.59f));
+        var axe = TreeExplicit(ac, sm, "Loco_Axe", new Vector3(500, 300, 0), axeEntries.ToArray());
         var pistol = Tree(ac, sm, "Loco_Pistol", Pistol + "pistol idle.fbx",
             // arc(방향 전환하며 걷기)는 대각선 이동이 아니라 제외. strafe = 왼쪽, strafe (2) = 오른쪽 (루트 커브로 확인)
             new[] { Pistol + "pistol walk.fbx", Pistol + "pistol walk backward.fbx", Pistol + "pistol strafe.fbx", Pistol + "pistol strafe (2).fbx" },
