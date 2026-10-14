@@ -39,6 +39,8 @@ public class WeaponData : ItemData
     public Vector3 carryMoveRotationOffset = Vector3.zero;
     [Tooltip("휘두를 때 손 위치 (손 뼈 로컬). 손 뼈 원점은 손목이라, 손바닥 중심 + 손잡이 중간쯤을 쥐도록 옮김")]
     public Vector3 swingPositionOffset = Vector3.zero;
+    [Tooltip("켜면 들고 다닐 때도 휘두를 때와 같은 쥐는 방식(rotationOffset + swingPositionOffset)으로 고정. 이동 속도/공격에 따라 손 안에서 도끼가 돌지 않음 (carry 값은 무시)")]
+    public bool rigidGrip = false;
 
     [Header("Back Holster (등에 멜 때 회전, 캐릭터 기준. 0이면 기본 대각선)")]
     public Vector3 holsterRotation = Vector3.zero;

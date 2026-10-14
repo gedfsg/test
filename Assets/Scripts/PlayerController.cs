@@ -430,18 +430,27 @@ public class PlayerController : MonoBehaviour
         {
             var wd = meleeWeapon.weaponData;
             Quaternion swing = Quaternion.Euler(wd.rotationOffset);
-            Quaternion carryIdle = wd.carryRotationOffset != Vector3.zero ? Quaternion.Euler(wd.carryRotationOffset) : swing;
-            Quaternion carryMove = wd.carryMoveRotationOffset != Vector3.zero ? Quaternion.Euler(wd.carryMoveRotationOffset) : carryIdle;
-            // 서 있을 때(팔 늘어뜨림)와 움직일 때(팔 굽혀 흔듦)는 손 방향이 달라서 하나로는 둘 다 자연스럽게 안 됨 → 이동 속도로 섞음
-            float planar = rb != null ? new Vector2(rb.linearVelocity.x, rb.linearVelocity.z).magnitude : 0f;
-            moveBlend = Mathf.MoveTowards(moveBlend, Mathf.Clamp01(planar / 3f), Time.deltaTime * 4f);
-            Quaternion carry = Quaternion.Slerp(carryIdle, carryMove, moveBlend);
-            // 쥐는 방향/위치 전환: 공격 시작엔 거의 즉시(돌면서 넘어가면 덜렁거려 보임), 끝날 땐 부드럽게
-            float gripTarget = Time.time < upperActionUntil ? 1f : 0f;
-            swingGrip = Mathf.MoveTowards(swingGrip, gripTarget, Time.deltaTime * (gripTarget > swingGrip ? 40f : 4f));
-            weaponHandAttacher.SetVisualLocalRotation(Quaternion.Slerp(carry, swing, swingGrip));
-            // 손 뼈 원점은 손목 → 휘두를 땐 손바닥 중심에서 손잡이 중간을 쥐도록 위치 이동 (손잡이 끝을 손목에 꽂은 것처럼 덜렁거리던 문제)
-            weaponHandAttacher.SetVisualLocalPosition(Vector3.Lerp(wd.positionOffset, wd.swingPositionOffset, swingGrip));
+            if (wd.rigidGrip)
+            {
+                // 손잡이를 주먹으로 꽉 쥔 한 가지 방식으로 고정: 뛰든 휘두르든 손 뼈에 딱 붙어서 같이 움직임 (섞는 동안 손 안에서 돌며 흐물거리던 문제)
+                weaponHandAttacher.SetVisualLocalRotation(swing);
+                weaponHandAttacher.SetVisualLocalPosition(wd.swingPositionOffset);
+            }
+            else
+            {
+                Quaternion carryIdle = wd.carryRotationOffset != Vector3.zero ? Quaternion.Euler(wd.carryRotationOffset) : swing;
+                Quaternion carryMove = wd.carryMoveRotationOffset != Vector3.zero ? Quaternion.Euler(wd.carryMoveRotationOffset) : carryIdle;
+                // 서 있을 때(팔 늘어뜨림)와 움직일 때(팔 굽혀 흔듦)는 손 방향이 달라서 하나로는 둘 다 자연스럽게 안 됨 → 이동 속도로 섞음
+                float planar = rb != null ? new Vector2(rb.linearVelocity.x, rb.linearVelocity.z).magnitude : 0f;
+                moveBlend = Mathf.MoveTowards(moveBlend, Mathf.Clamp01(planar / 3f), Time.deltaTime * 4f);
+                Quaternion carry = Quaternion.Slerp(carryIdle, carryMove, moveBlend);
+                // 쥐는 방향/위치 전환: 공격 시작엔 거의 즉시(돌면서 넘어가면 덜렁거려 보임), 끝날 땐 부드럽게
+                float gripTarget = Time.time < upperActionUntil ? 1f : 0f;
+                swingGrip = Mathf.MoveTowards(swingGrip, gripTarget, Time.deltaTime * (gripTarget > swingGrip ? 40f : 4f));
+                weaponHandAttacher.SetVisualLocalRotation(Quaternion.Slerp(carry, swing, swingGrip));
+                // 손 뼈 원점은 손목 → 휘두를 땐 손바닥 중심에서 손잡이 중간을 쥐도록 위치 이동 (손잡이 끝을 손목에 꽂은 것처럼 덜렁거리던 문제)
+                weaponHandAttacher.SetVisualLocalPosition(Vector3.Lerp(wd.positionOffset, wd.swingPositionOffset, swingGrip));
+            }
         }
         if (weaponHandAttacher == null) weaponHandAttacher = FindAnyObjectByType<WeaponHandAttacher>();
         if (weaponHandAttacher != null) weaponHandAttacher.aimAtTarget = !(meleeHeld || isDead || reloading);

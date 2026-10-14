@@ -295,6 +295,8 @@ public static class LiberatorWeaponBuilder
                 // 휘두를 때 손 위치: 손바닥 중심(손목에서 손가락 쪽 0.09, 손바닥 쪽 0.035)에 손잡이 아래쪽 35% 지점이 오게
                 // (프리팹 원점은 손잡이 15% 지점 → 손잡이 방향(엄지 쪽 +Y)으로 0.06 내림)
                 d.swingPositionOffset = new Vector3(0.035f, -0.06f, -0.09f);
+                // 들고 다닐 때도 위와 같은 주먹 쥐기로 고정 (carry 값과 섞으면 뛸 때/공격 끝날 때 손 안에서 돌아 흐물거림)
+                d.rigidGrip = true;
                 break;
         }
         if (isNew) AssetDatabase.CreateAsset(d, path); else EditorUtility.SetDirty(d);

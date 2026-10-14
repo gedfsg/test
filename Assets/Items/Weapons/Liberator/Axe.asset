@@ -37,4 +37,5 @@ MonoBehaviour:
   carryRotationOffset: {x: 0, y: 180, z: 90}
   carryMoveRotationOffset: {x: 90, y: 0, z: 0}
   swingPositionOffset: {x: 0.035, y: -0.06, z: -0.09}
+  rigidGrip: 1
   holsterRotation: {x: 306.8699, y: 270, z: 90}
