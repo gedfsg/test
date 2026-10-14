@@ -37,6 +37,8 @@ public class WeaponData : ItemData
     public Vector3 carryRotationOffset = Vector3.zero;
     [Tooltip("움직일 때 (팔을 굽혀 흔드는 자세). 0이면 carryRotationOffset 그대로. 이동 속도에 따라 서 있을 때 값과 섞음")]
     public Vector3 carryMoveRotationOffset = Vector3.zero;
+    [Tooltip("휘두를 때 손 위치 (손 뼈 로컬). 손 뼈 원점은 손목이라, 손바닥 중심 + 손잡이 중간쯤을 쥐도록 옮김")]
+    public Vector3 swingPositionOffset = Vector3.zero;
 
     [Header("Back Holster (등에 멜 때 회전, 캐릭터 기준. 0이면 기본 대각선)")]
     public Vector3 holsterRotation = Vector3.zero;

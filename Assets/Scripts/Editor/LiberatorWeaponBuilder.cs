@@ -286,12 +286,15 @@ public static class LiberatorWeaponBuilder
                 // 도끼: 데미지 35, 사거리 2m, 쿨타임 0.5초
                 d.type = WeaponType.Melee; d.damage = 35f; d.attackRate = 0.5f; d.effectiveRange = 2f; d.maxAmmo = 0;
                 d.autoFire = false;
-                // Mixamo 도끼 애니메이션 손 기준: 손잡이가 주먹을 관통. block idle에서 어깨 쪽으로 서고,
-                // 휘두르기 젖힘(20%)에서 머리가 위/뒤, 휘두른 뒤(35%) 아래로 향하는 방향 (Play 촬영 비교로 확인)
-                d.positionOffset = Vector3.zero; d.rotationOffset = new Vector3(0f, -90f, 0f);
+                // 휘두를 때 (손 뼈 측정: 손가락 -Z, 엄지 +Y, 손바닥 +X / 도끼: 손잡이 +Z, 날 +Y):
+                // 주먹 쥔 방향 = 손잡이가 엄지 쪽으로 서고 날이 손가락(앞) 쪽. 이전 (0,-90,0)은 손잡이가 팔 연장선이라 끝을 쥔 것처럼 보였음
+                d.positionOffset = Vector3.zero; d.rotationOffset = new Vector3(-90f, 0f, 0f);
                 // 들고 다닐 때 (Play 촬영 비교): 서 있을 땐 다리 옆으로 곧게 늘어뜨려 날이 아래, 움직일 땐 손 아래로 매달림
                 d.carryRotationOffset = new Vector3(0f, 180f, 90f);
                 d.carryMoveRotationOffset = new Vector3(90f, 0f, 0f);
+                // 휘두를 때 손 위치: 손바닥 중심(손목에서 손가락 쪽 0.09, 손바닥 쪽 0.035)에 손잡이 아래쪽 35% 지점이 오게
+                // (프리팹 원점은 손잡이 15% 지점 → 손잡이 방향(엄지 쪽 +Y)으로 0.06 내림)
+                d.swingPositionOffset = new Vector3(0.035f, -0.06f, -0.09f);
                 break;
         }
         if (isNew) AssetDatabase.CreateAsset(d, path); else EditorUtility.SetDirty(d);

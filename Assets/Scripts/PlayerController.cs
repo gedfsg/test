@@ -385,6 +385,7 @@ public class PlayerController : MonoBehaviour
     private float upperActionUntil;  // 상체 동작(휘두르기/마시기/전환/피격) 재생 중 - 도끼일 때 이 동안만 상체 레이어 켬
     private float upperWeight = 1f;
     private float moveBlend;          // 도끼 손 방향: 0 = 서 있을 때, 1 = 움직일 때
+    private float swingGrip;          // 도끼 쥐는 방식: 0 = 들고 다닐 때, 1 = 휘두를 때
 
     /// <summary>상체 레이어로 재생하는 동작 시작 (도끼 들었을 땐 이 시간 동안만 상체 레이어가 켜짐)</summary>
     void UpperAction(float seconds) => upperActionUntil = Mathf.Max(upperActionUntil, Time.time + seconds);
@@ -435,7 +436,12 @@ public class PlayerController : MonoBehaviour
             float planar = rb != null ? new Vector2(rb.linearVelocity.x, rb.linearVelocity.z).magnitude : 0f;
             moveBlend = Mathf.MoveTowards(moveBlend, Mathf.Clamp01(planar / 3f), Time.deltaTime * 4f);
             Quaternion carry = Quaternion.Slerp(carryIdle, carryMove, moveBlend);
-            weaponHandAttacher.SetVisualLocalRotation(Quaternion.Slerp(carry, swing, upperWeight));
+            // 쥐는 방향/위치 전환: 공격 시작엔 거의 즉시(돌면서 넘어가면 덜렁거려 보임), 끝날 땐 부드럽게
+            float gripTarget = Time.time < upperActionUntil ? 1f : 0f;
+            swingGrip = Mathf.MoveTowards(swingGrip, gripTarget, Time.deltaTime * (gripTarget > swingGrip ? 40f : 4f));
+            weaponHandAttacher.SetVisualLocalRotation(Quaternion.Slerp(carry, swing, swingGrip));
+            // 손 뼈 원점은 손목 → 휘두를 땐 손바닥 중심에서 손잡이 중간을 쥐도록 위치 이동 (손잡이 끝을 손목에 꽂은 것처럼 덜렁거리던 문제)
+            weaponHandAttacher.SetVisualLocalPosition(Vector3.Lerp(wd.positionOffset, wd.swingPositionOffset, swingGrip));
         }
         if (weaponHandAttacher == null) weaponHandAttacher = FindAnyObjectByType<WeaponHandAttacher>();
         if (weaponHandAttacher != null) weaponHandAttacher.aimAtTarget = !(meleeHeld || isDead || reloading);

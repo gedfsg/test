@@ -70,6 +70,12 @@ public class WeaponHandAttacher : MonoBehaviour
         if (currentVisual != null) currentVisual.localRotation = rot;
     }
 
+    /// <summary>손에 든 무기 모델의 로컬 위치 직접 지정</summary>
+    public void SetVisualLocalPosition(Vector3 pos)
+    {
+        if (currentVisual != null) currentVisual.localPosition = pos;
+    }
+
     // 총구가 무기 루트 기준으로 갖는 "고정된" 회전 오프셋. 무기 장착 시점에 한 번만 계산해서
     // 캐싱해두고, 매 프레임 이 값을 그대로 재사용한다. 매 프레임 currentMuzzlePoint.rotation을
     // 다시 읽어서 델타를 계산하면, 애니메이션의 미세한 흔들림이 계속 누적되는

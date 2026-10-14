@@ -190,6 +190,17 @@ public static class MixamoAxeSetup
 
         layers[li].defaultWeight = 1f; // 무기 자세를 상체 레이어가 담당 (사망 시만 0)
 
+        // 상체 레이어 마스크 = 팔(어깨~손)만. 몸통/머리/하체는 이동 트리 그대로 → 공격할 때 몸 전체가 돌아가지 않고 팔만 움직임
+        var mask = layers[li].avatarMask;
+        if (mask != null)
+        {
+            mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.Body, false);
+            mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.Head, false);
+            foreach (var part in new[] { AvatarMaskBodyPart.LeftArm, AvatarMaskBodyPart.RightArm, AvatarMaskBodyPart.LeftFingers, AvatarMaskBodyPart.RightFingers, AvatarMaskBodyPart.LeftHandIK, AvatarMaskBodyPart.RightHandIK })
+                mask.SetHumanoidBodyPartActive(part, true);
+            EditorUtility.SetDirty(mask);
+        }
+
         // Base Layer: 사망 (전신, Dying)
         var baseSm = layers[0].stateMachine;
         ClearStates(baseSm, "Dead");
