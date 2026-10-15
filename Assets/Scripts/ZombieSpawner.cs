@@ -49,6 +49,23 @@ public class ZombieSpawner : MonoBehaviour
     [Tooltip("스폰 포인트 주변 N미터 안에서 랜덤 위치로 스폰 (겹침 방지)")]
     public float spawnPointJitter = 4f;
 
+    [Header("━━ 스트리밍 (멀리 있는 좀비 정리 → 플레이어 근처에 새로 생성) ━━")]
+    [Tooltip("켜면 플레이어에서 despawnDistance보다 멀고 화면 밖인 좀비를 지워서 최대 수 자리를 비움. " +
+             "안 켜면 맵 곳곳에 생긴 좀비가 안 사라져서 후반엔 최대 수가 꽉 찬 채 플레이어 근처엔 새 좀비가 안 나옴 (7일차 실측)")]
+    public bool enableStreaming = true;
+    [Tooltip("이보다 먼 좀비는 정리 대상 (m)")]
+    public float despawnDistance = 70f;
+    [Tooltip("실내 스폰 포인트는 플레이어에서 이 거리 안의 것만 사용 (m)")]
+    public float indoorSpawnMaxDistance = 55f;
+    [Tooltip("실내 스폰 포인트 최소 거리 (눈앞에서 갑자기 생기지 않게, m)")]
+    public float indoorSpawnMinDistance = 12f;
+    [Tooltip("정리 검사 간격 (초)")]
+    public float streamCheckInterval = 2f;
+    [Tooltip("1일차 최대 수 비율. 스트리밍으로 최대 수 전부가 플레이어 근처에 모이므로 초반엔 줄여둠 (65/35 × 0.4 = 26/14)")]
+    [Range(0.1f, 1f)] public float startCapRatio = 0.4f;
+    [Tooltip("하루 지날 때마다 최대 수 비율 증가 (7일차 = 0.4 + 0.1×6 = 100%)")]
+    public float capRatioPerDay = 0.1f;
+
     [Header("디버그")]
     public bool debugLog = true;
 
@@ -60,6 +77,8 @@ public class ZombieSpawner : MonoBehaviour
     private Transform player;
     private bool  lastIsNight;
     private float countLogTimer;
+    private float streamTimer;
+    private readonly List<Transform> nearIndoorPoints = new List<Transform>(); // 스트리밍용: 플레이어 근처 실내 포인트
 
     void Start()
     {
@@ -75,6 +94,19 @@ public class ZombieSpawner : MonoBehaviour
     {
         indoorZombies .RemoveAll(z => z == null);
         outdoorZombies.RemoveAll(z => z == null);
+
+        // ── 스트리밍: 먼 좀비 정리 ──
+        if (enableStreaming && player != null)
+        {
+            streamTimer -= Time.deltaTime;
+            if (streamTimer <= 0f)
+            {
+                streamTimer = streamCheckInterval;
+                // extraZombies(창고/상자 이벤트 좀비)는 최대 수에 안 들어가고 건물에 미리 배치된 것이라 정리 안 함
+                int removed = DespawnFar(indoorZombies) + DespawnFar(outdoorZombies);
+                if (debugLog && removed > 0) Debug.Log($"[ZombieSpawner] 스트리밍: 플레이어에서 {despawnDistance}m 넘게 먼 좀비 {removed}마리 정리");
+            }
+        }
 
         bool isNight = DayNightCycle.Instance != null &&
                        DayNightCycle.Instance.CurrentPhase == DayNightCycle.Phase.Night;
@@ -93,12 +125,17 @@ public class ZombieSpawner : MonoBehaviour
             if (countLogTimer >= 5f)
             {
                 countLogTimer = 0f;
-                Debug.Log($"[ZombieSpawner] 현재 활성 좀비: 실내 {indoorZombies.Count}/{maxIndoorZombies}, 실외 {outdoorZombies.Count}/{maxOutdoorZombies}, 합계 {indoorZombies.Count + outdoorZombies.Count}");
+                Debug.Log($"[ZombieSpawner] 현재 활성 좀비: 실내 {indoorZombies.Count}/{Mathf.RoundToInt(maxIndoorZombies * CapScale())}, 실외 {outdoorZombies.Count}/{Mathf.RoundToInt(maxOutdoorZombies * CapScale())}, 합계 {indoorZombies.Count + outdoorZombies.Count}");
             }
         }
 
+        // 일차별 실제 최대 수 (스트리밍 끄면 예전처럼 최대 수 그대로)
+        float capScale = CapScale();
+        int maxIn  = Mathf.RoundToInt(maxIndoorZombies  * capScale);
+        int maxOut = Mathf.RoundToInt(maxOutdoorZombies * capScale);
+
         // ── 실내 스폰 ──
-        if (indoorZombies.Count < maxIndoorZombies)
+        if (indoorZombies.Count < maxIn)
         {
             indoorTimer -= Time.deltaTime;
             if (indoorTimer <= 0f)
@@ -106,12 +143,24 @@ public class ZombieSpawner : MonoBehaviour
                 float interval = isNight ? nightIndoorInterval : dayIndoorInterval;
                 int burst = isNight ? nightIndoorBurst : dayIndoorBurst;
 
-                if (indoorSpawnPoints != null && indoorSpawnPoints.Length > 0)
+                // 스트리밍 중엔 플레이어 근처(indoorSpawnMinDistance~indoorSpawnMaxDistance) 실내 포인트만 사용
+                Transform[] pts = enableStreaming && player != null ? NearIndoorPoints() : indoorSpawnPoints;
+                if (pts != null && pts.Length > 0)
                 {
                     for (int b = 0; b < burst; b++)
                     {
-                        if (indoorZombies.Count >= maxIndoorZombies) break;
-                        SpawnAt(indoorSpawnPoints, indoorZombies);
+                        if (indoorZombies.Count >= maxIn) break;
+                        SpawnAt(pts, indoorZombies);
+                    }
+                }
+                else if (enableStreaming && useRandomFallback && player != null)
+                {
+                    // 근처에 실내 포인트가 없으면(예: 경찰서는 가장 가까운 포인트가 61m) 플레이어 주변 랜덤 위치로 채움
+                    // → 어디에 있든 플레이어 주변 좀비 밀도 유지
+                    for (int b = 0; b < burst; b++)
+                    {
+                        if (indoorZombies.Count >= maxIn) break;
+                        SpawnRandom(indoorZombies);
                     }
                 }
                 indoorTimer = interval + Random.Range(-0.5f, 0.5f);
@@ -119,7 +168,7 @@ public class ZombieSpawner : MonoBehaviour
         }
 
         // ── 실외 스폰 ──
-        if (outdoorZombies.Count < maxOutdoorZombies)
+        if (outdoorZombies.Count < maxOut)
         {
             outdoorTimer -= Time.deltaTime;
             if (outdoorTimer <= 0f)
@@ -129,7 +178,7 @@ public class ZombieSpawner : MonoBehaviour
 
                 for (int b = 0; b < burst; b++)
                 {
-                    if (outdoorZombies.Count >= maxOutdoorZombies) break;
+                    if (outdoorZombies.Count >= maxOut) break;
                     if (outdoorSpawnPoints != null && outdoorSpawnPoints.Length > 0)
                         SpawnAt(outdoorSpawnPoints, outdoorZombies);
                     else if (useRandomFallback && player != null)
@@ -141,6 +190,52 @@ public class ZombieSpawner : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────
+
+    /// <summary>일차별 최대 수 비율 (1일차 startCapRatio → 하루마다 +capRatioPerDay, 최대 1)</summary>
+    float CapScale()
+    {
+        if (!enableStreaming) return 1f;
+        int day = DayNightCycle.Instance != null ? DayNightCycle.Instance.CurrentDay : 1;
+        return Mathf.Clamp(startCapRatio + capRatioPerDay * (day - 1), 0.1f, 1f);
+    }
+
+    /// <summary>플레이어에서 despawnDistance보다 멀고 카메라에 안 보이는 좀비 삭제. 지운 수 반환</summary>
+    int DespawnFar(List<GameObject> list)
+    {
+        int removed = 0;
+        Camera cam = Camera.main;
+        float sqr = despawnDistance * despawnDistance;
+        for (int i = list.Count - 1; i >= 0; i--)
+        {
+            GameObject z = list[i];
+            if (z == null) { list.RemoveAt(i); continue; }
+            if ((z.transform.position - player.position).sqrMagnitude < sqr) continue;
+            if (cam != null)
+            {
+                Vector3 vp = cam.WorldToViewportPoint(z.transform.position);
+                if (vp.z > 0f && vp.x > -0.1f && vp.x < 1.1f && vp.y > -0.1f && vp.y < 1.1f) continue; // 화면에 보이면 유지
+            }
+            list.RemoveAt(i);
+            Destroy(z);
+            removed++;
+        }
+        return removed;
+    }
+
+    /// <summary>플레이어 기준 indoorSpawnMinDistance~indoorSpawnMaxDistance 안의 실내 스폰 포인트</summary>
+    Transform[] NearIndoorPoints()
+    {
+        nearIndoorPoints.Clear();
+        if (indoorSpawnPoints == null) return null;
+        float min = indoorSpawnMinDistance * indoorSpawnMinDistance, max = indoorSpawnMaxDistance * indoorSpawnMaxDistance;
+        foreach (var pt in indoorSpawnPoints)
+        {
+            if (pt == null) continue;
+            float d = (pt.position - player.position).sqrMagnitude;
+            if (d >= min && d <= max) nearIndoorPoints.Add(pt);
+        }
+        return nearIndoorPoints.ToArray();
+    }
 
     void SpawnAt(Transform[] points, List<GameObject> list)
     {
