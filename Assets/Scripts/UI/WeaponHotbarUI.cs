@@ -214,6 +214,20 @@ public class WeaponHotbarUI : MonoBehaviour
         return AddItemToSlot(consumable, count);
     }
 
+    /// <summary>소비 칸(3~5)에 같은 아이템이 이미 있으면 개수만 더하고 true. 없으면 false (빈 칸에 새로 넣지 않음)</summary>
+    public bool TryStackExisting(ItemData item, int count)
+    {
+        if (item == null || count <= 0) return false;
+        for (int i = SlotTypeFilter.WeaponSlotCount; i < SLOT_COUNT; i++)
+        {
+            if (items[i] != item) continue;
+            ammos[i] += count;
+            RefreshSlot(i);
+            return true;
+        }
+        return false;
+    }
+
     /// <summary>현재 선택된 슬롯에 아이템 세팅 (Equip to Hotbar용)</summary>
     public bool AddItemToActiveSlot(ItemData item, int count) => SetSlot(activeSlot, item, count);
 

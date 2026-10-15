@@ -49,6 +49,15 @@ public class InventoryManager : MonoBehaviour
             }
         }
 
+        // 핫바(3~5번)에 이미 등록된 소비 아이템이면 인벤토리 대신 그 핫바 칸에 개수 합침 (붕대 x5 → x8)
+        if (itemToAdd is ConsumableData && WeaponHotbarUI.Instance != null
+            && WeaponHotbarUI.Instance.TryStackExisting(itemToAdd, amountToAdd))
+        {
+            Debug.Log($"{itemToAdd.itemName} {amountToAdd}개 획득 → 핫바에 합침");
+            RefreshUI();
+            return true;
+        }
+
         if (itemToAdd.isStackable)
         {
             foreach (InventorySlot slot in inventory)
@@ -100,6 +109,16 @@ public class InventoryManager : MonoBehaviour
             slot.currentAmmo = ammo;
         }
         return result;
+    }
+
+    /// <summary>같은 종류 아이템 칸을 전부 빼고 총 개수 반환 (핫바 등록 시 전부 올리기용)</summary>
+    public int TakeAll(ItemData item)
+    {
+        int total = 0;
+        foreach (var s in inventory) if (s.item == item) total += s.amount;
+        inventory.RemoveAll(s => s.item == item);
+        RefreshUI();
+        return total;
     }
 
     public InventorySlot GetSlotById(string id)

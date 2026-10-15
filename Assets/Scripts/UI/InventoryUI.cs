@@ -197,11 +197,18 @@ public class InventoryUI : MonoBehaviour
             inventoryManager.InsertItemAt(insertIndex, currentItem, 1, currentAmmo);
         }
 
-        inventoryManager.RemoveItemById(slot.slotId);
-
-        int finalCount = slot.item is WeaponData wd
-            ? (savedAmmo >= 0 ? savedAmmo : wd.maxAmmo)
-            : slot.amount + stackCount;
+        // 총은 그 1자루만 빼고, 소비 아이템은 인벤토리의 같은 종류를 전부 빼서 핫바에 한꺼번에 올림
+        // (예전엔 RemoveItemById가 1개만 줄여서 인벤토리에 4개가 남은 채 핫바에도 4개가 표시되던 복제 버그)
+        int finalCount;
+        if (slot.item is WeaponData wd)
+        {
+            inventoryManager.RemoveItemById(slot.slotId);
+            finalCount = savedAmmo >= 0 ? savedAmmo : wd.maxAmmo;
+        }
+        else
+        {
+            finalCount = inventoryManager.TakeAll(slot.item) + stackCount;
+        }
 
         hotbar.SetSlotOnly(targetSlot, slot.item, finalCount);
 

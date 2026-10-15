@@ -116,9 +116,8 @@ public static class SlotDragDrop
             var old = hb.GetItem(dst.Index);
             if (old == slot.item && !(slot.item is WeaponData))
             {
-                // 같은 소비 아이템이면 개수 합침
-                hb.PutSlot(dst.Index, old, hb.GetAmmo(dst.Index) + slot.amount);
-                list.RemoveAt(src.Index);
+                // 같은 소비 아이템이면 개수 합침 (인벤토리의 같은 종류 칸 전부)
+                hb.PutSlot(dst.Index, old, hb.GetAmmo(dst.Index) + inv.TakeAll(slot.item));
             }
             else
             {
@@ -126,6 +125,8 @@ public static class SlotDragDrop
                 var (oldItem, oldCount) = hb.TakeSlot(dst.Index);
                 if (oldItem != null) list[src.Index] = ToInventorySlot(oldItem, oldCount); // 원래 있던 건 인벤토리 그 자리로
                 else list.RemoveAt(src.Index);
+                // 소비 아이템은 인벤토리에 남은 같은 종류 칸도 전부 같이 올림 (10개 넘어서 칸이 나뉜 경우)
+                if (!(slot.item is WeaponData)) count += inv.TakeAll(slot.item);
                 hb.PutSlot(dst.Index, slot.item, count);
             }
         }
