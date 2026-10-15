@@ -17,6 +17,14 @@ public class ZombieController : MonoBehaviour
     public float detectionRange = 30f;
     public float retargetInterval = 1f;   // 플레이어 다시 찾기 간격
 
+    [Header("밤 / 최종 공격")]
+    [Tooltip("밤에 감지 범위 배수 (30m → 60m). 플레이어가 가만히 있어도 주변 좀비가 몰려옴")]
+    public float nightDetectionMultiplier = 2f;
+    [Tooltip("밤에 쫓아올 때 이동 속도 배수")]
+    public float nightSpeedMultiplier = 1.2f;
+    [Tooltip("켜지면 거리 상관없이 플레이어를 추적 (ZombieSpawner의 최종 공격 좀비 떼가 켬)")]
+    public bool huntPlayer = false;
+
     [Header("랜덤 배회")]
     public bool  enableWander       = true;
     public float wanderRadius       = 8f;
@@ -256,14 +264,13 @@ public class ZombieController : MonoBehaviour
             return;
         }
 
-        // 플레이어 감지 범위 내: 추적
-        if (dist <= detectionRange * WeatherManager.DetectionMultiplier) // 비 오면 20% 감소
+        // 플레이어 감지 범위 내: 추적 (비 오면 20% 감소, 밤엔 nightDetectionMultiplier배, 최종 공격 좀비는 무조건)
+        bool isNight = DayNightCycle.Instance != null && DayNightCycle.Instance.CurrentPhase == DayNightCycle.Phase.Night;
+        float detect = detectionRange * WeatherManager.DetectionMultiplier * (isNight ? nightDetectionMultiplier : 1f);
+        if (huntPlayer || dist <= detect)
         {
-            if (isWandering)
-            {
-                isWandering = false;
-                agent.speed = moveSpeed;
-            }
+            isWandering = false;
+            agent.speed = moveSpeed * (isNight ? nightSpeedMultiplier : 1f); // 밤엔 더 빠르게
             agent.SetDestination(target.position);
             SetAnimSpeed(agent.velocity.magnitude);
         }
