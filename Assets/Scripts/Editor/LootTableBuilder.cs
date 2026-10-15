@@ -33,6 +33,13 @@ public static class LootTableBuilder
     static readonly string[] RareGuns = { "Five-seveN", "RARAN_1130", "XMA-10", "SAIGA-12", "L85A2", "AUG", "Galil", "Groza", "Vector", "P90" };
     static readonly string[] EpicGuns = { "Deagle", "BandJ_357", "AA-12", "SCAR-L", "SCAR-H", "G3", "AS-762", "Honey_Badger", "SR-3M" };
 
+    // 7일 플레이 피드백: 권총/AR만 보이고 샷건·SMG는 거의 못 봄 (나무 상자 롤당 1.1%, 경찰서엔 SMG 없음, 집은 권총만)
+    // → 흔한 곳(나무 상자/집/마트/경찰서/경찰 좀비)에도 샷건·SMG를 섞음
+    static readonly string[] CommonShotguns = { "S12P8", "XMA-10" };
+    static readonly string[] CommonSMGs = { "Skorpion", "UMP45", "MP7" };
+    static readonly string[] RareShotguns = { "SAIGA-12", "AA-12" };
+    static readonly string[] RareSMGs = { "Vector", "P90", "SR-3M" };
+
     [MenuItem("Tools/Items/Build Loot Tables")]
     public static void BuildAll()
     {
@@ -49,6 +56,7 @@ public static class LootTableBuilder
         // ── 상자 ──
         var wood = new List<E>(foods) { new E(C + "Bandage.asset", 10), PAmmo(10, 10, 20), ARAmmo(8, 15, 30), SGAmmo(6, 4, 8) };
         AddGuns(wood, new[] { "G17", "P9" }, 3f); AddGuns(wood, new[] { "Skorpion", "S12P8" }, 1f);
+        AddGuns(wood, CommonShotguns, 1.5f); AddGuns(wood, CommonSMGs, 1.5f); // 샷건/SMG 롤당 약 1% → 약 6%
         wood.Add(new E(B + "Backpack_Medium.asset", 2)); // 가방 (1종)
         var crateWood = Table("Crate_Wood", 2, 5, wood);
 
@@ -59,6 +67,7 @@ public static class LootTableBuilder
             PAmmo(8, 15, 30), ARAmmo(10, 30, 60), SGAmmo(6, 6, 12),
         };
         AddGuns(metal, new[] { "G17", "S12P8", "AK-556", "AR-15", "UMP45" }, 2f); AddGuns(metal, RareGuns, 1.5f);
+        AddGuns(metal, CommonSMGs, 1.5f); AddGuns(metal, CommonShotguns, 1.5f);
         metal.Add(new E(B + "Backpack_Medium.asset", 3));
         var crateMetal = Table("Crate_Metal", 2, 5, metal);
 
@@ -72,10 +81,15 @@ public static class LootTableBuilder
         // ── 건물 ──
         var house = new List<E>(foods) { new E(C + "Bandage.asset", 6), PAmmo(4, 8, 15) };
         AddGuns(house, new[] { "G17", "P9" }, 1.5f); // 권총 가끔 (~3%)
+        AddGuns(house, new[] { "S12P8", "Skorpion" }, 0.75f); // 집에 있던 샷건/SMG 드물게 (~1.5%)
         house.Add(new E(B + "Backpack_Medium.asset", 1));
         var police = new List<E> { ARAmmo(20, 30, 60), PAmmo(15, 20, 40), SGAmmo(12, 8, 16), new E(C + "Bandage.asset", 5), new E(C + "MedKit.asset", 3) };
         AddGuns(police, new[] { "AK-556", "AR-15", "G36K", "FAMAS", "S12P8" }, 4f); AddGuns(police, new[] { "L85A2", "AUG", "SAIGA-12", "XMA-10" }, 1.5f); AddGuns(police, new[] { "G17" }, 3f);
+        // 경찰서: 진압용 샷건 + 기동대 SMG 추가 (총 중 샷건/SMG 비중 약 50%)
+        AddGuns(police, CommonShotguns, 3f); AddGuns(police, CommonSMGs, 3f); AddGuns(police, RareShotguns, 1f); AddGuns(police, RareSMGs, 1f);
         var mart = new List<E>(foods);
+        // 마트: 음식 대량 + 계산대/창고에 숨겨둔 샷건·SMG 가끔 (마트 1곳당 총 1자루 나올 확률 약 40%)
+        AddGuns(mart, new[] { "S12P8", "Skorpion", "UMP45" }, 0.7f); mart.Add(SGAmmo(1.5f, 4, 8));
         var church = new List<E> { new E(C + "Bandage.asset", 10), new E(C + "MedKit.asset", 6), new E(C + "Painkiller.asset", 4), new E(C + "Water.asset", 3) };
 
         var db = LoadOrCreate<LootDatabase>("Assets/Resources/LootDatabase.asset");
@@ -94,10 +108,13 @@ public static class LootTableBuilder
         // ── 좀비 드랍 (1개씩) ──
         var smallAmmo = Table("Zombie_Ammo", 1, 1, new List<E> { PAmmo(1, 5, 10), ARAmmo(1, 5, 15), SGAmmo(1, 2, 4) });
         var ragT = Table("Zombie_Rag", 1, 1, new List<E> { new E(rag, 1, 1, 2) });
-        var policePistol = Table("Zombie_PolicePistol", 1, 1, new List<E> { new E(W + "G17.asset", 5), new E(W + "P9.asset", 4), new E(W + "Five-seveN.asset", 1) });
+        // 경찰 좀비: 권총 위주 + 샷건/SMG도 가끔
+        var policePistol = Table("Zombie_PolicePistol", 1, 1, new List<E> { new E(W + "G17.asset", 5), new E(W + "P9.asset", 4), new E(W + "Five-seveN.asset", 1),
+                                                                            new E(W + "S12P8.asset", 2), new E(W + "MP7.asset", 1.5f), new E(W + "UMP45.asset", 1.5f) });
         var policeAmmo = Table("Zombie_PoliceAmmo", 1, 1, new List<E> { PAmmo(1, 8, 15) });
         var runnerFood = Table("Zombie_RunnerFood", 1, 1, new List<E> { new E(C + "Apple.asset", 3), new E(C + "Bread.asset", 2), new E(C + "CannedFood.asset", 1), new E(C + "Cola.asset", 2) });
         var tankRare = new List<E> { new E(C + "MedKit.asset", 4), new E(C + "Painkiller.asset", 3) }; AddGuns(tankRare, RareGuns, 0.5f);
+        AddGuns(tankRare, RareShotguns, 0.5f); AddGuns(tankRare, RareSMGs, 0.5f);
         var tankT = Table("Zombie_TankRare", 1, 1, tankRare);
         db.zombieDrops = new List<LootDatabase.ZombieDropRule>
         {
