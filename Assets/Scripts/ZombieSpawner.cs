@@ -66,6 +66,13 @@ public class ZombieSpawner : MonoBehaviour
     [Tooltip("하루 지날 때마다 최대 수 비율 증가 (7일차 = 0.4 + 0.1×6 = 100%)")]
     public float capRatioPerDay = 0.1f;
 
+    [Header("━━ 스폰 위치 제한 (1층 바닥만) ━━")]
+    [Tooltip("지형 높이보다 이 이상(m) 높은 곳엔 스폰 안 함. 건물 벽 콜라이더로 NavMesh를 구우면 지붕 위에도 NavMesh가 생겨서 " +
+             "좀비가 위층/지붕(지면 +16m)에 떠 있었음 (실내는 1층만 보이게 잘라서 위층 좀비가 검정 실루엣으로 보임)")]
+    public float maxSpawnHeightAboveGround = 1.5f;
+    [Tooltip("지형보다 이만큼(m) 낮은 곳까지는 허용 (지형보다 살짝 낮게 깔린 건물 바닥)")]
+    public float maxSpawnDepthBelowGround = 3f;
+
     [Header("━━ 낮/밤 밸런스 ━━")]
     [Tooltip("낮(Phase.Day)에는 실외 최대 수에 이 비율을 곱함 (0.25 = 75% 감소 → 낮 바깥은 비교적 안전). " +
              "실내는 그대로 (파밍 위험 유지). 노을/밤/새벽은 그대로")]
@@ -131,6 +138,9 @@ public class ZombieSpawner : MonoBehaviour
                 streamTick = true;
                 // extraZombies(창고/상자 이벤트 좀비)는 최대 수에 안 들어가고 건물에 미리 배치된 것이라 정리 안 함
                 int removed = DespawnFar(indoorZombies) + DespawnFar(outdoorZombies);
+                // 이미 위층/지붕에 올라가 있는 좀비 제거 (수정 전 스폰분, NavMesh 복구 워프로 지붕에 올라간 경우)
+                int floating = RemoveFloating(indoorZombies) + RemoveFloating(outdoorZombies) + RemoveFloating(extraZombies) + RemoveFloating(hordeZombies);
+                if (debugLog && floating > 0) Debug.Log($"[ZombieSpawner] 위층/지붕에 뜬 좀비 {floating}마리 제거");
                 if (debugLog && removed > 0) Debug.Log($"[ZombieSpawner] 스트리밍: 플레이어에서 {despawnDistance}m 넘게 먼 좀비 {removed}마리 정리");
             }
         }
@@ -258,8 +268,9 @@ public class ZombieSpawner : MonoBehaviour
         {
             float a = (baseAngle + Random.Range(-60f, 60f)) * Mathf.Deg2Rad;
             Vector3 candidate = player.position + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * Random.Range(hordeMinDistance, hordeMaxDistance);
+            candidate.y = GroundY(candidate) + 0.5f; // 1층 바닥 높이에서 찾기
             if (!NavMesh.SamplePosition(candidate, out NavMeshHit hit, 4f, NavMesh.AllAreas)) continue;
-            Spawn(hit.position, hordeZombies);
+            if (!Spawn(hit.position, hordeZombies)) continue;
             var zc = hordeZombies[hordeZombies.Count - 1].GetComponent<ZombieController>();
             if (zc != null) zc.huntPlayer = true; // 거리 상관없이 플레이어 추적
             spawned++;
@@ -354,13 +365,16 @@ public class ZombieSpawner : MonoBehaviour
             // 스폰 포인트 주변에 랜덤 오프셋 추가 (겹침 방지)
             Vector2 rnd2D = Random.insideUnitCircle * spawnPointJitter;
             Vector3 searchPos = pt.position + new Vector3(rnd2D.x, 0, rnd2D.y);
+            searchPos.y = GroundY(searchPos) + 0.5f; // 스폰 포인트 높이 대신 1층 바닥 높이로 고정 (위층/지붕 NavMesh를 안 집게)
 
             // 1차: 그 자리에서 NavMesh 찾기 (jitter 반경만큼 넉넉히)
             if (NavMesh.SamplePosition(searchPos, out NavMeshHit hit, spawnPointJitter + 2f, NavMesh.AllAreas))
             {
-                Spawn(hit.position, list);
-                if (debugLog) Debug.Log($"[ZombieSpawner] ✅ 스폰 at {pt.name} → {hit.position}");
-                return;
+                if (Spawn(hit.position, list))
+                {
+                    if (debugLog) Debug.Log($"[ZombieSpawner] ✅ 스폰 at {pt.name} → {hit.position}");
+                    return;
+                }
             }
 
             // 2차: 아래로 레이캐스트해서 지면 찾기 (공중에 떠 있는 스폰 포인트 대비)
@@ -368,18 +382,22 @@ public class ZombieSpawner : MonoBehaviour
             {
                 if (NavMesh.SamplePosition(groundHit.point, out NavMeshHit hit2, 5f, NavMesh.AllAreas))
                 {
-                    Spawn(hit2.position, list);
-                    if (debugLog) Debug.Log($"[ZombieSpawner] ✅ 스폰 at {pt.name} (지면 자동찾기) → {hit2.position}");
-                    return;
+                    if (Spawn(hit2.position, list))
+                    {
+                        if (debugLog) Debug.Log($"[ZombieSpawner] ✅ 스폰 at {pt.name} (지면 자동찾기) → {hit2.position}");
+                        return;
+                    }
                 }
             }
 
             // 3차: 더 큰 반경으로 한 번 더 시도
             if (NavMesh.SamplePosition(searchPos, out NavMeshHit hit3, 30f, NavMesh.AllAreas))
             {
-                Spawn(hit3.position, list);
-                if (debugLog) Debug.Log($"[ZombieSpawner] ✅ 스폰 at {pt.name} (넓은 반경) → {hit3.position}");
-                return;
+                if (Spawn(hit3.position, list))
+                {
+                    if (debugLog) Debug.Log($"[ZombieSpawner] ✅ 스폰 at {pt.name} (넓은 반경) → {hit3.position}");
+                    return;
+                }
             }
 
             if (debugLog)
@@ -393,11 +411,9 @@ public class ZombieSpawner : MonoBehaviour
         {
             Vector2 rnd = Random.insideUnitCircle.normalized * Random.Range(minSpawnDistance, spawnRadius);
             Vector3 candidate = player.position + new Vector3(rnd.x, 0, rnd.y);
-            if (NavMesh.SamplePosition(candidate, out NavMeshHit hit, 5f, NavMesh.AllAreas))
-            {
-                Spawn(hit.position, list);
+            candidate.y = GroundY(candidate) + 0.5f;
+            if (NavMesh.SamplePosition(candidate, out NavMeshHit hit, 5f, NavMesh.AllAreas) && Spawn(hit.position, list))
                 return;
-            }
         }
     }
 
@@ -429,17 +445,50 @@ public class ZombieSpawner : MonoBehaviour
         {
             Vector2 rnd = Random.insideUnitCircle.normalized * Random.Range(minDist, maxDist);
             Vector3 candidate = center + new Vector3(rnd.x, 0f, rnd.y);
-            if (NavMesh.SamplePosition(candidate, out NavMeshHit hit, 3f, NavMesh.AllAreas))
-            {
-                Spawn(hit.position, extraZombies);
+            candidate.y = GroundY(candidate) + 0.5f;
+            if (NavMesh.SamplePosition(candidate, out NavMeshHit hit, 3f, NavMesh.AllAreas) && Spawn(hit.position, extraZombies))
                 return extraZombies[extraZombies.Count - 1];
-            }
         }
         return null;
     }
 
-    void Spawn(Vector3 pos, List<GameObject> list)
+    /// <summary>지형 높이 (지형이 없으면 플레이어 높이 → 없으면 0)</summary>
+    float GroundY(Vector3 p)
     {
+        Terrain t = Terrain.activeTerrain;
+        if (t != null) return t.SampleHeight(p) + t.transform.position.y;
+        return player != null ? player.position.y : 0f;
+    }
+
+    /// <summary>1층 바닥 높이인지 (지형 -maxSpawnDepthBelowGround ~ +maxSpawnHeightAboveGround)</summary>
+    bool IsGroundFloor(Vector3 p)
+    {
+        if (Terrain.activeTerrain == null) return true;
+        float dy = p.y - GroundY(p);
+        return dy <= maxSpawnHeightAboveGround && dy >= -maxSpawnDepthBelowGround;
+    }
+
+    /// <summary>위층/지붕에 올라가 있는 좀비 삭제 (화면에 보여도 삭제 - 원래 있으면 안 되는 위치). 지운 수 반환</summary>
+    int RemoveFloating(List<GameObject> list)
+    {
+        int removed = 0;
+        for (int i = list.Count - 1; i >= 0; i--)
+        {
+            GameObject z = list[i];
+            if (z == null) { list.RemoveAt(i); continue; }
+            if (z.transform.position.y - GroundY(z.transform.position) <= maxSpawnHeightAboveGround + 1f) continue; // 계단/턱 여유 1m
+            list.RemoveAt(i);
+            Destroy(z);
+            removed++;
+        }
+        return removed;
+    }
+
+    /// <summary>pos에 좀비 생성. 1층 바닥이 아니면(위층/지붕) 생성 안 하고 false</summary>
+    bool Spawn(Vector3 pos, List<GameObject> list)
+    {
+        if (!IsGroundFloor(pos)) return false;
+
         GameObject prefab = PickWeightedPrefab();
         GameObject zombie = Instantiate(prefab, pos, Quaternion.Euler(0, Random.Range(0f, 360f), 0));
 
@@ -451,6 +500,7 @@ public class ZombieSpawner : MonoBehaviour
         }
 
         list.Add(zombie);
+        return true;
     }
 
     void OnDrawGizmosSelected()
