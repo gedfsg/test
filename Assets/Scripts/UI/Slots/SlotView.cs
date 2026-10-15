@@ -122,8 +122,8 @@ public class SlotView : MonoBehaviour, IPointerClickHandler,
     public void OnDrag(PointerEventData e) => SlotDragDrop.Move(e);
     public void OnEndDrag(PointerEventData e) => SlotDragDrop.End();
     public void OnDrop(PointerEventData e) => SlotDragDrop.Drop(this);
-    public void OnPointerEnter(PointerEventData e) => SlotDragDrop.Hover(this, true);
-    public void OnPointerExit(PointerEventData e) => SlotDragDrop.Hover(this, false);
+    public void OnPointerEnter(PointerEventData e) { SlotDragDrop.Hover(this, true); ItemTooltipUI.Show(this); }   // 마우스 올리면 아이템 툴팁
+    public void OnPointerExit(PointerEventData e) { SlotDragDrop.Hover(this, false); ItemTooltipUI.Hide(this); }
 
     public Sprite IconSprite => icon != null && icon.enabled ? icon.sprite : null;
 
