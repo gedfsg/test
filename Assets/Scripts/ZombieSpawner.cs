@@ -72,6 +72,11 @@ public class ZombieSpawner : MonoBehaviour
     public float maxSpawnHeightAboveGround = 1.5f;
     [Tooltip("지형보다 이만큼(m) 낮은 곳까지는 허용 (지형보다 살짝 낮게 깔린 건물 바닥)")]
     public float maxSpawnDepthBelowGround = 3f;
+    [Tooltip("켜면 플레이어까지 NavMesh 경로가 이어지는 곳에만 스폰 (문 없는 방/막힌 마당/지붕 같은 못 가는 공간 제외)")]
+    public bool requireReachable = true;
+    [Tooltip("플레이어와 이보다 멀면(m) 플레이어 대신 '플레이어 쪽으로 40m 지점'까지 이어지는지로 판정 " +
+             "(수백 m 경로 계산은 탐색 한도에 걸려 이어져 있어도 PathPartial이 나옴)")]
+    public float reachCheckFullPathDistance = 90f;
 
     [Header("━━ 낮/밤 밸런스 ━━")]
     [Tooltip("낮(Phase.Day)에는 실외 최대 수에 이 비율을 곱함 (0.25 = 75% 감소 → 낮 바깥은 비교적 안전). " +
@@ -484,10 +489,40 @@ public class ZombieSpawner : MonoBehaviour
         return removed;
     }
 
-    /// <summary>pos에 좀비 생성. 1층 바닥이 아니면(위층/지붕) 생성 안 하고 false</summary>
+    private NavMeshPath reachPath;
+    private int reachRejected; // 디버그: 못 가는 곳이라 거부한 수
+
+    /// <summary>플레이어가 걸어서 갈 수 있는 곳인지 (스폰 지점 → 플레이어 NavMesh 경로가 끝까지 이어지는지)</summary>
+    bool IsReachableFromPlayer(Vector3 pos)
+    {
+        if (!requireReachable || player == null) return true;
+        // 플레이어가 점프 중 등으로 NavMesh 위가 아니면 검사 생략 (스폰을 막지 않음)
+        if (!NavMesh.SamplePosition(player.position, out NavMeshHit ph, 3f, NavMesh.AllAreas)) return true;
+        reachPath ??= new NavMeshPath();
+
+        Vector3 target = ph.position;
+        Vector3 flat = ph.position - pos; flat.y = 0f;
+        if (flat.magnitude > reachCheckFullPathDistance)
+        {
+            // 멀면 플레이어 방향 40m 지점까지만 (그 근처 NavMesh가 없으면 판정 불가 → 허용)
+            Vector3 mid = pos + flat.normalized * 40f;
+            mid.y = GroundY(mid) + 0.5f;
+            if (!NavMesh.SamplePosition(mid, out NavMeshHit mh, 6f, NavMesh.AllAreas)) return true;
+            target = mh.position;
+        }
+        return NavMesh.CalculatePath(pos, target, NavMesh.AllAreas, reachPath) && reachPath.status == NavMeshPathStatus.PathComplete;
+    }
+
+    /// <summary>pos에 좀비 생성. 1층 바닥이 아니거나(위층/지붕) 플레이어가 못 가는 곳이면 생성 안 하고 false</summary>
     bool Spawn(Vector3 pos, List<GameObject> list)
     {
         if (!IsGroundFloor(pos)) return false;
+        if (!IsReachableFromPlayer(pos))
+        {
+            reachRejected++;
+            if (debugLog && reachRejected % 20 == 1) Debug.Log($"[ZombieSpawner] 플레이어가 못 가는 곳이라 스폰 안 함 (누적 {reachRejected}회) {pos}");
+            return false;
+        }
 
         GameObject prefab = PickWeightedPrefab();
         GameObject zombie = Instantiate(prefab, pos, Quaternion.Euler(0, Random.Range(0f, 360f), 0));
