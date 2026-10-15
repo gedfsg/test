@@ -66,6 +66,11 @@ public class ZombieSpawner : MonoBehaviour
     [Tooltip("하루 지날 때마다 최대 수 비율 증가 (7일차 = 0.4 + 0.1×6 = 100%)")]
     public float capRatioPerDay = 0.1f;
 
+    [Header("━━ 낮/밤 밸런스 ━━")]
+    [Tooltip("낮(Phase.Day)에는 실외 최대 수에 이 비율을 곱함 (0.25 = 75% 감소 → 낮 바깥은 비교적 안전). " +
+             "실내는 그대로 (파밍 위험 유지). 노을/밤/새벽은 그대로")]
+    [Range(0f, 1f)] public float dayOutdoorCapRatio = 0.25f;
+
     [Header("━━ 최종 공격 (마지막 날 좀비 떼) ━━")]
     [Tooltip("마지막 날엔 플레이어 주변에 주기적으로 좀비 떼가 생기고, 떼 좀비는 거리 상관없이 플레이어를 추적")]
     public bool enableFinalAssault = true;
@@ -116,12 +121,14 @@ public class ZombieSpawner : MonoBehaviour
         outdoorZombies.RemoveAll(z => z == null);
 
         // ── 스트리밍: 먼 좀비 정리 ──
+        bool streamTick = false; // 이번 프레임이 정리 검사 주기인지 (낮 실외 정리도 같은 주기로)
         if (enableStreaming && player != null)
         {
             streamTimer -= Time.deltaTime;
             if (streamTimer <= 0f)
             {
                 streamTimer = streamCheckInterval;
+                streamTick = true;
                 // extraZombies(창고/상자 이벤트 좀비)는 최대 수에 안 들어가고 건물에 미리 배치된 것이라 정리 안 함
                 int removed = DespawnFar(indoorZombies) + DespawnFar(outdoorZombies);
                 if (debugLog && removed > 0) Debug.Log($"[ZombieSpawner] 스트리밍: 플레이어에서 {despawnDistance}m 넘게 먼 좀비 {removed}마리 정리");
@@ -156,6 +163,15 @@ public class ZombieSpawner : MonoBehaviour
         float capScale = CapScale();
         int maxIn  = Mathf.RoundToInt(maxIndoorZombies  * capScale);
         int maxOut = Mathf.RoundToInt(maxOutdoorZombies * capScale);
+        bool isDayPhase = DayNightCycle.Instance != null && DayNightCycle.Instance.CurrentPhase == DayNightCycle.Phase.Day;
+        if (isDayPhase) maxOut = Mathf.RoundToInt(maxOut * dayOutdoorCapRatio); // 낮엔 실외 좀비 대폭 감소
+
+        // 밤에 늘어난 실외 좀비가 낮 최대 수보다 많으면, 화면 밖에 있는 먼 것부터 정리 (streamCheckInterval마다)
+        if (isDayPhase && outdoorZombies.Count > maxOut && streamTick)
+        {
+            int trimmed = TrimOffscreen(outdoorZombies, maxOut);
+            if (debugLog && trimmed > 0) Debug.Log($"[ZombieSpawner] ☀ 낮: 실외 좀비 {trimmed}마리 정리 → {outdoorZombies.Count}/{maxOut}");
+        }
 
         // ── 실내 스폰 ──
         if (indoorZombies.Count < maxIn)
@@ -275,6 +291,31 @@ public class ZombieSpawner : MonoBehaviour
                 Vector3 vp = cam.WorldToViewportPoint(z.transform.position);
                 if (vp.z > 0f && vp.x > -0.1f && vp.x < 1.1f && vp.y > -0.1f && vp.y < 1.1f) continue; // 화면에 보이면 유지
             }
+            list.RemoveAt(i);
+            Destroy(z);
+            removed++;
+        }
+        return removed;
+    }
+
+    /// <summary>list가 cap마리가 될 때까지 화면 밖 + 플레이어 감지 범위(30m) 밖인 좀비를 먼 순서로 삭제. 지운 수 반환</summary>
+    int TrimOffscreen(List<GameObject> list, int cap)
+    {
+        if (player == null) return 0;
+        list.RemoveAll(z => z == null);
+        Camera cam = Camera.main;
+        list.Sort((a, b) => (b.transform.position - player.position).sqrMagnitude.CompareTo((a.transform.position - player.position).sqrMagnitude)); // 먼 순
+        int removed = 0;
+        for (int i = 0; i < list.Count && list.Count > cap; )
+        {
+            GameObject z = list[i];
+            bool visible = false;
+            if (cam != null)
+            {
+                Vector3 vp = cam.WorldToViewportPoint(z.transform.position);
+                visible = vp.z > 0f && vp.x > -0.1f && vp.x < 1.1f && vp.y > -0.1f && vp.y < 1.1f;
+            }
+            if (visible || (z.transform.position - player.position).sqrMagnitude < 30f * 30f) { i++; continue; } // 보이거나 쫓아오는 중이면 유지
             list.RemoveAt(i);
             Destroy(z);
             removed++;
