@@ -197,6 +197,10 @@ public class ItemTooltipUI : MonoBehaviour
                     Line(CDim, $"{AmmoName(w.type)} 사용{(w.autoFire ? " · 연사" : "")}");
                 }
                 break;
+            case MaterialData:
+                var recipe = CraftingRecipe.FindByIngredient(item);
+                if (recipe != null) Line(CInfo, $"{recipe.ingredientCount}개 → {recipe.result.itemName} {recipe.resultCount}개 (우클릭 → 제작하기)");
+                break;
         }
         return sb.ToString();
     }
