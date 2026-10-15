@@ -26,6 +26,9 @@ public class SurvivalDayHUD : MonoBehaviour
     public Color clockColor = new Color32(0xF2, 0xE9, 0xCD, 0xFF);
     public Color dayPhaseColor = new Color32(0xF6, 0xC1, 0x56, 0xFF);
     public Color nightPhaseColor = new Color32(0x8F, 0xB6, 0xFF, 0xFF);
+    [Tooltip("건물 안에서는 해/달 아이콘·낮/밤 글자·날씨 아이콘을 숨기고 '실내'로 표시 (밖이 안 보이니 밤낮도 모르게 → 긴장감)")]
+    public bool hideSkyIndoors = true;
+    public Color indoorPhaseColor = new Color(1f, 1f, 1f, 0.55f);
     public Color sunColor = new Color32(0xFD, 0xB8, 0x4C, 0xFF);
     public Color dividerColor = new Color32(227, 215, 193, 200);
 
@@ -42,6 +45,7 @@ public class SurvivalDayHUD : MonoBehaviour
     TextMeshProUGUI[] dayNumbers;
     int shownDay = -1;
     DayNightCycle.Phase shownPhase;
+    bool shownIndoor;
 
     void Start()
     {
@@ -132,6 +136,22 @@ public class SurvivalDayHUD : MonoBehaviour
                 dayNumbers[i].color = current ? currentDayNumber : dayNumber;
                 dayNumbers[i].font = current ? HudStyle.Bold : HudStyle.SemiBold;
             }
+        }
+
+        // 실내: 하늘 관련 표시 숨김 (BuildingInterior 트리거 안에 있는 동안)
+        bool indoor = hideSkyIndoors && BuildingInterior.IsAnyoneIndoors;
+        if (force || indoor != shownIndoor)
+        {
+            shownIndoor = indoor;
+            phaseIcon.enabled = !indoor;
+            if (weatherIcon != null) weatherIcon.enabled = !indoor;
+            force = true; // 실외로 나오면 아래에서 낮/밤 글자 다시 채움
+        }
+        if (indoor)
+        {
+            phaseText.text = "실내";
+            phaseText.color = indoorPhaseColor;
+            return;
         }
 
         if (force || dnc.CurrentPhase != shownPhase)
