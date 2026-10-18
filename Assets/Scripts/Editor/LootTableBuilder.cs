@@ -91,6 +91,8 @@ public static class LootTableBuilder
         // 마트: 음식 대량 + 계산대/창고에 숨겨둔 샷건·SMG 가끔 (마트 1곳당 총 1자루 나올 확률 약 40%)
         AddGuns(mart, new[] { "S12P8", "Skorpion", "UMP45" }, 0.7f); mart.Add(SGAmmo(1.5f, 4, 8));
         var church = new List<E> { new E(C + "Bandage.asset", 10), new E(C + "MedKit.asset", 6), new E(C + "Painkiller.asset", 4), new E(C + "Water.asset", 3) };
+        // 병원: 의료 아이템만 (붕대/구급상자/진통제), 교회보다 많이
+        var hospital = new List<E> { new E(C + "Bandage.asset", 10), new E(C + "MedKit.asset", 7), new E(C + "Painkiller.asset", 6) };
 
         var db = LoadOrCreate<LootDatabase>("Assets/Resources/LootDatabase.asset");
         db.crateWood = crateWood; db.crateMetal = crateMetal; db.crateMilitary = crateMilitary; db.crateMilitaryGuaranteed = crateMilitaryG;
@@ -103,6 +105,7 @@ public static class LootTableBuilder
             Rule(LootDatabase.BuildingKind.Mart, Table("Bldg_Mart", 10, 14, mart), 0),         // 음식/음료 대량
             Rule(LootDatabase.BuildingKind.Church, Table("Bldg_Church", 3, 5, church), 0),     // 의료
             Rule(LootDatabase.BuildingKind.Warehouse, Table("Bldg_Warehouse", 4, 6, metal), 4), // 랜덤 + 좀비 多
+            Rule(LootDatabase.BuildingKind.Hospital, Table("Bldg_Hospital", 6, 9, hospital), 0), // 의료 대량
         };
 
         // ── 좀비 드랍 (1개씩) ──

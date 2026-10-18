@@ -10,6 +10,9 @@ using UnityEngine;
 [RequireComponent(typeof(Collider))]
 public class BuildingInterior : MonoBehaviour
 {
+    /// <summary>플레이어가 건물에 들어갈 때마다 (미션: 건물 방문 판정용)</summary>
+    public static event System.Action<BuildingInterior> PlayerEntered;
+
     [Header("1층 높이 (건물 바닥에서 이 높이 위는 전부 잘라내서 1층만 보이게 함)")]
     public float groundFloorHeight = 5f;
 
@@ -129,6 +132,7 @@ public class BuildingInterior : MonoBehaviour
     {
         if (!other.CompareTag(playerTag)) return;
         SetCut(true);
+        PlayerEntered?.Invoke(this);
         if (darkenSurroundings) EnterIndoorFog(other.transform);
         BuildingTransition.Play();
         Camera.main?.GetComponent<CameraZoom>()?.SetIndoor(true);

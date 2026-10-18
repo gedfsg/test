@@ -145,7 +145,7 @@ public class LootWorldSpawner : MonoBehaviour
     }
 
     // 실내 바닥 위 걸을 수 있는 점 (트리거 범위 안쪽, 아래로 레이 → NavMesh 0.6m 이내, NavMesh 없으면 빈 공간 체크)
-    static bool TryInteriorPoint(Bounds tb, out Vector3 point)
+    public static bool TryInteriorPoint(Bounds tb, out Vector3 point) // MissionManager(열쇠 카드 배치)도 사용
     {
         for (int i = 0; i < 12; i++)
         {
@@ -161,7 +161,7 @@ public class LootWorldSpawner : MonoBehaviour
         return false;
     }
 
-    static Collider FindTrigger(BuildingInterior b)
+    public static Collider FindTrigger(BuildingInterior b)
     {
         foreach (var c in b.GetComponents<Collider>()) if (c.isTrigger) return c;
         return null;

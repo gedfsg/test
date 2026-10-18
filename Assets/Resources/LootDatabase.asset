@@ -37,6 +37,9 @@ MonoBehaviour:
   - kind: 4
     table: {fileID: 11400000, guid: 4ed8229ba27d2e64cb6c2b3fd3e431f1, type: 2}
     extraZombies: 4
+  - kind: 5
+    table: {fileID: 11400000, guid: 73dc2acbf65e79842bef168564eab58a, type: 2}
+    extraZombies: 0
   zombieDrops:
   - nameContains: Normal
     chance: 0.2

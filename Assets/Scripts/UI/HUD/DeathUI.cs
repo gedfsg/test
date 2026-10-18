@@ -48,7 +48,7 @@ public class DeathUI : MonoBehaviour
         if (health != null)
         {
             if (health.onDeath == null) health.onDeath = new UnityEngine.Events.UnityEvent();
-            health.onDeath.AddListener(() => StartCoroutine(Sequence()));
+            health.onDeath.AddListener(() => { if (!shown) { shown = true; StartCoroutine(Sequence(showDelay)); } });
         }
     }
 
@@ -78,9 +78,27 @@ public class DeathUI : MonoBehaviour
                                 TextAlignmentOptions.Center, new Vector2(0f, -80f), new Vector2(400f, 40f));
     }
 
-    IEnumerator Sequence()
+    bool shown; // 이미 종료 화면이 떴으면 (예: 탈출 성공 뒤 사망) 다시 안 띄움
+
+    /// <summary>
+    /// 사망 말고 다른 이유로 게임이 끝날 때 (미션 실패 = 시간 초과, 탈출 성공).
+    /// 제목/색만 바꿔서 같은 연출(검게 fade → 큰 글자 → R 재시작)을 씀. 게임은 즉시 멈춤.
+    /// </summary>
+    public void ShowEnding(string titleText, Color titleColor, string hintText)
     {
-        yield return new WaitForSecondsRealtime(showDelay);
+        if (shown) return;
+        shown = true;
+        title.text = titleText; title.color = new Color(titleColor.r, titleColor.g, titleColor.b, 0f);
+        hint.text = hintText + "\nR - 다시 시작";
+        hint.rectTransform.sizeDelta = new Vector2(900f, 90f);
+        hint.rectTransform.anchoredPosition = new Vector2(0f, -100f);
+        Time.timeScale = 0f;
+        StartCoroutine(Sequence(0.5f));
+    }
+
+    IEnumerator Sequence(float delay)
+    {
+        yield return new WaitForSecondsRealtime(delay);
 
         for (float t = 0f; t < 1f; t += Time.unscaledDeltaTime / fadeDuration)
         {

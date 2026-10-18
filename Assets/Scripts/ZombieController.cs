@@ -6,6 +6,9 @@ using UnityEngine.AI;
 /// </summary>
 public class ZombieController : MonoBehaviour
 {
+    /// <summary>좀비가 죽을 때마다 (미션: 좀비 처치 수 집계용)</summary>
+    public static event System.Action<ZombieController> AnyDied;
+
     [Header("Stats")]
     public float maxHealth      = 50f;
     public float moveSpeed      = 2f;
@@ -425,6 +428,7 @@ public class ZombieController : MonoBehaviour
     {
         if (isDead) return;
         isDead = true;
+        AnyDied?.Invoke(this);
 
         // 좀비 종류별 드랍 (LootDatabase: 일반 탄약10%/넝마20%, 경찰 권총30%/탄약50%, 러너 음식, 탱커 희귀).
         // 데이터베이스가 없을 때만 예전 방식(프리팹의 dropAmmoData)으로 탄약 드랍
