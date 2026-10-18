@@ -78,6 +78,15 @@ public class ZombieSpawner : MonoBehaviour
              "(수백 m 경로 계산은 탐색 한도에 걸려 이어져 있어도 PathPartial이 나옴)")]
     public float reachCheckFullPathDistance = 90f;
 
+    [Header("━━ 스폰 위치 제한 (문 앞 / 화면 안 금지) ━━")]
+    [Tooltip("건물 문(BuildingWallCollider의 doorSlot) 중심에서 이 반경(m, 수평 거리) 안에는 스폰 안 함. " +
+             "플레이테스트: 건물에서 나오자마자 문 앞 좀비에게 잡힘. 0이면 끔")]
+    public float doorNoSpawnRadius = 5f;
+    [Tooltip("켜면 카메라 화면 밖에서만 스폰 (눈앞에서 좀비가 갑자기 생기지 않게)")]
+    public bool spawnOnlyOffscreen = true;
+    [Tooltip("화면 가장자리 바깥 여유 (뷰포트 비율). 0.1 = 화면 경계에서 10% 더 바깥까지도 '보이는 것'으로 취급 → 가장자리에서 생기자마자 보이는 것 방지")]
+    public float offscreenMargin = 0.1f;
+
     [Header("━━ 낮/밤 밸런스 ━━")]
     [Tooltip("낮(Phase.Day)에는 실외 최대 수에 이 비율을 곱함 (0.25 = 75% 감소 → 낮 바깥은 비교적 안전). " +
              "실내는 그대로 (파밍 위험 유지). 노을/밤/새벽은 그대로")]
@@ -513,10 +522,61 @@ public class ZombieSpawner : MonoBehaviour
         return NavMesh.CalculatePath(pos, target, NavMesh.AllAreas, reachPath) && reachPath.status == NavMeshPathStatus.PathComplete;
     }
 
-    /// <summary>pos에 좀비 생성. 1층 바닥이 아니거나(위층/지붕) 플레이어가 못 가는 곳이면 생성 안 하고 false</summary>
+    private List<Vector3> doorPositions; // 문 중심 월드 좌표 (처음 쓸 때 한 번 모음)
+
+    /// <summary>건물 문 반경(doorNoSpawnRadius) 안인지 (수평 거리)</summary>
+    bool IsNearDoor(Vector3 pos)
+    {
+        if (doorNoSpawnRadius <= 0f) return false;
+        if (doorPositions == null)
+        {
+            doorPositions = new List<Vector3>();
+            foreach (var wall in FindObjectsByType<BuildingWallCollider>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                if (wall.hasDoor) doorPositions.Add(wall.transform.TransformPoint(wall.doorSlotCenter));
+            if (debugLog) Debug.Log($"[ZombieSpawner] 문 {doorPositions.Count}개 주변 {doorNoSpawnRadius}m 스폰 금지");
+        }
+        float sqr = doorNoSpawnRadius * doorNoSpawnRadius;
+        foreach (var d in doorPositions)
+        {
+            float dx = d.x - pos.x, dz = d.z - pos.z;
+            if (dx * dx + dz * dz < sqr) return true;
+        }
+        return false;
+    }
+
+    /// <summary>카메라 화면(+offscreenMargin) 안에 보이는 위치인지 - 발 위치와 머리 높이(2m) 둘 중 하나라도 보이면 true</summary>
+    bool IsOnScreen(Vector3 pos)
+    {
+        Camera cam = Camera.main;
+        if (cam == null) return false;
+        return InViewport(cam, pos) || InViewport(cam, pos + Vector3.up * 2f);
+    }
+
+    bool InViewport(Camera cam, Vector3 p)
+    {
+        Vector3 vp = cam.WorldToViewportPoint(p);
+        float m = offscreenMargin;
+        return vp.z > 0f && vp.x > -m && vp.x < 1f + m && vp.y > -m && vp.y < 1f + m;
+    }
+
+    private int doorRejected, screenRejected; // 디버그: 문 앞 / 화면 안이라 거부한 수
+
+    /// <summary>pos에 좀비 생성. 1층 바닥이 아니거나(위층/지붕) 문 앞이거나 화면 안이거나 플레이어가 못 가는 곳이면 생성 안 하고 false</summary>
     bool Spawn(Vector3 pos, List<GameObject> list)
     {
         if (!IsGroundFloor(pos)) return false;
+        if (IsNearDoor(pos))
+        {
+            doorRejected++;
+            if (debugLog && doorRejected % 20 == 1) Debug.Log($"[ZombieSpawner] 문 {doorNoSpawnRadius}m 안이라 스폰 안 함 (누적 {doorRejected}회) {pos}");
+            return false;
+        }
+        if (spawnOnlyOffscreen && IsOnScreen(pos))
+        {
+            screenRejected++;
+            if (debugLog && screenRejected % 20 == 1) Debug.Log($"[ZombieSpawner] 화면 안이라 스폰 안 함 (누적 {screenRejected}회) {pos}");
+            return false;
+        }
         if (!IsReachableFromPlayer(pos))
         {
             reachRejected++;

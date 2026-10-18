@@ -257,7 +257,8 @@ public static class LiberatorWeaponBuilder
         switch (e.cat)
         {
             case Cat.Pistol:
-                d.type = WeaponType.Pistol; d.damage = new[] { 10f, 15f, 20f }[t]; d.maxAmmo = 15;
+                // 플레이테스트 피드백: 권총 약함 → 전부 ×1.75 (10/15/20 → 18/26/35)
+                d.type = WeaponType.Pistol; d.damage = new[] { 18f, 26f, 35f }[t]; d.maxAmmo = 15;
                 d.attackRate = 0.25f; d.autoFire = false; d.reloadTime = 1.5f;
                 d.bulletSpeed = 80f; d.effectiveRange = 25f; d.recoil = 2f;
                 d.positionOffset = new Vector3(0.01f, 0.06f, -0.2f); d.rotationOffset = new Vector3(30f, 200f, -20f); // Pistol K와 동일
@@ -283,10 +284,10 @@ public static class LiberatorWeaponBuilder
                 d.positionOffset = new Vector3(0.01f, 0.06f, -0.2f); d.rotationOffset = new Vector3(30f, 170f, 0f);
                 break;
             case Cat.Melee:
-                // 도끼: 데미지 40, 사거리 2.9m(부채꼴 90°, 2m 안은 160°), 쿨타임 0.5초, 스테미나 20
+                // 도끼: 데미지 30 (플레이테스트 피드백: 40은 너무 셈), 사거리 2.9m(부채꼴 90°, 2m 안은 160°), 쿨타임 0.5초, 스테미나 20
                 // d.type = WeaponType.Melee; d.damage = 35f; d.attackRate = 0.5f; d.effectiveRange = 2f; d.maxAmmo = 0;   // (이전)
                 // 사거리 2.9m: 좀비 공격 범위(1.8m, 뚱뚱이 2.5m)보다 길어 먼저 때릴 수 있게 (MeleeWeapon 부채꼴 90° 판정 반경으로 씀)
-                d.type = WeaponType.Melee; d.damage = 40f; d.attackRate = 0.5f; d.effectiveRange = 2.9f; d.maxAmmo = 0;
+                d.type = WeaponType.Melee; d.damage = 30f; d.attackRate = 0.5f; d.effectiveRange = 2.9f; d.maxAmmo = 0;
                 d.staminaCost = 20f; // 한 번에 20: 씬의 스테미나 회복이 초당 30이라 쿨타임 0.5초로 계속 휘두르면 초당 10씩 줄어 약 10초 뒤 못 휘두름
                 d.autoFire = false;
                 // 휘두를 때 (손 뼈 측정: 손가락 -Z, 엄지 +Y, 손바닥 +X / 도끼: 손잡이 +Z, 날 +Y):

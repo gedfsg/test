@@ -39,7 +39,7 @@ MonoBehaviour:
     extraZombies: 4
   zombieDrops:
   - nameContains: Normal
-    chance: 0.1
+    chance: 0.2
     table: {fileID: 11400000, guid: 06b1a4751503311448bf1d92cd01f39f, type: 2}
   - nameContains: Normal
     chance: 0.2
@@ -48,7 +48,7 @@ MonoBehaviour:
     chance: 0.3
     table: {fileID: 11400000, guid: 7353016d91b534843be274443dfea73f, type: 2}
   - nameContains: Police
-    chance: 0.5
+    chance: 1
     table: {fileID: 11400000, guid: 37ede6249627661458efbdbc54bd7443, type: 2}
   - nameContains: Girl
     chance: 0.25

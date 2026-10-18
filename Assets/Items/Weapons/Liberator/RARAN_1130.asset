@@ -20,7 +20,7 @@ MonoBehaviour:
   maxStackSize: 1
   weaponPrefab: {fileID: 6066075769527158105, guid: d9399d5916cbe9b42baa7a3249e11658, type: 3}
   type: 1
-  damage: 15
+  damage: 26
   attackRate: 0.25
   maxAmmo: 15
   reloadTime: 1.5

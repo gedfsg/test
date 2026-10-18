@@ -118,8 +118,8 @@ public static class LootTableBuilder
         var tankT = Table("Zombie_TankRare", 1, 1, tankRare);
         db.zombieDrops = new List<LootDatabase.ZombieDropRule>
         {
-            Drop("Normal", 0.10f, smallAmmo), Drop("Normal", 0.20f, ragT),           // 일반: 탄약 10%, 넝마 20%
-            Drop("Police", 0.30f, policePistol), Drop("Police", 0.50f, policeAmmo), // 경찰: 권총 30%, 탄약 50%
+            Drop("Normal", 0.20f, smallAmmo), Drop("Normal", 0.20f, ragT),           // 일반: 탄약 20%(플레이테스트로 2배), 넝마 20%
+            Drop("Police", 0.30f, policePistol), Drop("Police", 1.00f, policeAmmo), // 경찰: 권총 30%, 탄약 100%(플레이테스트로 2배)
             Drop("Girl", 0.25f, runnerFood),                                        // 러너(빠른 좀비): 음식 가끔
             Drop("Fat", 0.60f, tankT),                                              // 탱커(체력 400): 희귀 아이템
         };
