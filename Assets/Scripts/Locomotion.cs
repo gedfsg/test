@@ -149,10 +149,11 @@ public class Locomotion : MonoBehaviour
 
         Vector3 rollDir = direction.normalized;
         float startTime = Time.time;
+        float speed = rollSpeed * WeatherManager.RollDistanceMultiplier; // 비: 젖은 바닥에서 미끄러져 더 멀리 (같은 시간 × 빠른 속도 = 1.3배 거리)
 
         while (Time.time < startTime + rollDuration)
         {
-            rb.linearVelocity = rollDir * rollSpeed;
+            rb.linearVelocity = rollDir * speed;
             yield return null;
         }
 

@@ -55,6 +55,7 @@ public class BuildingInterior : MonoBehaviour
         {
             RenderSettings.fog = originalFogEnabled; RenderSettings.fogMode = originalFogMode; RenderSettings.fogColor = originalFogColor;
             RenderSettings.fogStartDistance = originalFogStart; RenderSettings.fogEndDistance = originalFogEnd;
+            RenderSettings.fogDensity = originalFogDensity;
         }
         originalFogSaved = false;
         hiddenCount.Clear();
@@ -64,7 +65,7 @@ public class BuildingInterior : MonoBehaviour
     static bool originalFogEnabled;
     static FogMode originalFogMode;
     static Color originalFogColor;
-    static float originalFogStart, originalFogEnd;
+    static float originalFogStart, originalFogEnd, originalFogDensity;
 
     Renderer[] renderers;
     float cutHeightWorld;
@@ -356,6 +357,7 @@ public class BuildingInterior : MonoBehaviour
             originalFogColor = RenderSettings.fogColor;
             originalFogStart = RenderSettings.fogStartDistance;
             originalFogEnd = RenderSettings.fogEndDistance;
+            originalFogDensity = RenderSettings.fogDensity; // 날씨 안개(ExponentialSquared)는 밀도를 씀
             originalFogSaved = true;
         }
 
@@ -398,6 +400,10 @@ public class BuildingInterior : MonoBehaviour
             RenderSettings.fogColor = originalFogColor;
             RenderSettings.fogStartDistance = originalFogStart;
             RenderSettings.fogEndDistance = originalFogEnd;
+            RenderSettings.fogDensity = originalFogDensity;
+            // 다음에 들어갈 때 "그때의" 실외 안개를 다시 저장 (예전엔 게임 첫 진입 때 한 번만 저장해서,
+            // 그 사이 날씨가 안개로 바뀌어도 나올 때마다 첫 진입 당시 안개로 되돌림 → WeatherManager 안개와 충돌)
+            originalFogSaved = false;
         }
     }
 

@@ -74,6 +74,11 @@ public class Weapon : MonoBehaviour
     {
         currentAmmo--;
 
+        // 소음: 플레이어 총소리는 주변 좀비를 부름 (반경은 총 종류별, 비 오면 절반)
+        if (shooterTag == "Player")
+            NoiseSystem.Emit(firePoint != null ? firePoint.position : transform.position,
+                             NoiseSystem.RadiusFor(weaponData != null ? weaponData.type : WeaponType.Ranged));
+
         if (muzzleFlashLight != null)
             StartCoroutine(MuzzleFlash());
 

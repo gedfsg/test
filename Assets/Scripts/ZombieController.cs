@@ -9,6 +9,9 @@ public class ZombieController : MonoBehaviour
     /// <summary>좀비가 죽을 때마다 (미션: 좀비 처치 수 집계용)</summary>
     public static event System.Action<ZombieController> AnyDied;
 
+    /// <summary>살아있는(활성) 좀비 목록 (NoiseSystem이 반경 안 좀비를 찾을 때 사용 - 매번 FindObjects 안 하게)</summary>
+    public static readonly System.Collections.Generic.List<ZombieController> All = new System.Collections.Generic.List<ZombieController>();
+
     [Header("Stats")]
     public float maxHealth      = 50f;
     public float moveSpeed      = 2f;
@@ -27,6 +30,10 @@ public class ZombieController : MonoBehaviour
     public float nightSpeedMultiplier = 1.2f;
     [Tooltip("켜지면 거리 상관없이 플레이어를 추적 (ZombieSpawner의 최종 공격 좀비 떼가 켬)")]
     public bool huntPlayer = false;
+
+    [Header("소음 반응 (NoiseSystem)")]
+    [Tooltip("소음을 들으면 이 시간(초) 동안 소리 난 곳으로 감 (도착하면 다시 배회)")]
+    public float investigateTime = 8f;
 
     [Header("랜덤 배회")]
     public bool  enableWander       = true;
@@ -61,6 +68,8 @@ public class ZombieController : MonoBehaviour
     private float wanderTimer;
     private bool  isWandering;
     private float retargetTimer;
+    private Vector3 noisePos;         // 마지막으로 들은 소음 위치
+    private float investigateUntil;   // 이 시각까지 소음 위치로 이동
 
     private Transform    target;
     private NavMeshAgent agent;
@@ -267,7 +276,7 @@ public class ZombieController : MonoBehaviour
             return;
         }
 
-        // 플레이어 감지 범위 내: 추적 (비 오면 20% 감소, 밤엔 nightDetectionMultiplier배, 최종 공격 좀비는 무조건)
+        // 플레이어 감지 범위 내: 추적 (안개면 20% 감소 - WeatherManager, 밤엔 nightDetectionMultiplier배, 최종 공격 좀비는 무조건)
         bool isNight = DayNightCycle.Instance != null && DayNightCycle.Instance.CurrentPhase == DayNightCycle.Phase.Night;
         float detect = detectionRange * WeatherManager.DetectionMultiplier * (isNight ? nightDetectionMultiplier : 1f);
         if (huntPlayer || dist <= detect)
@@ -277,11 +286,31 @@ public class ZombieController : MonoBehaviour
             agent.SetDestination(target.position);
             SetAnimSpeed(agent.velocity.magnitude);
         }
-        // 범위 밖: 배회
+        // 범위 밖: 소음을 들었으면 그곳으로 확인하러 감, 아니면 배회
+        else if (Time.time < investigateUntil)
+        {
+            isWandering = false;
+            agent.speed = moveSpeed;
+            agent.SetDestination(noisePos);
+            if (!agent.pathPending && agent.remainingDistance < 1.5f) investigateUntil = 0f; // 도착 → 배회로
+            SetAnimSpeed(agent.velocity.magnitude);
+        }
         else
         {
             DoWander();
         }
+    }
+
+    void OnEnable() => All.Add(this);
+    void OnDisable() => All.Remove(this);
+
+    /// <summary>NoiseSystem: 소음을 들음 → investigateTime 동안 그 위치로 이동. 죽었거나 이미 쫓는 중(최종 공격)이면 false</summary>
+    public bool HearNoise(Vector3 pos)
+    {
+        if (isDead || huntPlayer) return false;
+        noisePos = pos;
+        investigateUntil = Time.time + investigateTime;
+        return true;
     }
 
     void FacePlayer()

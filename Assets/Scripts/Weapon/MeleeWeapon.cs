@@ -59,6 +59,7 @@ public class MeleeWeapon : MonoBehaviour
 
     private void Attack()
     {
+        NoiseSystem.Emit(transform.position, NoiseSystem.MeleeRadius); // 휘두르는 소리 (작은 반경)
         if (useSlashTrail && slashPivot != null)
         {
             StartCoroutine(SwingEffect());
