@@ -111,7 +111,7 @@ public class EntranceMarkers : MonoBehaviour
         }
     }
 
-    static List<Vector3> DoorCenters(BuildingWallCollider[] walls)
+    internal static List<Vector3> DoorCenters(BuildingWallCollider[] walls) // NeonSigns도 사용
     {
         var list = new List<Vector3>();
         foreach (var w in walls) if (w.hasDoor) list.Add(w.transform.TransformPoint(w.doorSlotCenter));
@@ -119,7 +119,7 @@ public class EntranceMarkers : MonoBehaviour
     }
 
     /// <summary>v(수평)를 건물의 ±right / ±forward 중 가장 가까운 축으로 (매트가 벽과 나란히 놓이게)</summary>
-    static Vector3 SnapToAxis(Vector3 v, Transform building)
+    internal static Vector3 SnapToAxis(Vector3 v, Transform building)
     {
         v.y = 0f;
         if (v.sqrMagnitude < 0.01f) return Vector3.zero;
