@@ -53,8 +53,8 @@ public class EscapePoint : MonoBehaviour
         lightGo.transform.localPosition = Vector3.up * 2f;
         ep.glow = lightGo.AddComponent<Light>();
         ep.glow.type = LightType.Point;
-        ep.glow.range = 10f;
-        ep.glow.intensity = 3f;
+        ep.glow.range = 8f;
+        ep.glow.intensity = 1.5f;
         ep.glow.shadows = LightShadows.None;
         return ep;
     }
@@ -74,8 +74,8 @@ public class EscapePoint : MonoBehaviour
         bool open = mm.CanEscape;
         Color c = open ? OpenColor : LockedColor;
         float pulse = 0.75f + Mathf.Sin(Time.time * 3f) * 0.25f;
-        ringMat.color = new Color(c.r, c.g, c.b, 0.22f * pulse);
-        beamMat.color = new Color(c.r, c.g, c.b, (open ? 0.25f : 0.1f) * pulse);
+        ringMat.color = new Color(c.r, c.g, c.b, 0.12f * pulse); // 낮게: 가까이서 보면 지름 6m 원판이 화면을 크게 덮음 (플레이테스트 확인)
+        beamMat.color = new Color(c.r, c.g, c.b, (open ? 0.2f : 0.07f) * pulse);
         glow.color = c;
         if (lastOpen.HasValue && open && !lastOpen.Value)
             PickupFeedbackUI.Instance?.Show("탈출 지점이 열렸다! 초록 빛기둥으로 이동");

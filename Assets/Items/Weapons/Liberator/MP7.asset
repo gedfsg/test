@@ -15,7 +15,7 @@ MonoBehaviour:
   itemName: MP7
   icon: {fileID: 21300000, guid: 281b19815fbeaaa4d97a4973e789cfd2, type: 3}
   itemType: 0
-  rarity: 0
+  rarity: 4
   isStackable: 0
   maxStackSize: 1
   weaponPrefab: {fileID: 5694583946357982659, guid: 443fe7dbc89c74641905c4ff1778271c, type: 3}

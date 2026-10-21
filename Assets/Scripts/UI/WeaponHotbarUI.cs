@@ -420,6 +420,35 @@ public class WeaponHotbarUI : MonoBehaviour
             slots[i].SetEmpty(theme, isActive);
 
         slots[i].SetNumber(i + 1, isActive, theme);
+        UpdateRarityFrame(i);
+    }
+
+    // 무기 등급 테두리: 칸 안쪽(4px 안)에 등급 색 테두리. 바깥 테두리는 선택 표시(노랑)/무기 칸(빨강)이 쓰고 있어서
+    // 같은 자리에 칠하면 선택된 무기의 등급이 가려짐 → 안쪽에 따로 그려 둘 다 보이게
+    const float RarityFrameInset = 4f;
+    private readonly UnityEngine.UI.Image[] rarityFrames = new UnityEngine.UI.Image[SLOT_COUNT];
+
+    private void UpdateRarityFrame(int i)
+    {
+        var wd = items[i] as WeaponData;
+        if (rarityFrames[i] == null)
+        {
+            if (wd == null) return; // 무기가 처음 들어올 때 만듦
+            var go = new GameObject("RarityFrame", typeof(RectTransform), typeof(UnityEngine.UI.Image));
+            var rt = (RectTransform)go.transform;
+            rt.SetParent(slots[i].transform, false);
+            rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.one * RarityFrameInset; rt.offsetMax = -Vector2.one * RarityFrameInset;
+            var frame = slots[i].transform.Find("Frame");
+            if (frame != null) rt.SetSiblingIndex(frame.GetSiblingIndex() + 1); // 아이콘 위, 선택 표시/번호 아래
+            var img = go.GetComponent<UnityEngine.UI.Image>();
+            img.sprite = HudStyle.RoundedFrameThick != null ? HudStyle.RoundedFrameThick : HudStyle.RoundedFrame;
+            img.type = UnityEngine.UI.Image.Type.Sliced;
+            img.raycastTarget = false;
+            rarityFrames[i] = img;
+        }
+        rarityFrames[i].enabled = wd != null;
+        if (wd != null) rarityFrames[i].color = RarityColors.Get(wd.rarity);
     }
 
     private void RefreshAllSlots() { for (int i = 0; i < SLOT_COUNT; i++) RefreshSlot(i); }
