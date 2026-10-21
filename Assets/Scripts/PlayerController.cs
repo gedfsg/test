@@ -26,6 +26,30 @@ public class PlayerController : MonoBehaviour
     private Weapon rangedWeapon;
     private MeleeWeapon meleeWeapon;
 
+    [Header("구르기 (Space) - 모든 무기")]
+    public float rollDistance = 6f;          // 돌진 거리 (비: × WeatherManager.RollDistanceMultiplier 1.3)
+    public float rollDuration = 0.5f;        // 돌진 시간
+    public float rollCooldown = 1f;          // 구르기 끝난 뒤 다음 구르기까지
+    public float rollStaminaCost = 20f;
+    public float rollInvincibleTime = 0.3f;  // 시작부터 이 시간 동안 피해 무시
+    [Tooltip("권총을 구르는 동안 옮겨 둘 허리 위치 (비워두면 숨김)")]
+    public Transform pistolHolsterPoint;
+    [Tooltip("도끼를 구르는 동안 옮겨 둘 등 위치 (비워두면 숨김)")]
+    public Transform axeBackPoint;
+
+    public bool IsRolling => isRolling;
+    private bool isRolling;
+    private float rollEndTime = -99f;
+    private Vector3 rollVelocity;
+    private Health health;
+    // 구르는 동안 옮긴/숨긴 무기 모델 (끝나면 손으로 복귀)
+    private Transform rollStowed, rollStowParent;
+    private Vector3 rollStowPos;
+    private Quaternion rollStowRot;
+    private bool rollStowHidden;
+    static readonly int RollHash = Animator.StringToHash("Roll");
+    static readonly int RollStateHash = Animator.StringToHash("Base Layer.Roll");
+
     public float rotationSpeed = 15f;
 
     private enum WeaponMode { Ranged, Melee }
@@ -121,12 +145,13 @@ public class PlayerController : MonoBehaviour
 
         inputActions.Player.Sprint.started += _ => locomotion.SetSprinting(true);
         inputActions.Player.Sprint.canceled += _ => locomotion.SetSprinting(false);
-        inputActions.Player.Roll.performed += _ => locomotion.TryRoll(moveInput);
+        // inputActions.Player.Roll.performed += _ => locomotion.TryRoll(moveInput); // (이전) 3m 짧은 구르기, 애니메이션/무적 없음
+        inputActions.Player.Roll.performed += _ => TryRoll();
 
         // 1키(EquipRanged)/V키(EquipMelee): 핫바가 있으면 핫바가 무기 전환을 담당 → 무시
         // (안 그러면 1번 슬롯 도끼를 고를 때 1키가 총 모드로 덮어써버림)
-        inputActions.Player.EquipRanged.performed += _ => { if (WeaponHotbarUI.Instance == null) EquipWeapon(WeaponMode.Ranged); };
-        inputActions.Player.EquipMelee.performed += _ => { if (WeaponHotbarUI.Instance == null) EquipWeapon(WeaponMode.Melee); };
+        inputActions.Player.EquipRanged.performed += _ => { if (WeaponHotbarUI.Instance == null && !isRolling) EquipWeapon(WeaponMode.Ranged); };
+        inputActions.Player.EquipMelee.performed += _ => { if (WeaponHotbarUI.Instance == null && !isRolling) EquipWeapon(WeaponMode.Melee); };
 
         inputActions.Player.Restart.performed += OnRestartPerformed;
         inputActions.Player.Interact.performed += OnInteractPerformed;
@@ -155,6 +180,7 @@ public class PlayerController : MonoBehaviour
         if (inputActions == null) return;   // Awake 아직 실행 전 보호
         RefreshIKAndAim();
         if (isDead) { moveInput = Vector3.zero; return; } // 사망: 이동/조준/공격 입력 무시
+        if (isRolling) { moveInput = Vector3.zero; return; } // 구르는 중: 이동/조준/공격 입력 무시 (방향은 구르기 시작 때 고정)
 
         // === MAP DEV: 카메라 회전(Q/E) 대응 이동 로직 - 아래 CameraRelativeMove() 사용 ===
         Vector2 inputVector = inputActions.Player.Move.ReadValue<Vector2>();
@@ -165,7 +191,97 @@ public class PlayerController : MonoBehaviour
         HandleFire();
     }
 
-    void FixedUpdate() => locomotion.Move(moveInput);
+    // void FixedUpdate() => locomotion.Move(moveInput); // (이전)
+    void FixedUpdate()
+    {
+        if (isRolling)
+        {
+            // 구르기 돌진: 매 물리 프레임 같은 수평 속도 (Rigidbody라 벽에 막히면 멈춤, 중력은 그대로)
+            rb.linearVelocity = new Vector3(rollVelocity.x, rb.linearVelocity.y, rollVelocity.z);
+            return;
+        }
+        locomotion.Move(moveInput);
+    }
+
+    // ── 구르기 ─────────────────────────────────────
+    /// <summary>Space: 쿨타임 1초 + 스태미나 20 + 구르는 중 아님 → 이동 입력 방향(없으면 바라보는 방향)으로 6m 돌진</summary>
+    void TryRoll()
+    {
+        if (isDead) return;
+        if (isRolling) { Debug.Log("[Roll] 이미 구르는 중 - 무시"); return; }
+        float left = rollEndTime + rollCooldown - Time.time;
+        if (left > 0f) { Debug.Log($"[Roll] 쿨타임 {left:F2}초 남음 - 무시"); return; }
+        if (!locomotion.TryUseStamina(rollStaminaCost)) { Debug.Log($"[Roll] 스태미나 부족 ({rollStaminaCost} 필요) - 무시"); return; }
+        StartCoroutine(RollRoutine());
+    }
+
+    System.Collections.IEnumerator RollRoutine()
+    {
+        // 방향: WASD 입력(카메라 기준)이 있으면 그 방향, 없으면 캐릭터가 바라보는 방향
+        Vector3 input = CameraRelativeMove(inputActions.Player.Move.ReadValue<Vector2>());
+        Vector3 dir = input.sqrMagnitude > 0.01f ? input : transform.forward;
+        dir.y = 0f; dir.Normalize();
+        float mult = WeatherManager.RollDistanceMultiplier;
+        float distance = rollDistance * mult;
+        rollVelocity = dir * (distance / rollDuration);
+        transform.rotation = Quaternion.LookRotation(dir); // 구르는 방향을 봄
+        if (rb != null) rb.MoveRotation(transform.rotation);
+
+        Vector3 startPos = transform.position;
+        isRolling = true;
+        if (health == null) health = GetComponent<Health>();
+        if (health != null) health.isInvincible = true;
+        if (EnsureAnimRefs())
+        {
+            // 보통은 Roll 트리거 → Any State → Roll. 단, 무기 바꾼 직후처럼 하체 자세 전환(0.2초) 중이면
+            // Any State 전이가 그 전환을 못 끊어서 구르기 동작이 0.2초 늦게 나옴 → 그때만 바로 크로스페이드 (트리거는 지워서 나중에 또 구르지 않게)
+            if (animator.IsInTransition(0)) { animator.ResetTrigger(RollHash); animator.CrossFadeInFixedTime(RollStateHash, 0.1f, 0); }
+            else animator.SetTrigger(RollHash);
+        }
+        StowWeaponForRoll();
+        Debug.Log($"[Roll] 시작 - 방향 {(input.sqrMagnitude > 0.01f ? "이동 입력" : "바라보는 방향")}, 거리 {distance:F1}m (날씨 ×{mult:F2}), 스태미나 -{rollStaminaCost}, 무적 {rollInvincibleTime}초");
+
+        float start = Time.time;
+        while (Time.time < start + rollInvincibleTime) yield return null;
+        if (health != null) health.isInvincible = false;
+        while (Time.time < start + rollDuration) yield return null;
+
+        isRolling = false;
+        if (rb != null) rb.linearVelocity = new Vector3(0f, rb.linearVelocity.y, 0f); // 미끄러지지 않게 멈춤
+        RestoreWeaponAfterRoll();
+        rollEndTime = Time.time;
+        Vector3 moved = transform.position - startPos; moved.y = 0f;
+        Debug.Log($"[Roll] 끝 - 실제 이동 {moved.magnitude:F2}m, 쿨타임 {rollCooldown}초");
+    }
+
+    // 무기별: 소총(AR/샷건/SMG/저격) = 손에 그대로 / 권총 = 허리(pistolHolsterPoint) / 도끼 = 등(axeBackPoint). 위치가 없으면 숨김
+    void StowWeaponForRoll()
+    {
+        if (weaponHandAttacher == null) weaponHandAttacher = FindAnyObjectByType<WeaponHandAttacher>();
+        Transform visual = weaponHandAttacher != null ? weaponHandAttacher.CurrentVisual : null;
+        if (visual == null) return;
+        bool axe = currentMode == WeaponMode.Melee;
+        bool pistol = currentMode == WeaponMode.Ranged && rangedWeapon != null && rangedWeapon.weaponData != null && rangedWeapon.weaponData.type == WeaponType.Pistol;
+        if (!axe && !pistol) return; // 소총: 들고 구름
+
+        Transform point = pistol ? pistolHolsterPoint : axeBackPoint;
+        rollStowed = visual;
+        rollStowParent = visual.parent;
+        rollStowPos = visual.localPosition;
+        rollStowRot = visual.localRotation;
+        rollStowHidden = point == null;
+        if (rollStowHidden) visual.gameObject.SetActive(false);
+        else { visual.SetParent(point, false); visual.localPosition = Vector3.zero; visual.localRotation = Quaternion.identity; }
+        Debug.Log($"[Roll] {(pistol ? "권총" : "도끼")} → {(rollStowHidden ? "숨김 (위치 미지정)" : point.name)}");
+    }
+
+    void RestoreWeaponAfterRoll()
+    {
+        if (rollStowed == null) return;
+        if (rollStowHidden) rollStowed.gameObject.SetActive(true);
+        else { rollStowed.SetParent(rollStowParent, false); rollStowed.localPosition = rollStowPos; rollStowed.localRotation = rollStowRot; }
+        rollStowed = null; rollStowParent = null;
+    }
 
     // 애니메이션 적용 뒤: 도끼 들었을 때 상체(어깨)를 조준 방향으로 비틀어 줌 (총은 상체 레이어 조준 자세가 담당)
     void LateUpdate()
@@ -267,6 +383,7 @@ public class PlayerController : MonoBehaviour
 
     private void OnReloadPerformed(InputAction.CallbackContext context)
     {
+        if (isRolling) return; // 구르는 중엔 재장전 막음
         if (currentMode == WeaponMode.Ranged && rangedWeapon != null)
             rangedWeapon.TryReload();
     }
@@ -506,16 +623,17 @@ public class PlayerController : MonoBehaviour
     {
         EnsureAnimRefs();
         bool reloading = Time.time < reloadUntil;
-        bool ikOff = meleeHeld || isDead || reloading || Time.time < ikBlockUntil;
+        bool ikOff = meleeHeld || isDead || reloading || isRolling || Time.time < ikBlockUntil;
         if (handIKRig != null) handIKRig.weight = ikOff ? 0f : 1f;
 
         // 상체 레이어: 총 = 항상 켬(권총/소총 자세), 도끼 = 평소 끔(맨손처럼 자연스럽게) + 상체 동작 중에만 켬, 사망 = 끔
-        float target = isDead ? 0f : (!meleeHeld || Time.time < upperActionUntil) ? 1f : 0f;
-        upperWeight = Mathf.MoveTowards(upperWeight, target, Time.deltaTime * (target > upperWeight ? 12f : 4f)); // 켤 땐 빠르게, 끌 땐 부드럽게
+        // 구르기: 전신 동작이라 상체 레이어를 바로 끔 (안 끄면 다리만 구르고 상체는 총 자세)
+        float target = isDead || isRolling ? 0f : (!meleeHeld || Time.time < upperActionUntil) ? 1f : 0f;
+        upperWeight = Mathf.MoveTowards(upperWeight, target, Time.deltaTime * (isRolling ? 20f : target > upperWeight ? 12f : 4f)); // 켤 땐 빠르게, 끌 땐 부드럽게
         if (animator != null && upperBodyLayer >= 0) animator.SetLayerWeight(upperBodyLayer, upperWeight);
 
         // 도끼 손 회전: 들고 다닐 때(carry) ↔ 휘두를 때(rotationOffset)를 상체 레이어 가중치에 맞춰 부드럽게 전환
-        if (meleeHeld && meleeWeapon != null && meleeWeapon.weaponData != null && weaponHandAttacher != null)
+        if (meleeHeld && !isRolling && meleeWeapon != null && meleeWeapon.weaponData != null && weaponHandAttacher != null) // 구르는 중엔 도끼가 등/숨김 상태라 손 자세 갱신 안 함
         {
             var wd = meleeWeapon.weaponData;
             Quaternion swing = Quaternion.Euler(wd.rotationOffset);
@@ -542,7 +660,7 @@ public class PlayerController : MonoBehaviour
             }
         }
         if (weaponHandAttacher == null) weaponHandAttacher = FindAnyObjectByType<WeaponHandAttacher>();
-        if (weaponHandAttacher != null) weaponHandAttacher.aimAtTarget = !(meleeHeld || isDead || reloading);
+        if (weaponHandAttacher != null) weaponHandAttacher.aimAtTarget = !(meleeHeld || isDead || reloading || isRolling);
     }
 
     void OnReloadStarted(float reloadTime)

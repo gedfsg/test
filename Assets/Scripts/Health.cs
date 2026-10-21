@@ -7,6 +7,9 @@ public class Health : MonoBehaviour
     private float currentHealth;
     private bool dead; // 사망 처리 한 번만 (죽은 뒤 추가 피해로 onDeath가 반복 호출되던 것 방지)
 
+    [Tooltip("켜져 있는 동안 피해 무시 (플레이어 구르기 무적 시간)")]
+    public bool isInvincible;
+
     [Tooltip("플레이어 사망 후 게임을 멈출 때까지 기다리는 시간(초, 실제 시간). 사망 애니메이션이 보이게")]
     public float playerDeathFreezeDelay = 4.5f; // Dying 애니메이션(4.4초)이 끝까지 보이게
 
@@ -24,6 +27,7 @@ public class Health : MonoBehaviour
 
     public void TakeDamage(float amount, bool isCritical = false)
     {
+        if (isInvincible) return; // 무적 (구르기): 피해/데미지 숫자/피격 반응 전부 없음
         currentHealth -= amount;
 
         // 데미지 텍스트를 생성하는 함수를 호출함.

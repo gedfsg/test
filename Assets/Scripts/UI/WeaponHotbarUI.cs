@@ -62,6 +62,7 @@ public class WeaponHotbarUI : MonoBehaviour
     {
         var kb = Keyboard.current;
         if (kb == null) return;
+        if (playerController != null && playerController.IsRolling) return; // 구르는 중엔 무기 교체/버리기 막음
 
         if (kb.digit1Key.wasPressedThisFrame) SelectSlot(0);
         else if (kb.digit2Key.wasPressedThisFrame) SelectSlot(1);
