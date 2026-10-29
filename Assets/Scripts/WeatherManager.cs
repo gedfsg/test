@@ -59,7 +59,8 @@ public class WeatherManager : MonoBehaviour
     public Vector3 rainArea = new Vector3(45f, 1f, 45f);
     // public float rainHeight = 14f; // (이전)
     public float rainHeight = 10f;     // 플레이어 머리 위 10m
-    [Range(0f, 1f)] public float rainVolume = 0.35f;
+    // [Range(0f, 1f)] public float rainVolume = 0.35f; // (이전)
+    [Range(0f, 1f)] public float rainVolume = AudioManager.Vol.Rain; // 0.4 (사운드 볼륨 표)
     [Tooltip("실내에선 빗소리를 이만큼 줄임 (지붕 너머로 들리는 느낌)")]
     [Range(0f, 1f)] public float indoorRainVolume = 0.35f;
     [Tooltip("땅에 물 튀는 작은 파티클 (옵션)")]
@@ -315,7 +316,11 @@ public class WeatherManager : MonoBehaviour
     AudioSource BuildRainAudio()
     {
         var src = gameObject.AddComponent<AudioSource>();
-        src.clip = rainClip != null ? rainClip : GenerateRainClip();
+        // 우선순위: 인스펙터 rainClip → SoundLibrary의 rain_loop (녹음) → 코드 생성음
+        AudioClip clip = rainClip;
+        if (clip == null && AudioManager.Library != null) clip = AudioManager.Library.rainLoop;
+        src.clip = clip != null ? clip : GenerateRainClip();
+        src.outputAudioMixerGroup = AudioManager.GetGroup(AudioManager.Channel.Ambient);
         src.loop = true;
         src.playOnAwake = false;
         src.spatialBlend = 0f; // 전역 환경음

@@ -16,6 +16,7 @@ MonoBehaviour:
   icon: {fileID: 21300000, guid: 836ea8414526d8e43be65f38c8acf46b, type: 3}
   itemType: 0
   rarity: 1
+  worldModel: {fileID: 0}
   isStackable: 0
   maxStackSize: 1
   weaponPrefab: {fileID: 231834867688365002, guid: 0f7c91e25b52e1947ab4d52acad9f006, type: 3}
@@ -31,6 +32,13 @@ MonoBehaviour:
   spreadAngle: 15
   penetrating: 0
   autoFire: 1
+  fireSound: {fileID: 8300000, guid: d6fcf1b31d69cbe42b52dd7be0432c50, type: 3}
+  reloadSound: {fileID: 0}
   positionOffset: {x: 0.01, y: 0.06, z: -0.2}
   rotationOffset: {x: 30, y: 170, z: 0}
+  carryRotationOffset: {x: 0, y: 0, z: 0}
+  carryMoveRotationOffset: {x: 0, y: 0, z: 0}
+  swingPositionOffset: {x: 0, y: 0, z: 0}
+  staminaCost: 0
+  rigidGrip: 0
   holsterRotation: {x: 306.8699, y: 270, z: 90}

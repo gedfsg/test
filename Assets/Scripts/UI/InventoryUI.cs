@@ -54,6 +54,8 @@ public class InventoryUI : MonoBehaviour
     {
         isInventoryOpen = !isInventoryOpen;
         inventoryWindow.SetActive(isInventoryOpen);
+        if (AudioManager.Library != null)
+            AudioManager.PlayUI(SoundLibrary.Pick(isInventoryOpen ? AudioManager.Library.inventoryOpen : AudioManager.Library.inventoryClose), AudioManager.Vol.UI);
 
         if (isInventoryOpen)
             UpdateUI();

@@ -121,6 +121,7 @@ public class LootCrate : MonoBehaviour
     {
         if (isOpened || lootTable == null) return;
         AnyOpened?.Invoke(this);
+        if (AudioManager.Library != null) AudioManager.PlayUI(SoundLibrary.Pick(AudioManager.Library.crateOpen), AudioManager.Vol.UI);
 
         // 뚜껑이 있는 상자(월드 스폰 상자) = 새 방식: 파괴 안 하고 뚜껑 열림 + 바닥 드랍 + 좀비
         if (lidHinge != null) { OpenInPlace(); return; }

@@ -189,6 +189,28 @@ public class PlayerController : MonoBehaviour
 
         AimAtMouse();
         HandleFire();
+        UpdateFootsteps();
+    }
+
+    // ── 발소리 (2D) ─────────────────────────────────
+    [Header("발소리")]
+    public float footstepWalkInterval = 0.4f;
+    public float footstepRunInterval = 0.3f;
+    [Tooltip("달릴 때 발소리 볼륨 배수")]
+    public float footstepRunVolume = 1.3f;
+    private float footstepTimer;
+
+    void UpdateFootsteps()
+    {
+        Vector3 v = rb != null ? rb.linearVelocity : Vector3.zero; v.y = 0f;
+        if (moveInput.sqrMagnitude < 0.01f || v.magnitude < 0.5f) { footstepTimer = 0f; return; } // 멈춤/벽에 막힘 → 다음 걸음은 바로
+        footstepTimer -= Time.deltaTime;
+        if (footstepTimer > 0f || AudioManager.Library == null) return;
+
+        bool running = locomotion != null && locomotion.IsSprinting;
+        footstepTimer = running ? footstepRunInterval : footstepWalkInterval;
+        AudioManager.PlayUI(SoundLibrary.Pick(AudioManager.Library.footstep),
+                            AudioManager.Vol.Footstep * (running ? footstepRunVolume : 1f));
     }
 
     // void FixedUpdate() => locomotion.Move(moveInput); // (이전)
@@ -229,6 +251,8 @@ public class PlayerController : MonoBehaviour
 
         Vector3 startPos = transform.position;
         isRolling = true;
+        if (AudioManager.Library != null) // 옷 펄럭이는 소리 (2D)
+            AudioManager.PlayUI(SoundLibrary.Pick(AudioManager.Library.roll), AudioManager.Vol.Impact);
         if (health == null) health = GetComponent<Health>();
         if (health != null) health.isInvincible = true;
         if (EnsureAnimRefs())
@@ -432,6 +456,7 @@ public class PlayerController : MonoBehaviour
 
         if (picked)
         {
+            if (AudioManager.Library != null) AudioManager.PlayUI(SoundLibrary.Pick(AudioManager.Library.pickup), AudioManager.Vol.Pickup);
             nearbyItems.Remove(nearestItem);
             Destroy(nearestItem.gameObject);
         }

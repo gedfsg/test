@@ -285,6 +285,7 @@ public class ZombieController : MonoBehaviour
             agent.speed = moveSpeed * (isNight ? nightSpeedMultiplier : 1f); // 밤엔 더 빠르게
             agent.SetDestination(target.position);
             SetAnimSpeed(agent.velocity.magnitude);
+            ZombieVoiceManager.Tick(this, ZombieVoiceManager.State.Chase); // 2~5초마다 신음/비명
         }
         // 범위 밖: 소음을 들었으면 그곳으로 확인하러 감, 아니면 배회
         else if (Time.time < investigateUntil)
@@ -294,15 +295,21 @@ public class ZombieController : MonoBehaviour
             agent.SetDestination(noisePos);
             if (!agent.pathPending && agent.remainingDistance < 1.5f) investigateUntil = 0f; // 도착 → 배회로
             SetAnimSpeed(agent.velocity.magnitude);
+            ZombieVoiceManager.Tick(this, ZombieVoiceManager.State.Idle);
         }
         else
         {
             DoWander();
+            ZombieVoiceManager.Tick(this, ZombieVoiceManager.State.Idle); // 5~15초마다 신음
         }
     }
 
     void OnEnable() => All.Add(this);
-    void OnDisable() => All.Remove(this);
+    void OnDisable()
+    {
+        All.Remove(this);
+        ZombieVoiceManager.Forget(this); // 목소리 쿨타임 기록 정리
+    }
 
     /// <summary>NoiseSystem: 소음을 들음 → investigateTime 동안 그 위치로 이동. 죽었거나 이미 쫓는 중(최종 공격)이면 false</summary>
     public bool HearNoise(Vector3 pos)
@@ -408,6 +415,7 @@ public class ZombieController : MonoBehaviour
             anim.SetTrigger(HashAttack);
             attackLockUntil = Time.time + attackAnimDuration;
         }
+        ZombieVoiceManager.Play(this, ZombieVoiceManager.State.Attack); // 공격: 즉시 비명
 
         if (target == null) return;
         Health playerHealth = target.GetComponent<Health>();
@@ -459,6 +467,10 @@ public class ZombieController : MonoBehaviour
         isDead = true;
         AnyDied?.Invoke(this);
 
+        // 사망 사운드: 단말마(목소리 풀) + 피 튀는 소리 + 쓰러지는 소리
+        ZombieVoiceManager.Play(this, ZombieVoiceManager.State.Death);
+        StartCoroutine(DeathSounds());
+
         // 좀비 종류별 드랍 (LootDatabase: 일반 탄약10%/넝마20%, 경찰 권총30%/탄약50%, 러너 음식, 탱커 희귀).
         // 데이터베이스가 없을 때만 예전 방식(프리팹의 dropAmmoData)으로 탄약 드랍
         if (LootDatabase.Instance != null) LootDatabase.Instance.DropForZombie(gameObject);
@@ -493,6 +505,16 @@ public class ZombieController : MonoBehaviour
 
         int amount = Random.Range(dropAmmoMin, dropAmmoMax + 1);
         AmmoDropSpawner.Spawn(transform.position, dropAmmoData, amount);
+    }
+
+    System.Collections.IEnumerator DeathSounds()
+    {
+        var lib = AudioManager.Library;
+        if (lib == null) yield break;
+        Vector3 pos = transform.position + Vector3.up;
+        AudioManager.PlaySFX(SoundLibrary.Pick(lib.bloodSplatter), pos, AudioManager.Vol.Impact, AudioManager.Channel.SFX, 25f);
+        yield return new WaitForSeconds(0.7f); // 몸이 바닥에 닿는 쯤
+        AudioManager.PlaySFX(SoundLibrary.Pick(lib.bodyFall), transform.position, AudioManager.Vol.Impact, AudioManager.Channel.SFX, 25f);
     }
 
     // 사망 애니메이션 재생 → 누워있다가 → 땅 밑으로 가라앉으며 사라짐

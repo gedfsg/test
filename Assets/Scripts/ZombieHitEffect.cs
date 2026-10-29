@@ -68,7 +68,9 @@ public class ZombieHitEffect : MonoBehaviour
         if (knockRoutine != null) StopCoroutine(knockRoutine);
         knockRoutine = StartCoroutine(Knockback(dir));
 
-        AudioSource.PlayClipAtPoint(hitClip != null ? hitClip : GetDefaultClip(), hitPoint, hitVolume);
+        // 실제 피격음은 Health(좀비 피격 → AudioManager 살 맞는 소리)가 재생 → 사운드 라이브러리가 있으면 여기선 생략 (이중 재생 방지)
+        if (hitClip != null || AudioManager.Library == null)
+            AudioSource.PlayClipAtPoint(hitClip != null ? hitClip : GetDefaultClip(), hitPoint, hitVolume);
     }
 
     // ── 피 파티클 ───────────────────────────────

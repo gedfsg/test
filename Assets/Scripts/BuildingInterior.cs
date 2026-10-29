@@ -136,6 +136,7 @@ public class BuildingInterior : MonoBehaviour
         PlayerEntered?.Invoke(this);
         if (darkenSurroundings) EnterIndoorFog(other.transform);
         BuildingTransition.Play();
+        PlayDoorSound(true);
         Camera.main?.GetComponent<CameraZoom>()?.SetIndoor(true);
     }
 
@@ -145,7 +146,17 @@ public class BuildingInterior : MonoBehaviour
         SetCut(false);
         if (darkenSurroundings) ExitIndoorFog();
         BuildingTransition.Play();
+        PlayDoorSound(false);
         Camera.main?.GetComponent<CameraZoom>()?.SetIndoor(false);
+    }
+
+    // 문 열고/닫는 소리 (2D). 트리거 경계에서 들락날락하거나 겹친 건물 트리거로 연달아 울리지 않게 0.5초 간격 제한
+    static float lastDoorSoundTime = -99f;
+    static void PlayDoorSound(bool entering)
+    {
+        if (AudioManager.Library == null || Time.unscaledTime < lastDoorSoundTime + 0.5f) return;
+        lastDoorSoundTime = Time.unscaledTime;
+        AudioManager.PlayUI(SoundLibrary.Pick(entering ? AudioManager.Library.doorOpen : AudioManager.Library.doorClose), AudioManager.Vol.UI);
     }
 
     void SetCut(bool cut)

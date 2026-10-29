@@ -52,6 +52,7 @@ public class AutoPickupRadius : MonoBehaviour
 
         if (!picked) return;
 
+        if (AudioManager.Library != null) AudioManager.PlayUI(SoundLibrary.Pick(AudioManager.Library.pickup), AudioManager.Vol.Pickup);
         collected = true;
         Destroy(gameObject);
     }

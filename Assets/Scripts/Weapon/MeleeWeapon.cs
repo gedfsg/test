@@ -142,6 +142,11 @@ public class MeleeWeapon : MonoBehaviour
             DestructibleObstacle obstacle = hit.GetComponentInParent<DestructibleObstacle>();
             if (obstacle != null && done.Add(obstacle)) obstacle.TakeDamage(currentDamage);
         }
+
+        // 뭔가 맞았으면 도끼 타격음 한 번 (여러 마리 맞아도 한 번, 살 맞는 소리는 각자 Health가 냄)
+        if (done.Count > 0 && AudioManager.Library != null)
+            AudioManager.PlaySFX(SoundLibrary.Pick(AudioManager.Library.hitMelee), origin + forward * 1.5f + Vector3.up,
+                                 AudioManager.Vol.Impact, AudioManager.Channel.SFX, 25f);
     }
 
     // 중심축을 180도 회전시켜 트레일 렌더러의 궤적을 생성하는 코루틴임.
