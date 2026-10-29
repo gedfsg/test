@@ -88,6 +88,10 @@ public class ZombieController : MonoBehaviour
     public bool  IsStunned         => isStunned;
     public bool  AttackReady       => attackTimer <= 0f;
     public bool  IsDead            => isDead;
+    /// <summary>지금 타겟(플레이어/더미)을 직접 보고 있는가. 뇌 종류와 상관없이 같은 시야 판정을 쓴다.</summary>
+    public bool  SeesTarget        => perception != null && perception.TargetVisible;
+    /// <summary>지금 쫓는 대상 (플레이어/더미). 없으면 null. 위협 센서가 상대의 조준 방향을 읽는 데 쓴다.</summary>
+    public Transform CurrentTarget => perception != null ? perception.Target : null;
     public float HealthNormalized  => health != null && health.maxHealth > 0f
                                       ? Mathf.Clamp01(health.GetCurrentHealth() / health.maxHealth)
                                       : 1f;
@@ -410,6 +414,13 @@ public class ZombieController : MonoBehaviour
     }
 
     // ── 공격 ─────────────────────────────────────────
+    /// <summary>
+    /// 공격을 휘둘렀을 때 (대상, 데미지). 학습장이 더미의 가상 체력을 깎는 데 쓴다 ——
+    /// 더미에는 Health를 붙일 수 없어서(죽으면 Time.timeScale = 0) 이 이벤트로 받는다.
+    /// 게임에는 영향 없다 (구독자가 없으면 아무 일도 안 일어남).
+    /// </summary>
+    public event System.Action<ZombieController, Transform> AttackLanded;
+
     void DoAttack()
     {
         if (anim != null && anim.runtimeAnimatorController != null)
@@ -417,6 +428,8 @@ public class ZombieController : MonoBehaviour
 
         Transform t = perception != null ? perception.Target : null;
         if (t == null) return;
+
+        AttackLanded?.Invoke(this, t);
 
         Health playerHealth = t.GetComponent<Health>();
         if (playerHealth != null) playerHealth.TakeDamage(attackDamage);

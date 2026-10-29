@@ -63,6 +63,10 @@ public class ZombieAgent : Agent
     [Tooltip("동료와 이 거리보다 가까우면 벌점. 셋이 한 줄로 뭉쳐 다니는 걸 막는다.")]
     public float crowdDistance = 4f;
     public float crowdPenalty  = 0.004f;
+    [Tooltip("타겟과 이 거리(m) 안이면 뭉침 벌점을 주지 않는다. 0이면 항상 준다 (기존 학습).\n" +
+             "처치 모드에서는 여럿이 동시에 붙어 때려야 하는데(사거리 1.8m → 서로 4m 안),\n" +
+             "벌점이 그대로면 '같이 때리기' 자체가 벌을 받는다.")]
+    public float crowdExemptRadius = 0f;
 
     [Header("참조")]
     public ZombieTrainingArena arena;
@@ -94,12 +98,13 @@ public class ZombieAgent : Agent
     public ZombieController Body => body;
 
     /// <summary>타겟을 지금 직접 보고 있는지. 동료 관측에서 서로 참조한다.</summary>
+    /// (죽어서 꺼진 좀비는 마지막 관측이 남아 있어도 못 본 것으로 친다)
     public bool SeesTarget =>
-        mlBrain != null && mlBrain.HasObservation && mlBrain.LastObservation.targetVisible;
+        isActiveAndEnabled && mlBrain != null && mlBrain.HasObservation && mlBrain.LastObservation.targetVisible;
 
-    /// <summary>믿는 타겟까지의 거리. 모르면 음수.</summary>
+    /// <summary>믿는 타겟까지의 거리. 모르면(또는 죽어서 꺼졌으면) 음수.</summary>
     public float BelievedDistance =>
-        mlBrain != null && mlBrain.HasObservation && mlBrain.LastObservation.hasBelief
+        isActiveAndEnabled && mlBrain != null && mlBrain.HasObservation && mlBrain.LastObservation.hasBelief
             ? mlBrain.LastObservation.believedDistance
             : -1f;
 
@@ -138,19 +143,15 @@ public class ZombieAgent : Agent
     }
 
     /// <summary>
-    /// 구역의 에피소드 진행을 책임지는 에이전트인지.
-    /// 한 명만 TickEpisode를 불러야 스텝이 중복 계산되지 않는다.
+    /// Arena가 구역 구성원을 알려준다.
+    /// 에피소드 진행(TickEpisode)은 한 명만 불러야 스텝이 중복 계산되지 않는다 —— 누가 부를지는
+    /// Arena.IsEpisodeLeader가 '살아 있는 첫 에이전트'로 정한다 (좀비가 죽을 수 있어서 고정할 수 없다).
     /// </summary>
-    private bool isEpisodeLeader;
-
-    /// <summary>Arena가 구역 구성원을 알려준다.</summary>
     public void SetTeammates(IReadOnlyList<ZombieAgent> all)
     {
         teammates.Clear();
         foreach (var a in all)
             if (a != null && a != this) teammates.Add(a);
-
-        isEpisodeLeader = all.Count > 0 && all[0] == this;
     }
 
     /// <summary>
@@ -176,6 +177,16 @@ public class ZombieAgent : Agent
     public override void OnEpisodeBegin()
     {
         wanderUntil = 0f;
+        // 뭉침 벌점 면제 거리도 yaml(crowd_exempt_radius)로 바꿀 수 있다 —— 예전 씬을 처치 모드로 쓰기 위해
+        if (Academy.IsInitialized)
+        {
+            var ep = Academy.Instance.EnvironmentParameters;
+            crowdExemptRadius = ep.GetWithDefault("crowd_exempt_radius", crowdExemptRadius);
+            // 개별 보상도 yaml로 끌 수 있다 (visible_reward / crowd_penalty).
+            // 조율기+RL에서 '보이는 동안 보상'은 판을 오래 끌수록 쌓여서, 잡지 않고 쫓기만 하는 꼼수가 됐다.
+            visibleReward = ep.GetWithDefault("visible_reward", visibleReward);
+            crowdPenalty  = ep.GetWithDefault("crowd_penalty",  crowdPenalty);
+        }
         // 구역 리셋은 Arena가 그룹 단위로 한 번만 수행한다.
         // 여기서 arena.ResetArena()를 부르면 좀비 수만큼 중복 리셋된다.
         episodeCount++;
@@ -239,19 +250,7 @@ public class ZombieAgent : Agent
         // 동료가 어디서 무엇을 보고 있는지 알아야 "쟤가 정면에서 쫓으니 나는 돌아가자"가 성립한다.
         // 가까운 순으로 정렬해 넣는다 —— 칸 순서에 일관된 의미가 생겨 학습이 쉬워진다.
         // 학습장: Arena가 알려준 구역 동료 / 게임: ZombieSquad에 등록된 맵 전체 좀비 중 가까운 순
-        IReadOnlyList<ZombieAgent> pool = teammates;
-        if (arena == null && ZombieSquad.HasInstance) pool = ZombieSquad.Instance.Members;
-
-        nearestBuffer.Clear();
-        foreach (var m in pool)
-        {
-            if (m == null || m == this || !m.isActiveAndEnabled) continue;
-            if (m.Body != null && m.Body.IsDead) continue;
-            nearestBuffer.Add(m);
-        }
-        Vector3 me = transform.position;
-        nearestBuffer.Sort((a, b) =>
-            (a.transform.position - me).sqrMagnitude.CompareTo((b.transform.position - me).sqrMagnitude));
+        GetNearestTeammates(nearestBuffer);
 
         for (int i = 0; i < TeammateSlots; i++)
         {
@@ -294,6 +293,29 @@ public class ZombieAgent : Agent
         }
     }
 
+    /// <summary>
+    /// 살아 있는 동료를 가까운 순으로 result에 채운다. 관측의 동료 칸 순서가 이것이다.
+    /// 역할 센서(ZombieRoleSensor)도 이걸 써서 같은 칸에 같은 동료가 오게 한다.
+    /// 학습장: Arena가 알려준 구역 동료 / 게임: ZombieSquad에 등록된 맵 전체 RL 좀비
+    /// </summary>
+    public void GetNearestTeammates(List<ZombieAgent> result)
+    {
+        result.Clear();
+
+        IReadOnlyList<ZombieAgent> pool = teammates;
+        if (arena == null && ZombieSquad.HasInstance) pool = ZombieSquad.Instance.Members;
+
+        foreach (var m in pool)
+        {
+            if (m == null || m == this || !m.isActiveAndEnabled) continue;
+            if (m.Body != null && m.Body.IsDead) continue;
+            result.Add(m);
+        }
+        Vector3 me = transform.position;
+        result.Sort((a, b) =>
+            (a.transform.position - me).sqrMagnitude.CompareTo((b.transform.position - me).sqrMagnitude));
+    }
+
     // ── 행동 ──────────────────────────────────────
     public override void OnActionReceived(ActionBuffers actions)
     {
@@ -315,7 +337,8 @@ public class ZombieAgent : Agent
         // 에피소드 진행/종료는 반드시 에이전트 스텝 안에서 처리한다.
         // Arena의 FixedUpdate에서 부르면 Academy 스텝과 순서가 엇갈려
         // Unity가 응답을 못 보내고 굳는다.
-        if (isEpisodeLeader && arena != null) arena.TickEpisode();
+        // 진행 담당은 '살아 있는 첫 에이전트' —— 반격하는 더미에게 첫 좀비가 죽어도 판이 계속 굴러가게
+        if (arena != null && arena.IsEpisodeLeader(this)) arena.TickEpisode();
     }
 
     private void ApplyRewards()
@@ -339,7 +362,8 @@ public class ZombieAgent : Agent
         if (obs.targetVisible) AddReward(visibleReward);
 
         // 동료와 겹치면 벌점 —— 셋이 한 덩어리로 다니면 포위가 안 된다
-        if (crowdPenalty > 0f)
+        bool attackingClose = crowdExemptRadius > 0f && obs.hasBelief && obs.believedDistance <= crowdExemptRadius;
+        if (crowdPenalty > 0f && !attackingClose)
         {
             foreach (var mate in teammates)
             {
@@ -369,6 +393,23 @@ public class ZombieAgent : Agent
         ResolveRefs();
         if (mlBrain == null || !mlBrain.HasObservation) return;
         var obs = mlBrain.LastObservation;
+
+        // 조율기가 붙은 학습장(조율기+RL 씬)이면 조율기가 정해 준 자리로 그대로 간다.
+        // → 1구역 디버그 씬(Heuristic Only)에서 '조율기만 쓴 기준선'을 같은 학습장에서 볼 수 있다.
+        var pack = HunterPackTactics.PackOf(body);
+        if (pack != null && pack.TryGetOrder(body, out Vector3 order, out _))
+        {
+            Vector3 d = order - transform.position;
+            d.y = 0f;
+            if (d.sqrMagnitude > 0.04f)
+            {
+                Vector3 local = transform.InverseTransformDirection(d.normalized);
+                continuous[0] = local.x;
+                continuous[1] = local.z;
+            }
+            discrete[0] = (obs.targetVisible && obs.InAttackRange) ? 1 : 0;
+            return;
+        }
 
         // 자기는 모르지만 동료가 봤으면 그 지점으로 간다 (FSM의 경계 전파와 같은 수준).
         // 이걸 넣어야 '같은 정보를 받은 직선 추격'이 RL과 공정한 기준선이 된다.

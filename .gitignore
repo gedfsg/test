@@ -112,6 +112,10 @@ Report/package-lock.json
 /results/
 /Builds/
 /BuildsOpen/
+/BuildsOpenKill/
+/BuildObstacle/
+/BuildsShoot/
+/BuildsSlot/
 /Recordings/
 /Assets/ML-Agents/
 /Assets/ML-Agents.meta

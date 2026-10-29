@@ -22,8 +22,11 @@ using UnityEngine.AI;
 /// </summary>
 public static class ZombieTrainingSceneBuilder
 {
-    private const string ScenePath     = "Assets/Scenes/ZombieTraining.unity";
-    private const string OpenScenePath = "Assets/Scenes/ZombieTrainingOpen.unity";
+    private const string ScenePath        = "Assets/Scenes/ZombieTraining.unity";
+    private const string OpenScenePath    = "Assets/Scenes/ZombieTrainingOpen.unity";
+    private const string TerrainScenePath = "Assets/Scenes/ZombieTrainingTerrain.unity";
+    private const string SlotScenePath    = "Assets/Scenes/ZombieTrainingSlot.unity";
+    private const string ShootScenePath   = "Assets/Scenes/ZombieTrainingShoot.unity";
 
     // 구역 설정 (벽이 있는 사각 구역)
     private const float ArenaSize     = 40f;
@@ -62,9 +65,51 @@ public static class ZombieTrainingSceneBuilder
     [MenuItem("Tools/Zombie/열린 원형 씬 생성 (3x3 · 학습용)")]
     public static void BuildOpenGrid() => Build(3, true);
 
-    private static void Build(int gridSize, bool open)
+    /// <summary>지형 씬 1구역. 배선 확인용.</summary>
+    [MenuItem("Tools/Zombie/지형 씬 생성 (1구역 · 디버그용)")]
+    public static void BuildTerrainSingle() => Build(1, true, true);
+
+    /// <summary>
+    /// 지형 씬 9구역. 지형 센서 학습용.
+    /// 열린 원형 구역에 'ㄷ'자 건물(막다른 골목) 4개를 더하고, 좀비에 지형 센서를 붙인다.
+    /// 포위 점수도 벽을 퇴로 차단으로 쳐서, 골목으로 몰아넣는 전략에 보상이 가게 한다.
+    /// </summary>
+    [MenuItem("Tools/Zombie/지형 씬 생성 (3x3 · 학습용)")]
+    public static void BuildTerrainGrid() => Build(3, true, true);
+
+    /// <summary>
+    /// 조율기 + 강화학습 씬 1구역. 좀비가 Heuristic Only라 '조율기가 정한 자리로 그대로 가는' 기준선이 보인다.
+    /// </summary>
+    [MenuItem("Tools/Zombie/조율기+RL 씬 생성 (1구역 · 디버그용)")]
+    public static void BuildSlotSingle() => Build(1, true, true, true);
+
+    /// <summary>
+    /// 조율기 + 강화학습 씬 9구역. 지형 씬(ㄷ자 골목 + 섞인 무리)에 무리 조율기(조언 모드)를 붙이고,
+    /// 좀비에 자리 센서를 더한다. 성공 조건은 가둔 포획(처치 모드 끔).
+    /// </summary>
+    [MenuItem("Tools/Zombie/조율기+RL 씬 생성 (3x3 · 학습용)")]
+    public static void BuildSlotGrid() => Build(3, true, true, true);
+
+    /// <summary>반격하는 더미 씬 1구역. 조율기+RL 씬에 더미 사격과 위협 센서를 더한 것. 배선 확인용.</summary>
+    [MenuItem("Tools/Zombie/사격 씬 생성 (1구역 · 디버그용)")]
+    public static void BuildShootSingle() => Build(1, true, true, true, true);
+
+    /// <summary>
+    /// 반격하는 더미 씬 9구역. 더미가 바라보는 방향으로 총을 쏘고(뒷걸음질 가능), 좀비는 가상 체력이 있어 죽으면 빠진다.
+    /// 조율기가 자리를 정하고, 강화학습은 '살아서 거기까지 가는 법'(피하기, 틈 노리기)을 배운다.
+    /// </summary>
+    [MenuItem("Tools/Zombie/사격 씬 생성 (3x3 · 학습용)")]
+    public static void BuildShootGrid() => Build(3, true, true, true, true);
+
+    private static void Build(int gridSize, bool open, bool terrain = false, bool slot = false, bool shoot = false)
     {
-        string path = open ? OpenScenePath : ScenePath;
+        string path = shoot ? ShootScenePath : slot ? SlotScenePath : terrain ? TerrainScenePath : open ? OpenScenePath : ScenePath;
+        slotLayout  = slot || shoot;
+        shootLayout = shoot;
+        // 1구역(디버그용)은 다른 파일로 저장한다 —— 같은 파일에 저장하면 학습용 3x3 씬이 덮어써지고,
+        // 그걸 모르고 빌드하면 Heuristic Only 좀비만 있어서 학습기가 '응답 없음'으로 멈춘다.
+        if (gridSize == 1) path = path.Replace(".unity", "_Debug.unity");
+        terrainLayout = terrain;
 
         if (!EditorUtility.DisplayDialog(
                 "학습 씬 생성",
@@ -100,6 +145,9 @@ public static class ZombieTrainingSceneBuilder
     // ─────────────────────────────────────────────
     private static bool singleArena;
     private static bool openLayout;
+    private static bool terrainLayout;
+    private static bool slotLayout;
+    private static bool shootLayout;
 
     private static void BuildArena(string name, Vector3 center)
     {
@@ -194,6 +242,7 @@ public static class ZombieTrainingSceneBuilder
     {
         var root = new GameObject(name);
         root.transform.position = center;
+        int pocketCount = 0;
 
         // 바닥: 원기둥. 프리미티브 원기둥의 기본 충돌체는 캡슐이라 바닥으로 쓸 수 없으므로
         // 메시 충돌체로 바꾼다 (NavMesh가 충돌체 모양으로 구워지기 때문).
@@ -249,6 +298,32 @@ public static class ZombieTrainingSceneBuilder
             MakeDynamicObstacle(obstacles[i].gameObject);
         }
 
+        // 지형 씬: 'ㄷ'자 건물 4개 = 막다른 골목. 위의 벽들은 간격 규칙 때문에 막다른 곳을 만들지 못하므로
+        // 따로 넣는다. 더미는 앞이 막힌 쪽을 피해서 도망치므로(NavMesh 레이 14m) 저절로 들어가지 않는다 ——
+        // 다른 출구를 좀비가 막아야만 몰아넣을 수 있다. 지형 몰이도 결국 협동이 있어야 통한다.
+        if (terrainLayout)
+        {
+            var pockets = new[]
+            {
+                new Vector3(10f, WallHeight, 6f), new Vector3( 8f, WallHeight, 6f),
+                new Vector3(12f, WallHeight, 7f), new Vector3( 8f, WallHeight, 8f),
+            };
+            // 골목을 배열 맨 앞에 둔다 —— Arena가 앞쪽 scatterPinnedFirst개를 항상 먼저 배치한다.
+            // 뒤에 섞이면 큰 건물이라 자리가 모자라 자주 빠진다.
+            var list = new System.Collections.Generic.List<Transform>();
+            for (int i = 0; i < pockets.Length; i++)
+            {
+                float rad = (360f / pockets.Length * i + 45f) * Mathf.Deg2Rad;
+                float pr  = OpenRadius * 0.6f;
+                list.Add(MakePocket(root, $"Pocket_{i}",
+                    new Vector3(Mathf.Sin(rad) * pr, WallHeight * 0.5f, Mathf.Cos(rad) * pr),
+                    pockets[i]).transform);
+            }
+            pocketCount = pockets.Length;
+            list.AddRange(obstacles);
+            obstacles = list.ToArray();
+        }
+
         var surface = root.AddComponent<NavMeshSurface>();
         surface.collectObjects = CollectObjects.Children;
         surface.useGeometry    = NavMeshCollectGeometry.PhysicsColliders;
@@ -273,6 +348,105 @@ public static class ZombieTrainingSceneBuilder
         arena.scatterMaxRadius  = OpenRadius - 6f;   // 외곽 벽과 최소 5m 통로
         arena.scatterMinSpacing = 4f;                // 벽끼리 최소 4m (좀비 몸 폭의 5배)
         arena.scatterMinActive  = 14;                // 실제 배치는 평균 13~14개 (10~17)
+
+        // 지형 씬: 벽도 퇴로 차단으로 치는 포위 점수 + 골목은 매 에피소드 반드시 배치
+        arena.terrainAwareEncircle = terrainLayout;
+        arena.scatterPinnedFirst   = terrainLayout ? pocketCount : 0;
+
+        // 지형 씬: 섞인 무리 (일반 3.5 / 달리기 4.5 / 탱커 2.5, 매 판 구성 무작위)
+        if (terrainLayout)
+        {
+            arena.mixedPack      = true;
+            arena.normalSpeed    = 3.5f;
+            arena.runnerSpeed    = 4.5f;
+            arena.tankSpeed      = 2.5f;
+            arena.maxRunners     = 2;
+            arena.maxTanks       = 1;
+            arena.normalMaterial = GetOrCreateMaterial("Training_Zombie",        new Color(0.85f, 0.15f, 0.15f));
+            arena.runnerMaterial = GetOrCreateMaterial("Training_Zombie_Runner", new Color(1.00f, 0.65f, 0.10f));
+            arena.tankMaterial   = GetOrCreateMaterial("Training_Zombie_Tank",   new Color(0.35f, 0.12f, 0.50f));
+
+            // 달리기 좀비(4.5)가 있으면 더미가 그보다 빨라야 협동이 필요해진다.
+            // 게임의 플레이어 걷기 속도(5)까지 올라갈 수 있게 상한을 연다.
+            arena.adaptiveMax = 6f;
+
+            // 처치 모드: 닿기가 아니라 체력 100을 깎아야 끝난다. 공격력은 게임 설계값.
+            arena.killMode          = true;
+            arena.dummyMaxHealth    = 100f;
+            arena.damageRewardTotal = 0.5f;
+            arena.normalDamage      = 10f;
+            arena.runnerDamage      = 15f;
+            arena.tankDamage        = 40f;
+        }
+
+        // 조율기 + 강화학습: 조율기를 조언 모드로 붙이고, 성공 조건은 가둔 포획 (yaml로도 덮어쓸 수 있다)
+        if (slotLayout)
+        {
+            arena.useSlotTactics = true;
+            arena.killMode       = false;
+            arena.pinnedCapture  = true;
+            // 판정 기준은 조율기와 같게: 빈틈 150° 이하, 8m 안의 좀비가 한 마리당 좌우 25°씩 막는다
+            arena.pinnedMaxGap           = 150f;
+            arena.pinnedRadius           = 8f;
+            arena.pinnedControlHalfAngle = 25f;
+            // 1구역(디버그)에서만 화면 왼쪽 위에 무리 상태를 띄운다
+            arena.slotSettings.showStatus = singleArena;
+
+            // 학습 설정(zombie_poca_slot_res.yaml)과 같은 값을 씬 기본값으로도 넣는다.
+            // 평가 도구(ZombieEvaluator)는 yaml 없이 씬 값으로 돌기 때문에, 이게 다르면
+            // 학습과 다른 조건에서 평가하게 된다 (특히 잔차가 0이면 모델이 엉뚱하게 움직인다).
+            arena.slotResidualScale = ZombieMLBrain.DefaultSlotResidual;
+            arena.slotFollowReward  = 0f;
+            arena.runnerSpeed       = 4.0f;
+            arena.encircleReward    = 0.5f;
+            if (arena.dummy != null) arena.dummy.limitedSight = true;
+            foreach (var z in arena.zombies)
+            {
+                var ag = z != null ? z.GetComponent<ZombieAgent>() : null;
+                if (ag == null) continue;
+                ag.visibleReward = 0f;
+                ag.crowdPenalty  = 0f;
+            }
+
+            // 사격 씬: 더미가 쏘고, 좀비는 가상 체력이 있다 (수치는 yaml로 덮어쓴다 —— 여기는 평가용 기본값)
+            if (shootLayout)
+            {
+                if (arena.dummy != null) arena.dummy.shootingEnabled = true;
+                // shoot3부터: 좀비는 죽지 않는다 (체력 사실상 무한). 맞으면 벌점 + 멈칫.
+                arena.normalHealth = 1000000f;
+                arena.runnerHealth = 1000000f;
+                arena.tankHealth   = 1000000f;
+                arena.deathPenalty = 0f;
+                arena.hitPenalty   = 0.03f;
+                arena.hitStun      = 0.3f;
+                arena.slotResidualLateral = true;   // shoot2부터: 보정은 옆으로만
+                arena.slotResidualScale   = ZombieMLBrain.DefaultShootResidual;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 'ㄷ'자 건물 (막다른 골목). 뒷벽 + 양옆 벽, 앞(-z)이 트여 있다.
+    ///
+    /// 부모의 스케일을 (폭, 높이, 깊이)로 두는 이유: Arena의 Scatter가 장애물의 localScale x를 긴 변,
+    /// z를 두께로 읽어서 간격을 잰다. 부모 스케일이 건물 전체 크기면 골목 안쪽까지 한 덩어리로 계산되어
+    /// 다른 벽이 골목 안에 놓이지 않는다. 자식 벽 두께는 스케일을 거꾸로 나눠 실제 1m로 맞춘다.
+    /// </summary>
+    private static GameObject MakePocket(GameObject parent, string name, Vector3 localPos, Vector3 size)
+    {
+        var go = new GameObject(name);
+        go.transform.SetParent(parent.transform);
+        go.transform.localPosition = localPos;
+        go.transform.localScale    = size;
+
+        const float thickness = 1f;
+        float tx = thickness / size.x;
+        float tz = thickness / size.z;
+
+        MakeDynamicObstacle(MakeWall(go, "Back",  new Vector3(0f, 0f, 0.5f - tz * 0.5f),  new Vector3(1f, 1f, tz)));
+        MakeDynamicObstacle(MakeWall(go, "Left",  new Vector3(-0.5f + tx * 0.5f, 0f, 0f), new Vector3(tx, 1f, 1f)));
+        MakeDynamicObstacle(MakeWall(go, "Right", new Vector3( 0.5f - tx * 0.5f, 0f, 0f), new Vector3(tx, 1f, 1f)));
+        return go;
     }
 
     /// <summary>
@@ -389,6 +563,17 @@ public static class ZombieTrainingSceneBuilder
         // 보상 곡선은 평평한 채 시간만 흘러간다.
         bp.BehaviorType = singleArena ? BehaviorType.HeuristicOnly : BehaviorType.Default;
 
+        // 지형 씬: NavMesh 레이 지형 센서(21) + 역할 센서(5, 나와 동료의 최고 속도)가 별도 입력으로 추가된다
+        if (terrainLayout)
+        {
+            go.AddComponent<ZombieTerrainSensor>();
+            go.AddComponent<ZombieRoleSensor>();
+        }
+        // 조율기+RL 씬: 자리 센서(6, 조율기가 정해 준 자리 / 덮치기 여부 / 빈틈)가 하나 더 들어간다
+        if (slotLayout) go.AddComponent<ZombieSlotSensor>();
+        // 사격 씬: 위협 센서(7, 조준당하는지 / 어느 쪽으로 비킬지 / 재장전 / 내 체력)가 하나 더 들어간다
+        if (shootLayout) go.AddComponent<ZombieThreatSensor>();
+
         // ⚠ 순서가 중요하다. DecisionRequester에는 [RequireComponent(typeof(Agent))]가 붙어 있어서,
         //    ZombieAgent보다 먼저 추가하면 Unity가 "맨 Agent"를 자동으로 끼워 넣는다.
         //    그러면 Agent가 두 개가 되고 DecisionRequester는 먼저 붙은 맨 Agent를 잡는데,
@@ -396,6 +581,8 @@ public static class ZombieTrainingSceneBuilder
         //    → ZombieAgent를 먼저 붙여서 RequireComponent를 만족시킨다.
         var agent = go.AddComponent<ZombieAgent>();
         agent.MaxStep = 0;   // 에피소드 종료는 Arena가 그룹 단위로 처리한다
+        // 지형 씬(처치 모드): 타겟 5m 안에서는 뭉침 벌점 면제 —— 여럿이 붙어 때려야 처치된다
+        agent.crowdExemptRadius = terrainLayout ? 5f : 0f;
 
         var requester = go.AddComponent<DecisionRequester>();
         requester.DecisionPeriod = 5;

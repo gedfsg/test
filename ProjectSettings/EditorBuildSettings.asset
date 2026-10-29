@@ -4,7 +4,20 @@
 EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
-  m_Scenes: []
+  m_Scenes:
+  - enabled: 0
+    path: Assets/Scenes/ZombieTrainingTerrain.unity
+    guid: bad2a06bfdc9789438b00f311bd2e3e9
+  - enabled: 0
+    path: Assets/Scenes/ZombieTrainingOpen.unity
+    guid: 76b62941b5fe36f4f945cf2f551e17e4
+  - enabled: 0
+    path: Assets/Scenes/ZombieTrainingSlot.unity
+    guid: b27869c9575a830479725f2894391ee5
+  - enabled: 1
+    path: Assets/Scenes/ZombieTrainingShoot.unity
+    guid: 6a32e813b1d3dce4cbbeac7959893a49
   m_configObjects:
+    com.unity.dt.app-ui: {fileID: 11400000, guid: 1b1c20d82303e4b5781c3ef50ac1449f, type: 2}
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 289c1b55c9541489481df5cc06664110, type: 3}
   m_UseUCBPForAssetBundles: 0

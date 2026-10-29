@@ -1,0 +1,119 @@
+# Step "the evader shoots back" (coordinator + residual RL vs a shooter).
+#
+# Comments are ASCII-only on purpose: ml-agents opens this file without an
+# encoding, so on a Korean Windows any UTF-8 Hangul here crashes the loader.
+#
+# Why: against an evader that only runs, the coordinator alone already does
+# the job (eval: 52% vs 41% for coordinator + residual RL), so RL had nothing
+# to add. A real player shoots. The coordinator walks straight into the line
+# of fire; staying alive on the way (side-stepping when aimed at, not lining
+# up, closing in while a mate is the target or while the gun reloads, using
+# walls) is hard to script and is what RL is for. Division of labour:
+#   coordinator = WHERE (slots, roles, when to rush)
+#   RL residual = HOW to get there alive
+#
+# The dummy shoots where it looks (top-down shooter style): aim turns at a
+# limited rate, a new target needs a reaction time, bullets have travel time
+# (side-stepping makes them miss), magazine + reload. Movement and facing are
+# separate, so it can backpedal while shooting (slower, dummy_backpedal).
+# Zombies have virtual HP; a dead zombie leaves the episode (DungeonEscape
+# style: disabled, re-registered at reset; MA-POCA still credits it). Fail =
+# timeout or the whole pack dead (terminal).
+#
+# Gun strength was tuned in a 2D test so the coordinator alone catches about
+# 34/60 and is wiped 26/60 against a 2.6 m/s evader.
+#
+# New inputs (threat sensor), so this run starts from scratch.
+# Scene: Tools/Zombie/<shoot scene 3x3> -> Assets/Scenes/ZombieTrainingShoot.unity
+#   Build: only that scene -> BuildsShoot/
+#
+#   mlagents-learn config/zombie_poca_shoot.yaml --run-id=zombie_shoot
+#     --env="BuildsShoot/My First Game.exe" --no-graphics --num-envs=2
+#
+# Watch: Pursuit/CaptureRate (up), Shoot/Deaths and Shoot/WipeRate (down),
+# Shoot/HitRate (down = zombies dodge), Pursuit/EvaderSpeed.
+#
+# First try (fire 0.7 s, spread 6, reaction 0.5), 240k steps: mechanics OK
+# (zombies die, wiped episodes end and reset), but far harder than the 2D
+# test: capture 7%, wipe 89%, 4.7 of 5 zombies dead per episode, hit rate
+# 57%. Too little success to learn from. The gun is weakened here (yaml only,
+# no rebuild) and the run restarted:
+#   mlagents-learn config/zombie_poca_shoot.yaml --run-id=zombie_shoot --force
+#     --env="BuildsShoot/My First Game.exe" --no-graphics --num-envs=2
+
+behaviors:
+  Zombie:
+    trainer_type: poca
+    hyperparameters:
+      batch_size: 2048
+      buffer_size: 20480
+      learning_rate: 3.0e-4
+      learning_rate_schedule: linear
+      beta: 5.0e-3
+      beta_schedule: linear
+      epsilon: 0.2
+      lambd: 0.95
+      num_epoch: 3
+    network_settings:
+      normalize: true
+      hidden_units: 256
+      num_layers: 2
+      vis_encode_type: simple
+    reward_signals:
+      extrinsic:
+        gamma: 0.995
+        strength: 1.0
+    keep_checkpoints: 10
+    checkpoint_interval: 500000
+    max_steps: 20000000
+    time_horizon: 256
+    summary_freq: 20000
+
+environment_parameters:
+  # success = pinned contact (no HP)
+  kill_mode: 0
+  pinned_capture: 1
+  pinned_max_gap: 180.0
+  pinned_radius: 5.0
+  # per-agent rewards off: only team rewards remain
+  crowd_exempt_radius: 1000.0
+  crowd_penalty: 0.0
+  visible_reward: 0.0
+  evader_limited_sight: 1
+  intel_share_radius: 0
+  # guidance
+  # residual on, carrot-follow reward off
+  slot_residual: 0.5
+  slot_follow_reward: 0.0
+  encircle_reward: 0.5
+  cutoff_reward: 0.0
+  # mixed pack (same as the coordinator test: normal 3.5 / runner 4.0 / tank 2.5)
+  normal_speed: 3.5
+  runner_speed: 4.0
+  tank_speed: 2.5
+  # difficulty: the coordinator alone handles faster evaders, so start at 3.0
+  # and let the normal adaptive rule raise it
+  adaptive_start: 2.6
+  adaptive_window: 10
+  adaptive_step: 0.1
+  adaptive_raise: 0.5
+  adaptive_lower: 0.3
+  # the evader shoots back
+  dummy_shoot: 1
+  dummy_fire_interval: 1.0
+  dummy_damage: 20.0
+  dummy_mag: 12
+  dummy_reload: 1.8
+  dummy_bullet_speed: 40.0
+  dummy_range: 20.0
+  dummy_spread: 8.0
+  dummy_turn_speed: 180.0
+  dummy_reaction: 0.6
+  dummy_aim_lead: 0.3
+  dummy_backpedal: 0.8
+  dummy_flee_scale: 0.6
+  # zombie virtual HP (normal / runner / tank) and team penalty per death
+  zombie_hp_normal: 50.0
+  zombie_hp_runner: 35.0
+  zombie_hp_tank: 150.0
+  zombie_death_penalty: 0.2

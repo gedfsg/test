@@ -25,6 +25,24 @@ public class ZombieMLBrain : ZombieBrain
              "게임에서는 이걸 켜서 FSM과 같은 규칙으로 때리게 한다. 이동 판단은 그대로 정책이 한다.")]
     public bool autoAttackInRange = true;
 
+    /// <summary>조율기+RL 모델을 학습할 때 쓴 잔차 크기. 프리팹 도구가 _RL_Slot 프리팹에 이 값을 넣는다 (yaml slot_residual과 같아야 함).</summary>
+    public const float DefaultSlotResidual = 0.5f;
+    /// <summary>사격 대응 모델(shoot3부터, 회전식 옆 보정)을 학습할 때 쓴 잔차 크기 (yaml slot_residual과 같아야 함).</summary>
+    public const float DefaultShootResidual = 0.8f;
+
+    [Header("조율기 + 강화학습 (잔차)")]
+    [Tooltip("0보다 크면 '잔차' 방식: 무리 조율기가 정한 방향으로 기본 이동하고, 정책의 행동은 그 위에 더하는 보정이 된다.\n" +
+             "  최종 방향 = 조율기 방향 + 정책 행동 × 이 값   (속도 = 그 길이, 최대 1)\n" +
+             "정책이 0을 내면 조율기 그대로, 반대로 밀면 느려지거나 멈춘다. 조율기에 속하지 않았거나 명령이 없으면 정책 그대로.\n" +
+             "⚠ 학습 때 값(yaml slot_residual)과 같아야 학습한 대로 움직인다. 0 = 꺼짐 (기존 모델).")]
+    public float residualScale = 0f;
+    [Tooltip("켜면 보정을 '옆으로'만 허용한다: 조율기 방향으로는 항상 최고 속도, 정책은 좌우로 얼마나 비킬지만 정한다.\n" +
+             "총 쏘는 더미 상대로 자유 보정을 줬더니 피하는 대신 속도를 줄여 머뭇거렸다 (3.1 → 2.6 m/s, 더 오래 맞음).\n" +
+             "⚠ 학습 때 값(yaml slot_residual_lateral)과 같아야 한다.")]
+    public bool residualLateralOnly = false;
+
+    private ZombieController body;
+
     // ── Agent ↔ Brain 사이의 캐시 ────────────────────
     // Agent는 자기 주기(DecisionRequester)로 돌고 Brain은 매 프레임 호출되므로,
     // 둘을 직접 호출로 엮지 않고 최신 값만 주고받는다.
@@ -34,6 +52,12 @@ public class ZombieMLBrain : ZombieBrain
     private bool    attackAction;
 
     public bool HasObservation => hasObs;
+
+    // ── 회피 측정용 (평가 도구/학습 통계가 읽는다. 행동에는 영향 없음) ──
+    /// <summary>이번 프레임에 '옆으로만 보정' 방식으로 진행 방향을 몇 도 틀었는지 (+/- 방향). HasSteer가 false면 의미 없음.</summary>
+    public float LastSteerDeg { get; private set; }
+    /// <summary>이번 프레임에 옆으로만 보정이 실제로 적용됐는가 (조율기 명령이 있고 아직 도착 전).</summary>
+    public bool  HasSteer     { get; private set; }
     public ZombieObservation LastObservation => lastObs;
 
     /// <summary>
@@ -59,6 +83,7 @@ public class ZombieMLBrain : ZombieBrain
     {
         lastObs = obs;
         hasObs  = true;
+        HasSteer = false;
 
         if (obs.isStunned) return ZombieAction.Stand();
 
@@ -76,6 +101,10 @@ public class ZombieMLBrain : ZombieBrain
         Vector3 localDir = new Vector3(moveAction.x, 0f, moveAction.y);
         float magnitude  = Mathf.Clamp01(localDir.magnitude);
 
+        // 잔차 방식: 조율기 방향 + 정책 보정
+        if (residualScale > 0f && TryResidual(localDir, attack, out ZombieAction residual))
+            return residual;
+
         ZombieAction action;
         if (magnitude < 0.05f)
         {
@@ -88,6 +117,70 @@ public class ZombieMLBrain : ZombieBrain
             action.attack = attack;
         }
         return action;
+    }
+
+    /// <summary>
+    /// 조율기가 이 좀비에게 명령 지점을 줬으면: 그쪽 단위 방향 + 정책 행동 × residualScale 로 움직인다.
+    /// 명령이 없으면(무리가 플레이어를 모름 / 조율기 없음) false → 원래대로 정책 그대로.
+    /// </summary>
+    private bool TryResidual(Vector3 localAction, bool attack, out ZombieAction action)
+    {
+        action = default;
+        if (body == null) body = GetComponent<ZombieController>();
+        var pack = HunterPackTactics.PackOf(body);
+        if (pack == null || !pack.TryGetOrder(body, out Vector3 order, out _)) return false;
+
+        Vector3 baseDir = order - transform.position;
+        baseDir.y = 0f;
+        if (baseDir.sqrMagnitude < 0.04f) baseDir = Vector3.zero;   // 이미 도착 → 보정만
+        else baseDir.Normalize();
+
+        Vector3 worldAction = transform.TransformDirection(localAction);
+        worldAction.y = 0f;
+
+        Vector3 world;
+        float speed;
+
+        if (residualLateralOnly && baseDir.sqrMagnitude > 0f)
+        {
+            // [수정] 기존에는 baseDir(1.0) + side * (최대 0.5) 방식이라 최대 회피 각도가 26.5도에 불과해
+            // 예측 사격(aimLead)과 장애물을 피하지 못했음.
+            // 좌우 입력(lat)으로 진행 방향 자체를 최대 ±(residualScale * 75도)까지 회전시키고,
+            // 전후방 입력(fwd)으로도 약간의 가감속/대기(0.6~1.0)를 허용해 총알 회피와 엄폐 기동이 가능하도록 개선.
+            Vector3 side = new Vector3(-baseDir.z, 0f, baseDir.x);
+            float lat = Mathf.Clamp(Vector3.Dot(worldAction, side), -1f, 1f);
+            float fwd = Mathf.Clamp(Vector3.Dot(worldAction, baseDir), -1f, 1f);
+
+            float maxSteerDeg = Mathf.Clamp(residualScale * 75f, 15f, 75f);
+            float steerAngle  = lat * maxSteerDeg;
+            LastSteerDeg = steerAngle;
+            HasSteer     = true;
+            world = Quaternion.Euler(0f, steerAngle, 0f) * baseDir;
+            speed = Mathf.Clamp(1f + fwd * 0.25f, 0.7f, 1f);
+        }
+        else if (baseDir.sqrMagnitude > 0f)
+        {
+            Vector3 correction = worldAction * residualScale;
+            world = baseDir + correction;
+            world.y = 0f;
+            // 보정 때문에 속도가 너무 죽어 표적이 되는 현상 방지 (최소 속도 0.6 보장)
+            speed = Mathf.Clamp(world.magnitude, 0.6f, 1f);
+        }
+        else
+        {
+            // 슬롯 위치에 이미 도달한 상태에서도 제자리에 멈춰 총에 맞지 않고 자유롭게 회피 기동 허용
+            world = worldAction;
+            speed = Mathf.Clamp01(world.magnitude);
+        }
+
+        if (speed < 0.05f || world.sqrMagnitude < 0.0025f)
+        {
+            action = attack ? ZombieAction.Strike() : ZombieAction.Stand();
+            return true;
+        }
+        action = ZombieAction.FromDirection(transform.position, world.normalized, speed, stepDistance);
+        action.attack = attack;
+        return true;
     }
 
     /// <summary>ZombieAgent.OnActionReceived에서 호출.</summary>

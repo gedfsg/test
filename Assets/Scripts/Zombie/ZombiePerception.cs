@@ -61,6 +61,9 @@ public class ZombiePerception
 
     public Transform Target => target;
 
+    /// <summary>지금 타겟이 시야에 들어와 있는가 (마지막 시야 판정 결과). 무리 조율기가 목격 공유에 쓴다.</summary>
+    public bool TargetVisible => target != null && visibleCached;
+
     public ZombiePerception(ZombieController body)
     {
         this.body = body;

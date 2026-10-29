@@ -46,10 +46,21 @@ public class ZombieEvaluator : MonoBehaviour
     public int episodesPerCondition = 50;
     [Tooltip("시드 기준값. 바꾸면 다른 맵/배치 묶음으로 평가한다")]
     public int baseSeed = 20261014;
+    [Tooltip("평가용 포획 거리(m, 중심 거리). 0이면 씬 설정(학습 때 1.2)을 그대로 쓴다.\n" +
+             "기본값 1.8 = 좀비 공격 사거리. FSM은 이 거리에 들어오면 멈춰서 공격하므로\n" +
+             "포획 거리가 이보다 짧으면 '때렸는데 포획으로 안 치는' 불이익을 받는다.\n" +
+             "실제 게임에서 '잡혔다' = '공격이 닿았다'이므로, 셋 다 같은 규칙으로 비교한다.")]
+    public float captureRadius = 1.8f;
 
     [Header("실행")]
     [Tooltip("게임 배속. 너무 높으면 프레임당 물리 스텝이 밀려 실제로는 덜 빨라진다")]
     public float timeScale = 10f;
+
+    [Header("총 설정")]
+    [Tooltip("켜면 모든 더미의 총을 게임 총에 맞춘다 (shoot4 학습과 같은 값):\n" +
+             "연사 간격 0.1~0.5초, 총알 70~150 m/s (매 판 무작위), 탄창 30, 재장전 1.5초, 사거리 25m, 탄 퍼짐 15°.\n" +
+             "끄면 씬에 저장된 더미 값을 그대로 쓴다 (예전 평가와 같은 조건).")]
+    public bool gameGuns = false;
     public string outputFolder = "EvalResults";
     [Tooltip("끝나면 Play를 자동으로 멈춘다 (에디터 전용)")]
     public bool stopWhenDone = true;
@@ -105,7 +116,9 @@ public class ZombieEvaluator : MonoBehaviour
         foreach (var a in arenas)
         {
             a.adaptiveSpeed     = false;   // 속도는 평가 도구가 정한다
+            if (gameGuns && a.dummy != null) a.dummy.SetGun(0.1f, 0.5f, 70f, 150f, 30, 1.5f, 25f, 15f);
             a.evaderSpeedJitter = 0f;      // 조건을 정확히 고정
+            if (captureRadius > 0f) a.captureRadius = captureRadius;
             a.EpisodeFinished  += OnEpisodeFinished;
             a.BeforeReset      += OnBeforeReset;
             running[a] = null;
@@ -122,16 +135,20 @@ public class ZombieEvaluator : MonoBehaviour
         episodeCsv = new StreamWriter(episodePath, false, new UTF8Encoding(true));
         episodeCsv.WriteLine("brain,evader_speed,seed,episode,arena,captured,capture_sec,steps," +
                              "escape_gap_deg,encircle_mean,evader_mean_speed,evader_flee_speed," +
-                             "zombie_mean_speed,prediction_error_m");
+                             "zombie_mean_speed,prediction_error_m,shots_fired,shots_hit,hit_rate,hits_per_sec," +
+                             "oblique_aimed_deg,oblique_free_deg,steer_aimed_deg,steer_free_deg,aimed_fraction");
         summary.AppendLine("brain,evader_speed,episodes,capture_rate,capture_sec_mean,escape_gap_mean," +
-                           "encircle_mean,evader_flee_speed_mean,zombie_speed_mean,prediction_error_mean");
+                           "encircle_mean,evader_flee_speed_mean,zombie_speed_mean,prediction_error_mean," +
+                           "hits_per_episode,hit_rate,hits_per_sec," +
+                           "oblique_aimed_deg,oblique_free_deg,steer_aimed_deg,steer_free_deg,aimed_fraction");
 
         Application.runInBackground = true;
         Time.timeScale = timeScale;
         startRealtime  = Time.realtimeSinceStartup;
 
         Debug.Log($"[평가] 시작: 구역 {arenas.Count}개, 뇌 {string.Join("/", brains)}, " +
-                  $"속도 {string.Join("/", evaderSpeeds)}, 조건당 {episodesPerCondition}판\n결과: {episodePath}");
+                  $"속도 {string.Join("/", evaderSpeeds)}, 조건당 {episodesPerCondition}판, " +
+                  $"포획 거리 {arenas[0].captureRadius:0.0}m, 총 {(gameGuns ? "게임 총" : "씬 값")}\n결과: {episodePath}");
 
         BeginPhase(0);
     }
@@ -278,7 +295,11 @@ public class ZombieEvaluator : MonoBehaviour
             r.captured ? r.seconds.ToString("0.00", ci) : "",
             r.steps.ToString(ci),
             F(r.escapeGapDeg), F(r.encircleMean), F(r.evaderMeanSpeed), F(r.evaderFleeSpeed),
-            F(r.zombieMeanSpeed), F(r.predictionError)));
+            F(r.zombieMeanSpeed), F(r.predictionError),
+            r.shotsFired >= 0 ? r.shotsFired.ToString(ci) : "",
+            r.shotsHit   >= 0 ? r.shotsHit.ToString(ci)   : "",
+            F(HitRate(r)), F(HitsPerSec(r)),
+            F(r.obliqueAimedDeg), F(r.obliqueFreeDeg), F(r.steerAimedDeg), F(r.steerFreeDeg), F(r.aimedFraction)));
         episodeCsv.Flush();   // 중간에 멈춰도 그때까지의 결과는 남는다
 
         if (!phaseResults.TryGetValue(job.speed, out var list))
@@ -310,6 +331,10 @@ public class ZombieEvaluator : MonoBehaviour
             int caught = 0;
             float secSum = 0f, gapSum = 0f; int gapN = 0;
             var enc = new Mean(); var flee = new Mean(); var zsp = new Mean(); var pe = new Mean();
+            // 사격: 판당 맞은 수 / 명중률(전체 맞은 수 ÷ 전체 쏜 수) / 초당 맞은 수 (판 길이가 달라도 비교되게)
+            var hitsEp = new Mean(); var hps = new Mean(); int firedSum = 0, hitSum = 0;
+            // 회피: 판별 평균을 다시 평균 (판마다 표본 수가 달라도 판 하나를 한 표로)
+            var oA = new Mean(); var oF = new Mean(); var sA = new Mean(); var sF = new Mean(); var aF = new Mean();
             foreach (var r in list)
             {
                 if (r.captured)
@@ -319,25 +344,42 @@ public class ZombieEvaluator : MonoBehaviour
                     if (!float.IsNaN(r.escapeGapDeg)) { gapSum += r.escapeGapDeg; gapN++; }
                 }
                 enc.Add(r.encircleMean); flee.Add(r.evaderFleeSpeed); zsp.Add(r.zombieMeanSpeed); pe.Add(r.predictionError);
+                if (r.shotsFired >= 0)
+                {
+                    hitsEp.Add(r.shotsHit); hps.Add(HitsPerSec(r));
+                    firedSum += r.shotsFired; hitSum += r.shotsHit;
+                }
+                oA.Add(r.obliqueAimedDeg); oF.Add(r.obliqueFreeDeg); sA.Add(r.steerAimedDeg); sF.Add(r.steerFreeDeg); aF.Add(r.aimedFraction);
             }
 
             float rate   = caught / (float)list.Count;
             float secAvg = caught > 0 ? secSum / caught : float.NaN;
             float gapAvg = gapN > 0 ? gapSum / gapN : float.NaN;
+            float hitRate = firedSum > 0 ? hitSum / (float)firedSum : float.NaN;
 
             summary.AppendLine(string.Join(",",
                 kind.ToString(), speed.ToString("0.00", ci), list.Count.ToString(ci),
                 rate.ToString("0.000", ci), F(secAvg), F(gapAvg),
-                F(enc.Value), F(flee.Value), F(zsp.Value), F(pe.Value)));
+                F(enc.Value), F(flee.Value), F(zsp.Value), F(pe.Value),
+                F(hitsEp.Value), F(hitRate), F(hps.Value),
+                F(oA.Value), F(oF.Value), F(sA.Value), F(sF.Value), F(aF.Value)));
 
             log.AppendLine($"  더미 {speed:0.0}: 포획률 {rate:P0} ({caught}/{list.Count}) | 포획 {secAvg:0.0}초 | " +
                            $"빈틈 {gapAvg:0}° | 포위 {enc.Value:0.00} | 더미 실속 {flee.Value:0.00} | " +
-                           $"좀비 {zsp.Value:0.00} | 예측오차 {pe.Value:0.00}m");
+                           $"좀비 {zsp.Value:0.00} | 예측오차 {pe.Value:0.00}m" +
+                           (firedSum > 0 ? $" | 피격 {hitsEp.Value:0.0}발/판 (명중 {hitRate:P0}, {hps.Value:0.00}발/초)" : "") +
+                           (oA.Count > 0 ? $" | 비스듬함 조준당함 {oA.Value:0}° / 아님 {oF.Value:0}°" : "") +
+                           (sA.Count > 0 ? $" | RL 옆보정 조준당함 {sA.Value:0}° / 아님 {sF.Value:0}°" : ""));
         }
 
         File.WriteAllText(summaryPath, summary.ToString(), new UTF8Encoding(true));
         Debug.Log(log.ToString());
     }
+
+    private static float HitRate(ZombieTrainingArena.EpisodeReport r)
+        => r.shotsFired > 0 ? r.shotsHit / (float)r.shotsFired : float.NaN;
+    private static float HitsPerSec(ZombieTrainingArena.EpisodeReport r)
+        => r.shotsHit >= 0 && r.seconds > 0f ? r.shotsHit / r.seconds : float.NaN;
 
     private void Finish()
     {
@@ -365,5 +407,6 @@ public class ZombieEvaluator : MonoBehaviour
         private float sum; private int n;
         public void Add(float v) { if (!float.IsNaN(v) && !float.IsInfinity(v)) { sum += v; n++; } }
         public float Value => n > 0 ? sum / n : float.NaN;
+        public int Count => n;
     }
 }
