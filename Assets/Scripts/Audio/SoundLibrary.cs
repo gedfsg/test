@@ -12,6 +12,7 @@ public class SoundLibrary : ScriptableObject
     public AudioClip[] zombieGroan;
     public AudioClip[] zombieScream;
     public AudioClip[] zombieDeath;
+    public AudioClip[] zombieBreath;   // 추적 중 가끔
 
     [Header("무기 (WeaponData.fireSound/reloadSound가 비어 있을 때 종류별 기본값)")]
     public AudioClip[] firePistol;
@@ -27,12 +28,17 @@ public class SoundLibrary : ScriptableObject
     public AudioClip[] hitMelee;
     public AudioClip[] bloodSplatter;
     public AudioClip[] bodyFall;
+    public AudioClip[] woodBreak;      // 나무 상자/장애물 파괴
+    public AudioClip[] glassBreak;     // 유리 장애물 파괴
 
     [Header("플레이어")]
     public AudioClip[] footstep;
     public AudioClip[] playerHurt;
     public AudioClip[] playerDeath;
-    public AudioClip[] roll;
+    // public AudioClip[] roll; // (이전) 펄럭/옷 떨어지는 소리 중 랜덤 하나
+    public AudioClip[] rollSwoosh;     // 구르기 시작 (펄럭)
+    public AudioClip[] rollLand;       // 구르기 착지 (옷 떨어지는 소리)
+    public AudioClip[] outOfBreath;    // 스태미나 10% 이하
 
     [Header("UI")]
     public AudioClip[] inventoryOpen;
@@ -43,10 +49,19 @@ public class SoundLibrary : ScriptableObject
     public AudioClip[] crateOpen;
     public AudioClip[] click;
     public AudioClip[] heartbeat;
-    public AudioClip[] missionNotification;
+    public AudioClip[] missionNotification; // 서브 미션 활성화
+    public AudioClip[] missionComplete;     // 서브 미션 완료
+    public AudioClip[] missionSuccess;      // 탈출 성공
+    public AudioClip[] missionFail;         // 미션 실패 (시간 초과)
+    public AudioClip[] error;               // 못 넣는 슬롯 / 인벤토리 가득
+    public AudioClip[] gameOver;            // 사망 화면
+    public AudioClip[] coin;                // 점수 획득
 
     [Header("반복음")]
     public AudioClip rainLoop;
+    public AudioClip dayAmbientLoop;   // 낮/평시 배경
+    public AudioClip nightAmbientLoop; // 밤 배경
+    public AudioClip[] crows;          // 낮에 30~60초마다
 
     /// <summary>배열에서 랜덤 하나 (비어 있으면 null)</summary>
     public static AudioClip Pick(AudioClip[] clips)

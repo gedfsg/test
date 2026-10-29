@@ -151,6 +151,9 @@ public class LootCrate : MonoBehaviour
         if (openEffectPrefab != null)
             Instantiate(openEffectPrefab, transform.position, Quaternion.identity);
 
+        // 예전 방식 상자는 열면 부서져 사라짐 → 나무 상자 부서지는 소리 (3D)
+        if (AudioManager.Library != null)
+            AudioManager.PlaySFX(SoundLibrary.Pick(AudioManager.Library.woodBreak), transform.position, AudioManager.Vol.Impact, AudioManager.Channel.SFX, 30f);
         Destroy(gameObject);
     }
 

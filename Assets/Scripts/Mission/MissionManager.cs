@@ -244,6 +244,7 @@ public class MissionManager : MonoBehaviour
         Finished = true;
         Escaped = true;
         if (debugLog) Debug.Log($"[MissionManager] 탈출 성공! 점수 {Score}");
+        PlaySound(l => l.missionSuccess);
         FindFirstObjectByType<DeathUI>()?.ShowEnding("탈출 성공", new Color(0.3f, 1f, 0.45f), $"{CurrentDay}일 생존 · 열쇠 카드 {KeyCards}/{keyCardsRequired} · 점수 {Score}");
     }
 
@@ -254,6 +255,7 @@ public class MissionManager : MonoBehaviour
         Finished = true;
         string why = HasAllKeyCards ? "구조 헬기가 떠났다" : $"열쇠 카드를 다 못 모았다 ({KeyCards}/{keyCardsRequired})";
         if (debugLog) Debug.Log($"[MissionManager] 시간 초과 → 미션 실패: {why}");
+        PlaySound(l => l.missionFail);
         FindFirstObjectByType<DeathUI>()?.ShowEnding("MISSION FAILED", new Color(0.85f, 0.1f, 0.1f), $"{why} · 점수 {Score}");
     }
 
@@ -358,8 +360,7 @@ public class MissionManager : MonoBehaviour
             activeSubMissions.Add(s);
 
             // 알림: 소리 + 토스트 2초
-            if (AudioManager.Library != null)
-                AudioManager.PlayUI(SoundLibrary.Pick(AudioManager.Library.missionNotification), AudioManager.Vol.Notification);
+            PlaySound(l => l.missionNotification); // notification-bell
             GetComponent<MissionHUD>()?.ShowToast($"새 서브 미션: {s.title}", $"보상 {s.RewardText}");
             if (debugLog) Debug.Log($"[MissionManager] 서브 미션 활성화: {s.title} (진행 중 {RunningSubMissionCount}/{maxActiveSubMissions}, 대기 {waitingSubMissions.Count})");
         }
@@ -395,9 +396,11 @@ public class MissionManager : MonoBehaviour
 
     void GiveReward(SubMission s)
     {
+        PlaySound(l => l.missionComplete);
         if (!s.IsItemReward)
         {
             Score += s.rewardScore;
+            StartCoroutine(PlaySoundDelayed(l => l.coin, 0.6f)); // 점수 획득: 완료음 뒤에 동전 소리
         }
         else
         {
@@ -415,6 +418,18 @@ public class MissionManager : MonoBehaviour
         }
         PickupFeedbackUI.Instance?.Show($"서브 미션 완료: {s.title} → {s.RewardText}");
         if (debugLog) Debug.Log($"[MissionManager] 서브 미션 완료: {s.title} → {s.RewardText} (점수 {Score})");
+    }
+
+    // 미션 알림/결과음 (2D). 라이브러리가 없으면 무시
+    static void PlaySound(System.Func<SoundLibrary, AudioClip[]> clips)
+    {
+        if (AudioManager.Library != null) AudioManager.PlayUI(SoundLibrary.Pick(clips(AudioManager.Library)), AudioManager.Vol.Notification);
+    }
+
+    System.Collections.IEnumerator PlaySoundDelayed(System.Func<SoundLibrary, AudioClip[]> clips, float delay)
+    {
+        yield return new WaitForSecondsRealtime(delay);
+        PlaySound(clips);
     }
 
     /// <summary>아이템 에셋 이름으로 찾기 (Resources의 LootDatabase가 참조하는 루팅 테이블들에서 검색 - 따로 Resources 에셋 안 만들어도 됨)</summary>

@@ -27,17 +27,21 @@ public static class SoundSystemSetup
     // SoundLibrary 필드 ← _Processed 안 파일 이름 접두어
     static readonly Dictionary<string, string> LibraryMap = new Dictionary<string, string>
     {
-        { "zombieGroan", "zombie/zombie_groan_" }, { "zombieScream", "zombie/zombie_scream_" }, { "zombieDeath", "zombie/zombie_death_" },
+        { "zombieGroan", "zombie/zombie_groan_" }, { "zombieScream", "zombie/zombie_scream_" }, { "zombieDeath", "zombie/zombie_death_" }, { "zombieBreath", "zombie/zombie_breath_" },
         { "firePistol", "weapon/fire_pistol_" }, { "fireSmg", "weapon/fire_smg_" }, { "fireRifle", "weapon/fire_rifle_" },
         { "fireShotgun", "weapon/fire_shotgun_" }, { "fireSniper", "weapon/fire_sniper_" },
         { "reloadPistol", "weapon/reload_pistol_" }, { "reloadRifle", "weapon/reload_rifle_" },
         { "hitFlesh", "impact/hit_flesh_" }, { "hitMelee", "impact/hit_melee_" },
         { "bloodSplatter", "impact/blood_splatter_" }, { "bodyFall", "impact/body_fall_" },
-        { "footstep", "player/footstep_" }, { "playerHurt", "player/hurt_" }, { "playerDeath", "player/death_" }, { "roll", "player/roll_" },
+        { "woodBreak", "impact/wood_break_" }, { "glassBreak", "impact/glass_break_" },
+        { "footstep", "player/footstep_" }, { "playerHurt", "player/hurt_" }, { "playerDeath", "player/death_" }, { "rollSwoosh", "player/roll_swoosh_" }, { "rollLand", "player/roll_land_" }, { "outOfBreath", "player/out_of_breath_" },
         { "inventoryOpen", "ui/inventory_open_" }, { "inventoryClose", "ui/inventory_close_" }, { "pickup", "ui/pickup_" },
         { "doorOpen", "ui/door_open_" }, { "doorClose", "ui/door_close_" }, { "crateOpen", "ui/crate_open_" },
-        { "click", "ui/click_" }, { "heartbeat", "ui/heartbeat_" }, { "missionNotification", "ui/notification_" },
-        { "rainLoop", "weather/rain_loop_" },
+        { "click", "ui/click_" }, { "heartbeat", "ui/heartbeat_" }, { "missionNotification", "ui/mission_notification_" },
+        { "missionComplete", "ui/mission_complete_" }, { "missionSuccess", "ui/success_" }, { "missionFail", "ui/mission_fail_" },
+        { "error", "ui/error_" }, { "gameOver", "ui/game_over_" }, { "coin", "ui/coin_" },
+        { "rainLoop", "weather/rain_loop_" }, { "dayAmbientLoop", "ambient/day_loop_" }, { "nightAmbientLoop", "ambient/night_loop_" },
+        { "crows", "ambient/crows_" },
     };
 
     // 3D로 재생하는 폴더 → 모노로

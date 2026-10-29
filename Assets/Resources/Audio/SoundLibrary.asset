@@ -21,12 +21,6 @@ MonoBehaviour:
   - {fileID: 8300000, guid: d932bd54831afbe45b66b0f1c6540780, type: 3}
   - {fileID: 8300000, guid: 437f648a8f5f0394a8453c0d5741e816, type: 3}
   - {fileID: 8300000, guid: deb456fc232d0424f871b7e464483af5, type: 3}
-  - {fileID: 8300000, guid: 702551d893cf75b439c0510e9c51cc11, type: 3}
-  - {fileID: 8300000, guid: 6a3d6f3b54fbf9f4088b3c3c323d34e3, type: 3}
-  - {fileID: 8300000, guid: 0a6c7285d090a9b45a214fb43d580cad, type: 3}
-  - {fileID: 8300000, guid: 125ee99ae644166469c18021c77aaf1e, type: 3}
-  - {fileID: 8300000, guid: 9949470a3e22e0748b0de6b8aca9365a, type: 3}
-  - {fileID: 8300000, guid: c0e025aadf6df674bbf0299fd2cb9d9e, type: 3}
   zombieScream:
   - {fileID: 8300000, guid: b0c5bf0e0dee5cf4ab4264e3af1ed517, type: 3}
   - {fileID: 8300000, guid: 4ef440e8630aa0649b8eab051bbf9828, type: 3}
@@ -42,6 +36,13 @@ MonoBehaviour:
   zombieDeath:
   - {fileID: 8300000, guid: 123f699760b6cfe47879b33affb27d32, type: 3}
   - {fileID: 8300000, guid: b929cc837be8e394499362546f7dc465, type: 3}
+  zombieBreath:
+  - {fileID: 8300000, guid: b8fb2280fdef5874e8049e93e3b9f9dd, type: 3}
+  - {fileID: 8300000, guid: a4fae3b047faa7e4b88010f2dd8de0b5, type: 3}
+  - {fileID: 8300000, guid: abb2df4a022d0594aa8a5645500b3ea7, type: 3}
+  - {fileID: 8300000, guid: 36e2ae1bcc0afb34eb037fd4c1b2f5b9, type: 3}
+  - {fileID: 8300000, guid: 897c47a1a33677e43888045b4de075ed, type: 3}
+  - {fileID: 8300000, guid: b8f3779adbca464498de96994c4cb749, type: 3}
   firePistol:
   - {fileID: 8300000, guid: aeeb413f8c351294ba0051789a2f794e, type: 3}
   - {fileID: 8300000, guid: 890ca8ce818db3d46b0531b9f5b9eeda, type: 3}
@@ -71,6 +72,10 @@ MonoBehaviour:
   - {fileID: 8300000, guid: f719fb30d61b8e641b5644e67e8fb3bd, type: 3}
   bodyFall:
   - {fileID: 8300000, guid: dcb49459f539101429b56ca8d9cb7aba, type: 3}
+  woodBreak:
+  - {fileID: 8300000, guid: 77c5c2b84c0bce748905c2ab7ef97393, type: 3}
+  glassBreak:
+  - {fileID: 8300000, guid: d15c75c82563276489d078bd64d6d0d3, type: 3}
   footstep:
   - {fileID: 8300000, guid: 1d0b95d7a2e930f48a95c0dfd438e4f0, type: 3}
   - {fileID: 8300000, guid: 481a3453291281c45a46b95428f67662, type: 3}
@@ -103,9 +108,15 @@ MonoBehaviour:
   playerDeath:
   - {fileID: 8300000, guid: dca7e602c904399428af2d279cda8779, type: 3}
   - {fileID: 8300000, guid: fd1f5806e18f71545953ee41bb08e5eb, type: 3}
-  roll:
-  - {fileID: 8300000, guid: 50a68304c99148446b7fbfc9e2928b94, type: 3}
-  - {fileID: 8300000, guid: 7a6f268126ecfcf49a6141bb1ac28696, type: 3}
+  rollSwoosh:
+  - {fileID: 8300000, guid: 48f684b4a897f3c49a47bf36ab1c4ae8, type: 3}
+  rollLand:
+  - {fileID: 8300000, guid: aa5f4268d20f92642a2c9b5a4cb54cf0, type: 3}
+  outOfBreath:
+  - {fileID: 8300000, guid: 913aac1a91a6d1248a771da4f8a4f4b7, type: 3}
+  - {fileID: 8300000, guid: 228ea64c9d331ca419e34a3914331786, type: 3}
+  - {fileID: 8300000, guid: 3c069266c9f28764694d4b107e1f1dd1, type: 3}
+  - {fileID: 8300000, guid: 0736a56032466364a95870d0f93e461f, type: 3}
   inventoryOpen:
   - {fileID: 8300000, guid: 1b0397395ab022f4e965ca4981107d2c, type: 3}
   inventoryClose:
@@ -123,5 +134,24 @@ MonoBehaviour:
   heartbeat:
   - {fileID: 8300000, guid: e6ac393142fdfe9498611cef6523817d, type: 3}
   missionNotification:
-  - {fileID: 8300000, guid: 638811d220d356343a0d6e0d9ddf828d, type: 3}
+  - {fileID: 8300000, guid: 02812db71b97de54aa33bf4903b47166, type: 3}
+  missionComplete:
+  - {fileID: 8300000, guid: 6ce7c2919501186479bac3c0f2764a2f, type: 3}
+  missionSuccess:
+  - {fileID: 8300000, guid: 348d63e899d5ada408fe43566ec988d6, type: 3}
+  missionFail:
+  - {fileID: 8300000, guid: cb44ee0521cd4af4abcb5e9ed7d72c18, type: 3}
+  error:
+  - {fileID: 8300000, guid: e9989aa46a6fbcd458c9d21c605965c9, type: 3}
+  gameOver:
+  - {fileID: 8300000, guid: 89f6b127ac7f0c144b8a3a091d727e21, type: 3}
+  coin:
+  - {fileID: 8300000, guid: c281ed82972d3344d9afd26555ba37f7, type: 3}
   rainLoop: {fileID: 8300000, guid: d9a1c3718c62d0744b77bf8abe0b09c3, type: 3}
+  dayAmbientLoop: {fileID: 8300000, guid: f6031c26f314f754996c7ae15c7f573e, type: 3}
+  nightAmbientLoop: {fileID: 8300000, guid: 87685af432a1fb446b755314f992f5f0, type: 3}
+  crows:
+  - {fileID: 8300000, guid: 0c6f92e4389539241a23e5cd5a52a30e, type: 3}
+  - {fileID: 8300000, guid: 4a05e82c77926514991cb08e57d34b0c, type: 3}
+  - {fileID: 8300000, guid: cfe9907b612049d45ac7491fd8edc3d2, type: 3}
+  - {fileID: 8300000, guid: 30a241a57a615e845a4e8395c555851d, type: 3}

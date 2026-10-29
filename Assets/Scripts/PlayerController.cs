@@ -190,6 +190,27 @@ public class PlayerController : MonoBehaviour
         AimAtMouse();
         HandleFire();
         UpdateFootsteps();
+        UpdateOutOfBreath();
+    }
+
+    // ── 스태미나 소진 숨소리 (2D) ──────────────────────
+    [Header("숨소리")]
+    [Tooltip("스태미나가 이 비율 이하로 떨어지면 숨 헐떡이는 소리 1번")]
+    public float outOfBreathRatio = 0.1f;
+    [Tooltip("다시 울리려면 스태미나가 이 비율 이상 회복돼야 함 (계속 반복 방지)")]
+    public float outOfBreathResetRatio = 0.4f;
+    private bool outOfBreathPlayed;
+
+    void UpdateOutOfBreath()
+    {
+        if (locomotion == null || AudioManager.Library == null) return;
+        float st = locomotion.GetStaminaNormalized();
+        if (!outOfBreathPlayed && st <= outOfBreathRatio)
+        {
+            outOfBreathPlayed = true;
+            AudioManager.PlayUI(SoundLibrary.Pick(AudioManager.Library.outOfBreath), AudioManager.Vol.OutOfBreath);
+        }
+        else if (outOfBreathPlayed && st >= outOfBreathResetRatio) outOfBreathPlayed = false;
     }
 
     // ── 발소리 (2D) ─────────────────────────────────
@@ -251,8 +272,9 @@ public class PlayerController : MonoBehaviour
 
         Vector3 startPos = transform.position;
         isRolling = true;
-        if (AudioManager.Library != null) // 옷 펄럭이는 소리 (2D)
-            AudioManager.PlayUI(SoundLibrary.Pick(AudioManager.Library.roll), AudioManager.Vol.Impact);
+        // if (AudioManager.Library != null) AudioManager.PlayUI(SoundLibrary.Pick(AudioManager.Library.roll), AudioManager.Vol.Impact); // (이전) 하나만
+        if (AudioManager.Library != null) // 시작: 옷 펄럭 (2D). 착지 소리는 아래 무적 끝날 때
+            AudioManager.PlayUI(SoundLibrary.Pick(AudioManager.Library.rollSwoosh), AudioManager.Vol.Impact);
         if (health == null) health = GetComponent<Health>();
         if (health != null) health.isInvincible = true;
         if (EnsureAnimRefs())
@@ -268,6 +290,8 @@ public class PlayerController : MonoBehaviour
         float start = Time.time;
         while (Time.time < start + rollInvincibleTime) yield return null;
         if (health != null) health.isInvincible = false;
+        if (AudioManager.Library != null) // 착지: 몸이 바닥에 닿는 옷 소리 (펄럭과 섞여 구르는 느낌)
+            AudioManager.PlayUI(SoundLibrary.Pick(AudioManager.Library.rollLand), AudioManager.Vol.Impact * 0.8f);
         while (Time.time < start + rollDuration) yield return null;
 
         isRolling = false;

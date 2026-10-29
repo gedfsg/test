@@ -48,7 +48,7 @@ public class DeathUI : MonoBehaviour
         if (health != null)
         {
             if (health.onDeath == null) health.onDeath = new UnityEngine.Events.UnityEvent();
-            health.onDeath.AddListener(() => { if (!shown) { shown = true; StartCoroutine(Sequence(showDelay)); } });
+            health.onDeath.AddListener(() => { if (!shown) { shown = true; playGameOver = true; StartCoroutine(Sequence(showDelay)); } });
         }
     }
 
@@ -96,9 +96,13 @@ public class DeathUI : MonoBehaviour
         StartCoroutine(Sequence(0.5f));
     }
 
+    bool playGameOver; // 사망일 때만 (탈출 성공/미션 실패 화면은 MissionManager가 각자 소리를 냄)
+
     IEnumerator Sequence(float delay)
     {
         yield return new WaitForSecondsRealtime(delay);
+        if (playGameOver && AudioManager.Library != null) // 화면이 어두워지기 시작할 때 게임오버 음
+            AudioManager.PlayUI(SoundLibrary.Pick(AudioManager.Library.gameOver), AudioManager.Vol.Notification);
 
         for (float t = 0f; t < 1f; t += Time.unscaledDeltaTime / fadeDuration)
         {

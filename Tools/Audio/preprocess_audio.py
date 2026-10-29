@@ -112,7 +112,7 @@ PLAN = [
     # 좀비
     ("zombie/zombie_groan", "zombie/dragon-studio-zombie-sound-2-357976.mp3", "chunk", dict(piece=2.7)),
     ("zombie/zombie_groan", "zombie/dragon-studio-zombie-sound-357975.mp3", "split", dict(min=0.7, max=3.0)),
-    ("zombie/zombie_groan", "zombie/freesound_community-zombie-breathing-70682.mp3", "chunk", dict(piece=3.0, count=6)),
+    ("zombie/zombie_breath", "zombie/freesound_community-zombie-breathing-70682.mp3", "chunk", dict(piece=3.0, count=6)),  # 추적 중 가끔
     ("zombie/zombie_scream", "zombie/dragon-studio-zombie-scream-324752.mp3", "chunk", dict(piece=3.2)),
     ("zombie/zombie_scream", "zombie/dragon-studio-female-zombie-screams-324744.mp3", "chunk", dict(piece=2.8)),
     ("zombie/zombie_scream", "zombie/dragon-studio-zombie-sfx-450450.mp3", "chunk", dict(piece=3.5)),
@@ -147,8 +147,8 @@ PLAN = [
     ("player/hurt", "player/freesound_community-voice_male_grunt-98362.mp3", "split", dict(min=0.4, max=1.0)),
     ("player/death", "player/u_r7cny11q7r-man-death-scream-186763.mp3", "whole", dict(trim=(0, 1.8))),
     ("player/death", "player/universfield-man-scream-05-252033.mp3", "whole", {}),
-    ("player/roll", "player/freesound_community-fabric-flap-80054.mp3", "whole", {}),
-    ("player/roll", "player/freesound_community-clothes-drop-2-40202.mp3", "whole", {}),
+    ("player/roll_swoosh", "player/freesound_community-fabric-flap-80054.mp3", "whole", {}),   # 구르기 시작
+    ("player/roll_land", "player/freesound_community-clothes-drop-2-40202.mp3", "whole", {}),  # 구르기 착지
     ("player/out_of_breath", "player/voicebosch-out-of-breath-male-176715.mp3", "split", dict(min=1.0, max=4.0, count=4)),
     # UI
     ("ui/inventory_open", "UI/freesound_community-open-bag-sound-39216.mp3", "whole", {}),
@@ -162,13 +162,16 @@ PLAN = [
     ("ui/hover", "UI/litupsubway-ui-hover-sfx-513360.mp3", "whole", {}),
     ("ui/notification", "UI/dragon-studio-new-notification-3-398649.mp3", "whole", {}),
     ("ui/success", "UI/updatepelgo-success-221935.mp3", "whole", {}),
-    ("ui/fail", "UI/u_8g40a9z0la-fail-234710.mp3", "whole", {}),
-    ("ui/fail", "UI/miraclei-sample_error_fail01_kofi_by_miraclei-360129.mp3", "whole", {}),
+    ("ui/mission_fail", "UI/u_8g40a9z0la-fail-234710.mp3", "whole", {}),                       # 미션 실패
+    ("ui/error", "UI/miraclei-sample_error_fail01_kofi_by_miraclei-360129.mp3", "whole", {}),  # 못 넣는 슬롯 등
+    ("ui/mission_notification", "UI/dragon-studio-notification-bell-sound-376888.mp3", "whole", dict(trim=(0, 2.0))),  # 서브 미션 활성화
+    ("ui/mission_complete", "UI/mission complete.mp3", "whole", {}),                          # 서브 미션 완료
+    ("ui/game_over", "UI/alphix-game-over-417465.mp3", "whole", dict(trim=(0, 2.6))),          # 사망 화면
     ("ui/heartbeat", "UI/brvhrtz-heartbeat-02-225103.mp3", "split", dict(min=0.3, max=1.2, noise=-30, sil=0.12, count=1)),
     # 반복음 (자르지 않음)
     ("weather/rain_loop", "weather/liecio-calming-rain-257596.mp3", "loop", {}),
     ("ambient/night_loop", "ambient/freesound_community-night-ambience-17064.mp3", "loop", {}),
-    ("ambient/wind_loop", "ambient/freesound_community-ambient_loop1-88046.mp3", "loop", {}),
+    ("ambient/day_loop", "ambient/freesound_community-ambient_loop1-88046.mp3", "loop", {}),
     ("ambient/crows", "ambient/soundsforyou-flock-of-crows-ravens-cawing-129073.mp3", "chunk", dict(piece=4.0, count=4)),
 ]
 
@@ -210,6 +213,12 @@ def main():
             else:
                 cut(src, dst, start, end, pitch=opt.get("pitch", 1.0),
                     fade_out=0.15 if mode == "chunk" else 0.05)
+
+    # 이름이 바뀌거나 빠진 클립의 남은 .meta 정리 (Unity가 고아 meta 경고를 내지 않게)
+    for d, _, files in os.walk(OUT):
+        for f in files:
+            if f.endswith(".wav.meta") and not os.path.exists(os.path.join(d, f[:-5])):
+                os.remove(os.path.join(d, f))
 
 
 if __name__ == "__main__":

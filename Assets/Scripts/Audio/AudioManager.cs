@@ -34,7 +34,11 @@ public class AudioManager : MonoBehaviour
         public const float PlayerHurt = 0.9f;   // 위기감 (피격/사망)
         // public const float ZombieGroan = 0.6f; // (이전) 좀비가 많으면 시끄러워서 낮춤
         public const float ZombieGroan = 0.4f;  // 배경 분위기
-        public const float Notification = 0.5f; // 서브 미션 활성화 알림
+        public const float Notification = 0.5f; // 서브 미션 활성화/완료, 점수, 실패/에러 알림
+        public const float DayAmbient = 0.2f;   // 낮/평시 배경 루프
+        public const float NightAmbient = 0.3f; // 밤 배경 루프
+        public const float Crows = 0.35f;       // 낮 까마귀 (가끔)
+        public const float OutOfBreath = 0.6f;  // 스태미나 소진 숨소리
         public const float Impact = 0.7f;       // 타격감
         public const float Pickup = 0.5f;       // 작은 피드백
         public const float UI = 0.4f;           // 클릭/문/인벤토리 - 과하지 않게
