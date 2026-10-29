@@ -160,7 +160,9 @@ public class Weapon : MonoBehaviour
             clip = SoundLibrary.Pick(fire ? lib.FireFor(wType) : lib.ReloadFor(wType));
         }
         Vector3 pos = firePoint != null ? firePoint.position : transform.position;
-        if (fire) AudioManager.PlaySFX(clip, pos, AudioManager.Vol.Gunshot, AudioManager.Channel.SFX, 60f, Random.Range(0.96f, 1.04f));
+        bool shotgun = weaponData != null && weaponData.type == WeaponType.Shotgun;
+        if (fire) AudioManager.PlaySFX(clip, pos, shotgun ? AudioManager.Vol.GunshotShotgun : AudioManager.Vol.Gunshot,
+                                       AudioManager.Channel.SFX, 60f, Random.Range(0.96f, 1.04f));
         else AudioManager.PlaySFX(clip, pos, AudioManager.Vol.Impact, AudioManager.Channel.SFX, 20f);
     }
 

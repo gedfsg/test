@@ -27,10 +27,14 @@ public class AudioManager : MonoBehaviour
     /// </summary>
     public static class Vol
     {
-        public const float Gunshot = 1.0f;      // 긴장감, 원거리 식별
+        // public const float Gunshot = 1.0f;   // (이전) 플레이테스트: 너무 커서 낮춤
+        public const float Gunshot = 0.8f;      // 긴장감, 원거리 식별
+        public const float GunshotShotgun = 0.9f; // 샷건은 여전히 가장 크게
         public const float ZombieScream = 0.9f; // 위협 표현 (추적/공격/사망)
         public const float PlayerHurt = 0.9f;   // 위기감 (피격/사망)
-        public const float ZombieGroan = 0.6f;  // 배경 분위기
+        // public const float ZombieGroan = 0.6f; // (이전) 좀비가 많으면 시끄러워서 낮춤
+        public const float ZombieGroan = 0.4f;  // 배경 분위기
+        public const float Notification = 0.5f; // 서브 미션 활성화 알림
         public const float Impact = 0.7f;       // 타격감
         public const float Pickup = 0.5f;       // 작은 피드백
         public const float UI = 0.4f;           // 클릭/문/인벤토리 - 과하지 않게

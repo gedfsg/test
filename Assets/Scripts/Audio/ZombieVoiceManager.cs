@@ -6,7 +6,7 @@ using UnityEngine;
 ///  - 동시에 최대 MaxVoices(4)개만 재생 (전용 AudioSource 4개를 돌려씀)
 ///  - 플레이어(리스너)에서 MaxDistance(20m) 밖 좀비는 재생 안 함
 ///  - 자리가 없으면 지금 재생 중인 것 중 가장 먼 좀비보다 가까울 때만 그 자리를 뺏음 (가까운 좀비 우선), 아니면 skip
-///  - 상태별 쿨타임 (좀비마다 따로): 배회 5~15초 신음 / 추적 2~5초 신음 또는 비명 / 공격 즉시 비명 / 사망 즉시 단말마
+///  - 상태별 쿨타임 (좀비마다 따로): 배회 10~25초 신음 / 추적 5~10초 신음 또는 비명 / 공격 즉시 비명 / 사망 즉시 단말마
 /// 사용: ZombieController가 매 프레임 Tick(this, Idle/Chase), 공격·사망 때 Play(this, Attack/Death).
 /// 씬 배치 불필요 - 처음 쓸 때 자동 생성.
 /// </summary>
@@ -96,7 +96,8 @@ public class ZombieVoiceManager : MonoBehaviour
         Play(zombie, state);
     }
 
-    static float Cooldown(State state) => state == State.Chase ? Random.Range(2f, 5f) : Random.Range(5f, 15f);
+    // static float Cooldown(State state) => state == State.Chase ? Random.Range(2f, 5f) : Random.Range(5f, 15f); // (이전) 좀비가 많으면 시끄러움
+    static float Cooldown(State state) => state == State.Chase ? Random.Range(5f, 10f) : Random.Range(10f, 25f);
 
     /// <summary>즉시 재생 시도 (공격/사망). 멀거나 자리가 없으면 false</summary>
     public static bool Play(ZombieController zombie, State state)
@@ -109,7 +110,7 @@ public class ZombieVoiceManager : MonoBehaviour
         float dist = Vector3.Distance(pos, AudioManager.ListenerPosition);
         if (dist > MaxDistance) return false;
 
-        // 상태별 클립/볼륨: 신음 0.6 (배경), 비명/단말마 0.9 (위협)
+        // 상태별 클립/볼륨: 신음 0.4 (배경), 비명/단말마 0.9 (위협)
         bool scream = state == State.Attack || (state == State.Chase && Random.value < 0.5f);
         AudioClip clip = state == State.Death ? SoundLibrary.Pick(lib.zombieDeath)
                        : scream ? SoundLibrary.Pick(lib.zombieScream)
