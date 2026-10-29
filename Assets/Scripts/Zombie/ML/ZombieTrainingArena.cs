@@ -203,6 +203,10 @@ public class ZombieTrainingArena : MonoBehaviour
         public float steerAimedDeg;       // RL 옆 보정으로 튼 각도의 절댓값 평균 —— 조준당할 때 (RL 아니면 NaN)
         public float steerFreeDeg;        //   〃 조준 안 당할 때
         public float aimedFraction;       // 측정 표본 중 조준당한 비율
+        // 좌우 전환: 더미를 기준으로 좀비가 옆으로 움직이는 방향(왼쪽/오른쪽)이 바뀐 횟수 ÷ 시간(초).
+        //   조준당할 때 더 자주 바뀌면 '시선을 피하려고 좌우로 꺾는다'는 뜻 (옆 속도 0.5 m/s 이상일 때만 셈)
+        public float zigzagAimedPerSec;
+        public float zigzagFreePerSec;
     }
 
     /// <summary>에피소드가 끝날 때마다 호출된다 (중단된 에피소드는 제외).</summary>
@@ -246,6 +250,9 @@ public class ZombieTrainingArena : MonoBehaviour
     private float obqAimSum, obqFreeSum, steerAimSum, steerFreeSum;
     private int   obqAimN, obqFreeN, steerAimN, steerFreeN;
     private ZombieMLBrain[] zombieMl;
+    private int[]   latSign = new int[0];
+    private float   zigAimTime, zigFreeTime;
+    private int     zigAimFlips, zigFreeFlips;
     private float encircleWeightNow;
     private float prevEncircle = -1f;
     private int   prevAliveForEncircle = -1;
@@ -1061,6 +1068,8 @@ public class ZombieTrainingArena : MonoBehaviour
             steerAimedDeg      = steerAimN  > 0 ? steerAimSum  / steerAimN  : float.NaN,
             steerFreeDeg       = steerFreeN > 0 ? steerFreeSum / steerFreeN : float.NaN,
             aimedFraction      = obqAimN + obqFreeN > 0 ? obqAimN / (float)(obqAimN + obqFreeN) : float.NaN,
+            zigzagAimedPerSec  = zigAimTime  > 0.5f ? zigAimFlips  / zigAimTime  : float.NaN,
+            zigzagFreePerSec   = zigFreeTime > 0.5f ? zigFreeFlips / zigFreeTime : float.NaN,
         };
     }
 
@@ -1147,6 +1156,8 @@ public class ZombieTrainingArena : MonoBehaviour
             if (steerFreeN > 0) sr.Add("Dodge/SteerFree",    steerFreeSum / steerFreeN);
             // 사거리 안 좀비 중 총구 선(aimLineWidth) 안에 있던 비율 —— 내려가면 정면을 비켜 가는 중
             if (lineSamples > 0) sr.Add("Dodge/InAimLine", inLineSamples / (float)lineSamples);
+            if (zigAimTime  > 0.5f) sr.Add("Dodge/ZigzagAimed", zigAimFlips  / zigAimTime);
+            if (zigFreeTime > 0.5f) sr.Add("Dodge/ZigzagFree",  zigFreeFlips / zigFreeTime);
             if (dummy.ShotsFired > 0) sr.Add("Shoot/HitRate", dummy.ShotsHit / (float)dummy.ShotsFired);
             if (captured)
             {
@@ -1298,6 +1309,19 @@ public class ZombieTrainingArena : MonoBehaviour
             bool isAimed = aimed == z.transform;
             if (isAimed) { obqAimSum += obq; obqAimN++; } else { obqFreeSum += obq; obqFreeN++; }
 
+            // 좌우 전환: 더미→좀비 방향 기준 옆 속도의 부호가 바뀐 횟수
+            if (latSign.Length != zombies.Count) latSign = new int[zombies.Count];
+            Vector3 rn = -toD / Mathf.Max(dist, 0.001f);
+            float lat = rn.x * v.z - rn.z * v.x;            // + = 한쪽, - = 반대쪽
+            float dtz = Time.fixedDeltaTime;
+            if (isAimed) zigAimTime += dtz; else zigFreeTime += dtz;
+            if (Mathf.Abs(lat) > 0.5f)
+            {
+                int sgn = lat > 0f ? 1 : -1;
+                if (latSign[i] != 0 && sgn != latSign[i]) { if (isAimed) zigAimFlips++; else zigFreeFlips++; }
+                latSign[i] = sgn;
+            }
+
             var ml = zombieMl[i];
             if (ml != null && ml.enabled && z.brain == ml && ml.HasSteer)   // 지금 이 좀비를 움직이는 뇌일 때만
             {
@@ -1418,6 +1442,9 @@ public class ZombieTrainingArena : MonoBehaviour
         obqAimSum = obqFreeSum = steerAimSum = steerFreeSum = 0f;
         obqAimN = obqFreeN = steerAimN = steerFreeN = 0;
         inLineSamples = lineSamples = 0;
+        zigAimTime = zigFreeTime = 0f;
+        zigAimFlips = zigFreeFlips = 0;
+        if (latSign.Length > 0) System.Array.Clear(latSign, 0, latSign.Length);
         prevMinDistance = -1f;
         prevEncircle         = -1f;
         prevAliveForEncircle = -1;

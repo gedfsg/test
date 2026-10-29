@@ -38,6 +38,9 @@ public class ZombieEvaluator : MonoBehaviour
 
     [Tooltip("평가할 RL 모델(.onnx). 비우면 좀비들의 Behavior Parameters에 이미 들어 있는 모델을 쓴다.")]
     public Object rlModel;
+    [Tooltip("모델 여러 개 비교: 여기에 .onnx를 넣으면 RL / RLDeterministic 단계를 모델마다 한 번씩 돈다 (RL Model 칸 대신).\n" +
+             "결과의 brain 칸에는 'RLDeterministic[모델 이름]'처럼 적힌다. 비우면 RL Model 하나만 쓴다.")]
+    public Object[] compareModels;
 
     [Header("조건")]
     [Tooltip("더미 최고 속도(고정). 조건마다 아래 판 수만큼 돈다. 좀비 최고 속도는 3.5")]
@@ -61,6 +64,9 @@ public class ZombieEvaluator : MonoBehaviour
              "연사 간격 0.1~0.5초, 총알 70~150 m/s (매 판 무작위), 탄창 30, 재장전 1.5초, 사거리 25m, 탄 퍼짐 15°.\n" +
              "끄면 씬에 저장된 더미 값을 그대로 쓴다 (예전 평가와 같은 조건).")]
     public bool gameGuns = false;
+    [Tooltip("더미의 반응 지연(초)을 이 값으로 맞춘다. -1이면 씬에 저장된 값 그대로.\n" +
+             "shoot5/6은 0.25/0.4초로 학습했다 (사람의 반응 시간). shoot4까지는 0.")]
+    public float perceptionDelay = -1f;
 
     [Header("영상 촬영용")]
     [Tooltip("화면 위쪽에 지금 어떤 AI가 움직이는지 크게 표시한다 (영상 녹화용)")]
@@ -78,6 +84,9 @@ public class ZombieEvaluator : MonoBehaviour
     private readonly Queue<Job> pending = new Queue<Job>();
 
     private int  phase = -1;
+    private struct Phase { public BrainKind kind; public Object model; public string name; }
+    private readonly List<Phase> phases = new List<Phase>();
+    private static bool IsRL(BrainKind k) => k == BrainKind.RL || k == BrainKind.RLDeterministic;
     private int  phaseTotal;
     private int  phaseDone;
     private bool switchRequested;
@@ -118,10 +127,24 @@ public class ZombieEvaluator : MonoBehaviour
         }
         if (brains.Count == 0) { enabled = false; return; }
 
+        // 단계 목록: RL 단계는 비교 모델마다 한 번씩
+        phases.Clear();
+        bool anyCompare = compareModels != null && System.Array.Exists(compareModels, m => m != null);
+        foreach (var b in brains)
+        {
+            if (IsRL(b) && anyCompare)
+            {
+                foreach (var m in compareModels)
+                    if (m != null) phases.Add(new Phase { kind = b, model = m, name = $"{b}[{m.name}]" });
+            }
+            else phases.Add(new Phase { kind = b, model = IsRL(b) ? rlModel : null, name = b.ToString() });
+        }
+
         foreach (var a in arenas)
         {
             a.adaptiveSpeed     = false;   // 속도는 평가 도구가 정한다
             if (gameGuns && a.dummy != null) a.dummy.SetGun(0.1f, 0.5f, 70f, 150f, 30, 1.5f, 25f, 15f);
+            if (perceptionDelay >= 0f && a.dummy != null) a.dummy.perceptionDelay = perceptionDelay;
             a.evaderSpeedJitter = 0f;      // 조건을 정확히 고정
             if (captureRadius > 0f) a.captureRadius = captureRadius;
             a.EpisodeFinished  += OnEpisodeFinished;
@@ -141,11 +164,11 @@ public class ZombieEvaluator : MonoBehaviour
         episodeCsv.WriteLine("brain,evader_speed,seed,episode,arena,captured,capture_sec,steps," +
                              "escape_gap_deg,encircle_mean,evader_mean_speed,evader_flee_speed," +
                              "zombie_mean_speed,prediction_error_m,shots_fired,shots_hit,hit_rate,hits_per_sec," +
-                             "oblique_aimed_deg,oblique_free_deg,steer_aimed_deg,steer_free_deg,aimed_fraction");
+                             "oblique_aimed_deg,oblique_free_deg,steer_aimed_deg,steer_free_deg,aimed_fraction,zigzag_aimed_per_s,zigzag_free_per_s");
         summary.AppendLine("brain,evader_speed,episodes,capture_rate,capture_sec_mean,escape_gap_mean," +
                            "encircle_mean,evader_flee_speed_mean,zombie_speed_mean,prediction_error_mean," +
                            "hits_per_episode,hit_rate,hits_per_sec," +
-                           "oblique_aimed_deg,oblique_free_deg,steer_aimed_deg,steer_free_deg,aimed_fraction");
+                           "oblique_aimed_deg,oblique_free_deg,steer_aimed_deg,steer_free_deg,aimed_fraction,zigzag_aimed_per_s,zigzag_free_per_s");
 
         Application.runInBackground = true;
         Time.timeScale = timeScale;
@@ -173,7 +196,7 @@ public class ZombieEvaluator : MonoBehaviour
     private GUIStyle labelStyle, subStyle;
     void OnGUI()
     {
-        if (!showLabel || phase < 0 || phase >= brains.Count) return;
+        if (!showLabel || phase < 0 || phase >= phases.Count) return;
         if (labelStyle == null)
         {
             labelStyle = new GUIStyle(GUI.skin.label) { fontSize = labelFontSize, fontStyle = FontStyle.Bold, alignment = TextAnchor.UpperCenter };
@@ -189,7 +212,7 @@ public class ZombieEvaluator : MonoBehaviour
         GUI.color = new Color(0f, 0f, 0f, 0.55f);
         GUI.DrawTexture(new Rect(w * 0.2f, 8f, w * 0.6f, h), Texture2D.whiteTexture);
         GUI.color = Color.white;
-        GUI.Label(new Rect(0f, 12f, w, labelFontSize * 1.4f), BrainLabel(brains[phase]), labelStyle);
+        GUI.Label(new Rect(0f, 12f, w, labelFontSize * 1.4f), BrainLabel(phases[phase].kind) + (phases[phase].model != null && compareModels != null && compareModels.Length > 1 ? $" · {phases[phase].model.name}" : ""), labelStyle);
         GUI.Label(new Rect(0f, 12f + labelFontSize * 1.35f, w, labelFontSize), sub, subStyle);
     }
 
@@ -199,7 +222,7 @@ public class ZombieEvaluator : MonoBehaviour
         switchRequested = false;
 
         WritePhaseSummary();
-        if (phase + 1 < brains.Count) BeginPhase(phase + 1);
+        if (phase + 1 < phases.Count) BeginPhase(phase + 1);
         else                          Finish();
     }
 
@@ -220,8 +243,8 @@ public class ZombieEvaluator : MonoBehaviour
     private void BeginPhase(int index)
     {
         phase = index;
-        var kind = brains[phase];
-        ApplyBrain(kind);
+        var kind = phases[phase].name;
+        ApplyBrain(phases[phase].kind, phases[phase].model);
 
         pending.Clear();
         phaseResults.Clear();
@@ -249,7 +272,7 @@ public class ZombieEvaluator : MonoBehaviour
 
     private bool warnedNoDeterministic;
 
-    private void ApplyBrain(BrainKind kind)
+    private void ApplyBrain(BrainKind kind, Object model)
     {
         var modelProp = typeof(BehaviorParameters).GetProperty("Model");
         // ML-Agents 버전에 따라 없을 수도 있어서 이름으로 찾는다
@@ -274,10 +297,10 @@ public class ZombieEvaluator : MonoBehaviour
             var bp = z.GetComponent<BehaviorParameters>();
             if (bp == null) continue;
 
-            if (isRL && rlModel != null && modelProp != null)
+            if (isRL && model != null && modelProp != null)
             {
-                if (modelProp.PropertyType.IsInstanceOfType(rlModel)) modelProp.SetValue(bp, rlModel);
-                else Debug.LogError($"[평가] RL Model 칸의 파일 형식이 맞지 않습니다: {rlModel.GetType().Name}");
+                if (modelProp.PropertyType.IsInstanceOfType(model)) modelProp.SetValue(bp, model);
+                else Debug.LogError($"[평가] 모델 파일 형식이 맞지 않습니다: {model.name} ({model.GetType().Name})");
             }
 
             // 정책을 다시 만들기 전에 설정해야 반영된다 (아래 BehaviorType 대입이 정책을 다시 만든다)
@@ -293,6 +316,7 @@ public class ZombieEvaluator : MonoBehaviour
     private bool HasUsableModel()
     {
         if (rlModel != null) return true;
+        if (compareModels != null && System.Array.Exists(compareModels, m => m != null)) return true;
         foreach (var a in arenas)
         foreach (var z in a.zombies)
         {
@@ -323,7 +347,7 @@ public class ZombieEvaluator : MonoBehaviour
         var job = maybeJob.Value;
         running[arena] = null;
 
-        var kind = brains[phase];
+        var kind = phases[phase].name;
         var ci   = CultureInfo.InvariantCulture;
         episodeCsv.WriteLine(string.Join(",",
             kind.ToString(),
@@ -339,7 +363,8 @@ public class ZombieEvaluator : MonoBehaviour
             r.shotsFired >= 0 ? r.shotsFired.ToString(ci) : "",
             r.shotsHit   >= 0 ? r.shotsHit.ToString(ci)   : "",
             F(HitRate(r)), F(HitsPerSec(r)),
-            F(r.obliqueAimedDeg), F(r.obliqueFreeDeg), F(r.steerAimedDeg), F(r.steerFreeDeg), F(r.aimedFraction)));
+            F(r.obliqueAimedDeg), F(r.obliqueFreeDeg), F(r.steerAimedDeg), F(r.steerFreeDeg), F(r.aimedFraction),
+            F(r.zigzagAimedPerSec), F(r.zigzagFreePerSec)));
         episodeCsv.Flush();   // 중간에 멈춰도 그때까지의 결과는 남는다
 
         if (!phaseResults.TryGetValue(job.speed, out var list))
@@ -360,7 +385,7 @@ public class ZombieEvaluator : MonoBehaviour
     // ── 요약 ──────────────────────────────────────
     private void WritePhaseSummary()
     {
-        var kind = brains[phase];
+        var kind = phases[phase].name;
         var ci   = CultureInfo.InvariantCulture;
         var log  = new StringBuilder($"[평가] ■ {kind} 결과\n");
 
@@ -375,6 +400,7 @@ public class ZombieEvaluator : MonoBehaviour
             var hitsEp = new Mean(); var hps = new Mean(); int firedSum = 0, hitSum = 0;
             // 회피: 판별 평균을 다시 평균 (판마다 표본 수가 달라도 판 하나를 한 표로)
             var oA = new Mean(); var oF = new Mean(); var sA = new Mean(); var sF = new Mean(); var aF = new Mean();
+            var zA = new Mean(); var zF = new Mean();
             foreach (var r in list)
             {
                 if (r.captured)
@@ -390,6 +416,7 @@ public class ZombieEvaluator : MonoBehaviour
                     firedSum += r.shotsFired; hitSum += r.shotsHit;
                 }
                 oA.Add(r.obliqueAimedDeg); oF.Add(r.obliqueFreeDeg); sA.Add(r.steerAimedDeg); sF.Add(r.steerFreeDeg); aF.Add(r.aimedFraction);
+                zA.Add(r.zigzagAimedPerSec); zF.Add(r.zigzagFreePerSec);
             }
 
             float rate   = caught / (float)list.Count;
@@ -402,14 +429,16 @@ public class ZombieEvaluator : MonoBehaviour
                 rate.ToString("0.000", ci), F(secAvg), F(gapAvg),
                 F(enc.Value), F(flee.Value), F(zsp.Value), F(pe.Value),
                 F(hitsEp.Value), F(hitRate), F(hps.Value),
-                F(oA.Value), F(oF.Value), F(sA.Value), F(sF.Value), F(aF.Value)));
+                F(oA.Value), F(oF.Value), F(sA.Value), F(sF.Value), F(aF.Value),
+                F(zA.Value), F(zF.Value)));
 
             log.AppendLine($"  더미 {speed:0.0}: 포획률 {rate:P0} ({caught}/{list.Count}) | 포획 {secAvg:0.0}초 | " +
                            $"빈틈 {gapAvg:0}° | 포위 {enc.Value:0.00} | 더미 실속 {flee.Value:0.00} | " +
                            $"좀비 {zsp.Value:0.00} | 예측오차 {pe.Value:0.00}m" +
                            (firedSum > 0 ? $" | 피격 {hitsEp.Value:0.0}발/판 (명중 {hitRate:P0}, {hps.Value:0.00}발/초)" : "") +
                            (oA.Count > 0 ? $" | 비스듬함 조준당함 {oA.Value:0}° / 아님 {oF.Value:0}°" : "") +
-                           (sA.Count > 0 ? $" | RL 옆보정 조준당함 {sA.Value:0}° / 아님 {sF.Value:0}°" : ""));
+                           (sA.Count > 0 ? $" | RL 옆보정 조준당함 {sA.Value:0}° / 아님 {sF.Value:0}°" : "") +
+                           (zA.Count > 0 ? $" | 좌우 전환 조준당함 {zA.Value:0.00}회/초 / 아님 {zF.Value:0.00}회/초" : ""));
         }
 
         File.WriteAllText(summaryPath, summary.ToString(), new UTF8Encoding(true));
