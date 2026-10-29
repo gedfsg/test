@@ -31,6 +31,12 @@ public class ConsumableData : ItemData
     [Tooltip("즉시 회복할 스태미나 양 (0이면 없음)")]
     public float staminaAmount = 0f;
 
+    [Tooltip("먹으면 회복되는 수분 % (SurvivalNeeds)")]
+    public float waterAmount = 0f;
+
+    [Tooltip("먹으면 회복되는 포만감 % (SurvivalNeeds)")]
+    public float foodAmount = 0f;
+
     [Header("Buff Settings")]
     public BuffType buffType = BuffType.None;
 

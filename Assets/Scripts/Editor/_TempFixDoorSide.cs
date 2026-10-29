@@ -8,16 +8,18 @@ using UnityEditor.SceneManagement;
 // 선택한 건물의 막힌 벽만 다시 계산해서 문을 옮김 (다른 건물/트리거/지붕 컷어웨이는 그대로 유지).
 public static class TempFixDoorSide
 {
-    [MenuItem("Tools/Map/Fix Door Side/Front +Z (Selected)")]
+    // 메뉴 비활성화 (2026-10-10): 재실행하면 바운딩 박스 벽/박스 콜라이더가 다시 생겨 유령 벽이 됨.
+    // 건물 벽은 _TempFixBuildingWallColliders + BuildingWallCollider가 담당. 코드는 참고용으로 유지.
+    // [MenuItem("Tools/Map/Fix Door Side/Front +Z (Selected)")]
     static void FixForward() => Fix(Vector3.forward);
 
-    [MenuItem("Tools/Map/Fix Door Side/Back -Z (Selected)")]
+    // [MenuItem("Tools/Map/Fix Door Side/Back -Z (Selected)")]
     static void FixBack() => Fix(Vector3.back);
 
-    [MenuItem("Tools/Map/Fix Door Side/Right +X (Selected)")]
+    // [MenuItem("Tools/Map/Fix Door Side/Right +X (Selected)")]
     static void FixRight() => Fix(Vector3.right);
 
-    [MenuItem("Tools/Map/Fix Door Side/Left -X (Selected)")]
+    // [MenuItem("Tools/Map/Fix Door Side/Left -X (Selected)")]
     static void FixLeft() => Fix(Vector3.left);
 
     static void Fix(Vector3 doorSideLocal)

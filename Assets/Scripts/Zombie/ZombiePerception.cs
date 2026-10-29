@@ -123,7 +123,7 @@ public class ZombiePerception
     {
         var obs = new ZombieObservation
         {
-            detectionRange    = body.detectionRange,
+            detectionRange    = body.DetectionRangeNow,
             attackRange       = body.attackRange,
             healthNormalized  = body.HealthNormalized,
             canMove           = body.CanMove,
@@ -206,7 +206,8 @@ public class ZombiePerception
         float sqDist = d.sqrMagnitude;
 
         // 1. 감지 반경 밖
-        if (sqDist > body.detectionRange * body.detectionRange) return false;
+        float range = body.DetectionRangeNow;   // 비 오면 줄어든다 (WeatherManager)
+        if (sqDist > range * range) return false;
 
         // 2. 바로 옆이면 각도 무시 (등 뒤에 바짝 붙어도 알아챈다)
         if (v.nearSenseRadius > 0f && sqDist <= v.nearSenseRadius * v.nearSenseRadius)

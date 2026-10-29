@@ -1,0 +1,53 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 232eea3291527f3409bc89f592f4628b, type: 3}
+  m_Name: Crate_Military_Guaranteed
+  m_EditorClassIdentifier: Assembly-CSharp::LootTable
+  minRolls: 1
+  maxRolls: 1
+  entries:
+  - item: {fileID: 11400000, guid: 3637fa9709cfcfb438a0292072cb3fa6, type: 2}
+    weight: 1
+    minAmount: 1
+    maxAmount: 1
+  - item: {fileID: 11400000, guid: 9a6b473187e767a4e9d435b1a9867149, type: 2}
+    weight: 1
+    minAmount: 1
+    maxAmount: 1
+  - item: {fileID: 11400000, guid: e19a10065bad6974298fa85f0ac6c81b, type: 2}
+    weight: 1
+    minAmount: 1
+    maxAmount: 1
+  - item: {fileID: 11400000, guid: 7fb4c618604ebdd49a7c29fd073ef438, type: 2}
+    weight: 1
+    minAmount: 1
+    maxAmount: 1
+  - item: {fileID: 11400000, guid: 4d5ad6f644ce7504fa98762c5af73b14, type: 2}
+    weight: 1
+    minAmount: 1
+    maxAmount: 1
+  - item: {fileID: 11400000, guid: 411622dde0eb71642aef28f945fa781b, type: 2}
+    weight: 1
+    minAmount: 1
+    maxAmount: 1
+  - item: {fileID: 11400000, guid: af4ee5890c13deb4fb7699b5832b066b, type: 2}
+    weight: 1
+    minAmount: 1
+    maxAmount: 1
+  - item: {fileID: 11400000, guid: 415eea56c41342840bfdf12e7639ad28, type: 2}
+    weight: 1
+    minAmount: 1
+    maxAmount: 1
+  - item: {fileID: 11400000, guid: b0212e3f94b9fe54f9f9382624168e17, type: 2}
+    weight: 1
+    minAmount: 1
+    maxAmount: 1

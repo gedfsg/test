@@ -37,6 +37,14 @@ public class ZombieController : MonoBehaviour
     public int dropAmmoMin = 5;
     public int dropAmmoMax = 10;
 
+    [Header("애니메이션 (kimozero/dev에서 합침)")]
+    [Tooltip("러너: 쫓아올 때 달리기 애니메이션 (IsRunning)")]
+    public bool isRunner = false;
+    [Tooltip("공격 애니메이션 재생 시간(초). 이 동안은 제자리에서 플레이어만 바라봄 (Animator의 공격 재생 시간과 맞출 것)")]
+    public float attackAnimDuration = 1.3f;
+    [Tooltip("공격 동작 중에는 이동을 멈추고 대상을 바라본다 (게임 연출). 학습장은 학습 조건을 바꾸지 않도록 끈다")]
+    public bool attackMoveLock = true;
+
     [Header("종류")]
     [Tooltip("일반/달리기/탱커 프로필. 비워두면 아래 인스펙터 값을 그대로 쓴다.")]
     public ZombieProfile profile;
@@ -62,6 +70,7 @@ public class ZombieController : MonoBehaviour
 
     // ─────────────────────────────────────────────
     private float attackTimer;
+    private float attackLockUntil;   // 공격 동작 재생 중엔 쫓아가지 않고 제자리에서 바라보기만
     private bool  isDead;
     private bool  isStunned;
     private float stunTimer;
@@ -82,6 +91,12 @@ public class ZombieController : MonoBehaviour
     private static readonly int HashSpeed     = Animator.StringToHash("Speed");
     private static readonly int HashAttack    = Animator.StringToHash("Attack");
     private static readonly int HashDie       = Animator.StringToHash("Die");
+    private static readonly int HashHit       = Animator.StringToHash("Hit");
+    private static readonly int HashIsRunning = Animator.StringToHash("IsRunning");
+    private static readonly int HashAttackIdx = Animator.StringToHash("AttackIndex");
+
+    /// <summary>날씨를 반영한 감지 거리 (비 오면 20% 감소 —— WeatherManager가 없으면 그대로).</summary>
+    public float DetectionRangeNow => detectionRange * WeatherManager.DetectionMultiplier;
 
     // ── Brain이 읽어가는 몸 상태 ──────────────────────
     public bool  CanMove           => agent != null && agent.enabled && agent.isOnNavMesh;
@@ -210,6 +225,8 @@ public class ZombieController : MonoBehaviour
         //    좀비는 총에 맞은 사실 자체를 모른다. Brain에 피격을 전달하는 유일한 경로.
         health.onHurt.RemoveListener(NotifyBrainDamaged);
         health.onHurt.AddListener(NotifyBrainDamaged);
+        health.onHurt.RemoveListener(OnHurtAnim);
+        health.onHurt.AddListener(OnHurtAnim);   // 피격 비틀거림
 
         if (damageTextPrefab != null) health.damageTextPrefab = damageTextPrefab;
 
@@ -292,6 +309,16 @@ public class ZombieController : MonoBehaviour
         {
             DoAttack();
             attackTimer = attackCooldown;
+        }
+
+        // 공격 동작 재생 중: 제자리에서 대상만 바라본다 (미끄러지며 멈추지 않게 즉시 정지)
+        if (attackMoveLock && Time.time < attackLockUntil)
+        {
+            if (CanMove && hasDestination) { agent.ResetPath(); hasDestination = false; }
+            if (CanMove) agent.velocity = Vector3.zero;
+            if (obs.hasTarget) FaceTowards(obs.targetPosition);
+            SetAnimSpeed(0f);
+            return;
         }
 
         float moveSpeedNow = 0f;
@@ -401,6 +428,7 @@ public class ZombieController : MonoBehaviour
 
         bool walking = speed > 0.1f;
         anim.SetBool(HashIsWalking, walking);
+        if (HasParam(HashIsRunning)) anim.SetBool(HashIsRunning, isRunner && speed > 2f);   // 러너가 쫓아올 때만 달리기
 
         foreach (var p in anim.parameters)
         {
@@ -424,7 +452,11 @@ public class ZombieController : MonoBehaviour
     void DoAttack()
     {
         if (anim != null && anim.runtimeAnimatorController != null)
+        {
+            if (HasParam(HashAttackIdx)) anim.SetInteger(HashAttackIdx, Random.Range(0, 2));   // 공격 / 목 물기 랜덤
             anim.SetTrigger(HashAttack);
+            attackLockUntil = Time.time + attackAnimDuration;
+        }
 
         Transform t = perception != null ? perception.Target : null;
         if (t == null) return;
@@ -433,6 +465,18 @@ public class ZombieController : MonoBehaviour
 
         Health playerHealth = t.GetComponent<Health>();
         if (playerHealth != null) playerHealth.TakeDamage(attackDamage);
+    }
+
+    bool HasParam(int hash)
+    {
+        if (anim == null || anim.runtimeAnimatorController == null) return false;
+        foreach (var p in anim.parameters) if (p.nameHash == hash) return true;
+        return false;
+    }
+
+    void OnHurtAnim()
+    {
+        if (!isDead && HasParam(HashHit)) anim.SetTrigger(HashHit);
     }
 
     // ── 외부 API (Bullet.cs / MeleeWeapon.cs가 호출) ────
@@ -486,6 +530,7 @@ public class ZombieController : MonoBehaviour
         isStunned   = false;
         stunTimer   = 0f;
         attackTimer = 0f;
+        attackLockUntil = 0f;
 
         hasDestination = false;
         repathTimer    = 0f;
@@ -526,13 +571,11 @@ public class ZombieController : MonoBehaviour
         if (isDead) return;
         isDead = true;
 
-        TryDropAmmo();
+        // 좀비 종류별 드랍 (LootDatabase). 데이터베이스가 없을 때만 예전 방식(프리팹의 dropAmmoData)으로 탄약 드랍
+        if (LootDatabase.Instance != null) LootDatabase.Instance.DropForZombie(gameObject);
+        else TryDropAmmo();
 
         if (agent != null) agent.enabled = false;
-
-        // 가짜 죽음 모션과 충돌 방지
-        // (Mixamo 죽음 애니메이션을 넣게 되면 이 줄을 지우고 anim.SetTrigger(HashDie)로 교체)
-        if (anim != null) anim.enabled = false;
 
         Collider col = GetComponent<Collider>();
         if (col != null) col.enabled = false;
@@ -542,7 +585,33 @@ public class ZombieController : MonoBehaviour
 
         foreach (var b in GetComponents<ZombieBrain>()) b.enabled = false;
 
-        StartCoroutine(FakeDeathRoutine());
+        // 사망 애니메이션(Die)이 컨트롤러에 있으면 그걸 재생, 없으면 예전 코드 쓰러뜨리기
+        if (HasParam(HashDie))
+        {
+            if (HasParam(HashHit)) anim.ResetTrigger(HashHit);   // 같은 프레임 피격 트리거가 남아 있으면 사망 후 다시 일어남
+            anim.SetTrigger(HashDie);
+            StartCoroutine(AnimDeathRoutine());
+        }
+        else
+        {
+            if (anim != null) anim.enabled = false;   // 가짜 죽음 회전과 충돌 방지
+            StartCoroutine(FakeDeathRoutine());
+        }
+    }
+
+    // 사망 애니메이션 재생 → 누워있다가 → 땅 밑으로 가라앉으며 사라짐
+    System.Collections.IEnumerator AnimDeathRoutine()
+    {
+        yield return new WaitForSeconds(3f);
+        float sinkDuration = 1f, sinkElapsed = 0f;
+        Vector3 sinkStart = transform.position, sinkEnd = sinkStart + Vector3.down * 1.5f;
+        while (sinkElapsed < sinkDuration)
+        {
+            sinkElapsed += Time.deltaTime;
+            transform.position = Vector3.Lerp(sinkStart, sinkEnd, sinkElapsed / sinkDuration);
+            yield return null;
+        }
+        Destroy(gameObject);
     }
 
     void TryDropAmmo()

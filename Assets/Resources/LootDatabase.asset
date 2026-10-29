@@ -1,0 +1,58 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 08c722a637139524e82a984dce44ac4e, type: 3}
+  m_Name: LootDatabase
+  m_EditorClassIdentifier: Assembly-CSharp::LootDatabase
+  crateWood: {fileID: 11400000, guid: fd178d6c74977594b8398b7159fa397a, type: 2}
+  crateMetal: {fileID: 11400000, guid: fcb9d7e38161a0d4f98afb8bc52457ac, type: 2}
+  crateMilitary: {fileID: 11400000, guid: 523fb50bd7e94f14d875d91a43ef382f, type: 2}
+  crateMilitaryGuaranteed: {fileID: 11400000, guid: 14938c3f62810db42b32b6976ceb7843, type: 2}
+  woodCrateCount: 50
+  metalCrateCount: 10
+  militaryCrateCount: 2
+  crateZombiesMin: 2
+  crateZombiesMax: 3
+  buildingRules:
+  - kind: 0
+    table: {fileID: 11400000, guid: 86edc260c67e5bc47a45a1fa1a002d52, type: 2}
+    extraZombies: 0
+  - kind: 1
+    table: {fileID: 11400000, guid: 69acee1d88ef79c4f8fe384669cc0e22, type: 2}
+    extraZombies: 0
+  - kind: 2
+    table: {fileID: 11400000, guid: a701c502d395bad4dbb88cc75e2e3149, type: 2}
+    extraZombies: 0
+  - kind: 3
+    table: {fileID: 11400000, guid: 50a77eab4f93d5648a867727f8862e63, type: 2}
+    extraZombies: 0
+  - kind: 4
+    table: {fileID: 11400000, guid: 4ed8229ba27d2e64cb6c2b3fd3e431f1, type: 2}
+    extraZombies: 4
+  zombieDrops:
+  - nameContains: Normal
+    chance: 0.1
+    table: {fileID: 11400000, guid: 06b1a4751503311448bf1d92cd01f39f, type: 2}
+  - nameContains: Normal
+    chance: 0.2
+    table: {fileID: 11400000, guid: bcab94e44ab63b940840262b2babb252, type: 2}
+  - nameContains: Police
+    chance: 0.3
+    table: {fileID: 11400000, guid: 7353016d91b534843be274443dfea73f, type: 2}
+  - nameContains: Police
+    chance: 0.5
+    table: {fileID: 11400000, guid: 37ede6249627661458efbdbc54bd7443, type: 2}
+  - nameContains: Girl
+    chance: 0.25
+    table: {fileID: 11400000, guid: 641114d3c3d8b1a4c95740775007a267, type: 2}
+  - nameContains: Fat
+    chance: 0.6
+    table: {fileID: 11400000, guid: 0edca4ecc8e430e40a0a8a20a40bab64, type: 2}

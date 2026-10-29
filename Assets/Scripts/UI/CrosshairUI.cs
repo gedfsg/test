@@ -5,10 +5,15 @@ using UnityEngine.UI;
 /// <summary>
 /// 마우스를 따라다니는 크로스헤어. 총구에서 조준점까지의 거리에 따라 색이 바뀐다.
 ///
-/// 구간은 Bullet.cs의 사거리 처리와 같은 기준을 쓴다.
-///   - 유효 사거리의 절반 이내 : 데미지 100%
-///   - 절반 ~ 유효 사거리      : 데미지 50%
-///   - 유효 사거리 초과        : 총알이 소멸해 닿지 않음
+/// 구간 (고정 거리 기준, 인스펙터에서 조정):
+///   - nearDistance 이내          : 빨강 (가까움)
+///   - nearDistance ~ midDistance : 노랑 (중간)
+///   - midDistance ~ 유효 사거리   : 흰색 (멀리)
+///   - 유효 사거리 초과            : 회색 (총알이 소멸해 닿지 않음)
+///
+/// 예전엔 "사거리의 절반/사거리"(AR 기준 20m/40m)로 나눴는데, 탑뷰 카메라 화면 안에서
+/// 조준할 수 있는 최대 거리가 실내 약 10m, 실외 약 12m라 구간 경계에 마우스가 닿지 않아
+/// 색이 항상 같게 보였음. 그래서 화면 안에서 구분되는 고정 거리로 바꿈.
 ///
 /// Canvas(Screen Space - Overlay) 밑에 Image를 하나 만들고 이 컴포넌트를 붙인 뒤,
 /// crosshairRect와 crosshairGraphic에 그 Image를 연결하면 된다.
@@ -25,18 +30,31 @@ public class CrosshairUI : MonoBehaviour
     [Tooltip("비워두면 Player 태그에서 자동으로 찾는다.")]
     public PlayerController playerController;
 
+    [Header("구간 거리 (m, 총구 기준)")]
+    [Tooltip("이 거리 이내면 '가까움'(빨강).")]
+    public float nearDistance = 4f;
+
+    [Tooltip("이 거리 이내면 '중간'(노랑). 그 너머 ~ 유효 사거리는 '멀리'(흰색).")]
+    public float midDistance = 8f;
+
     [Header("구간별 색")]
-    [Tooltip("데미지가 온전히 들어가는 거리.")]
-    public Color inRangeColor = Color.white;
+    [Tooltip("가까움.")]
+    public Color nearColor = new Color(0.90f, 0.20f, 0.20f, 1f);
 
-    [Tooltip("데미지가 절반으로 줄어드는 거리.")]
-    public Color falloffColor = new Color(0.95f, 0.75f, 0.25f, 1f);
+    [Tooltip("중간.")]
+    public Color midColor = new Color(0.95f, 0.85f, 0.20f, 1f);
 
-    [Tooltip("총알이 닿지 않는 거리.")]
-    public Color outOfRangeColor = new Color(0.85f, 0.25f, 0.20f, 1f);
+    [Tooltip("멀리 (유효 사거리 이내).")]
+    public Color farColor = Color.white;
+
+    [Tooltip("유효 사거리 밖 (총알이 닿지 않음).")]
+    public Color beyondRangeColor = new Color(0.5f, 0.5f, 0.5f, 0.8f);
 
     [Tooltip("무기를 들고 있지 않을 때의 색.")]
     public Color noWeaponColor = new Color(0.6f, 0.6f, 0.6f, 0.6f);
+
+    [Tooltip("켜면 구간이 바뀔 때마다 콘솔에 거리/구간을 출력 (디버그용).")]
+    public bool debugLog = false;
 
     [Header("옵션")]
     [Tooltip("켜면 시스템 마우스 커서를 숨긴다.")]
@@ -96,7 +114,6 @@ public class CrosshairUI : MonoBehaviour
         if (weapon == null || weapon.weaponData == null) return noWeaponColor;
 
         float range = weapon.weaponData.effectiveRange;
-        if (range <= 0f) return inRangeColor;
 
         // 총알이 실제로 출발하는 지점. 없으면 플레이어 위치로 대체한다.
         Vector3 origin = weapon.firePoint != null
@@ -104,14 +121,25 @@ public class CrosshairUI : MonoBehaviour
             : (playerController != null ? playerController.transform.position : Vector3.zero);
 
         if (!GameUtils.GetMouseWorldPosition(mainCamera, origin.y, out Vector3 aimPoint))
-            return inRangeColor;
+            return farColor;
 
         float distance = Vector3.Distance(origin, aimPoint);
 
-        if (distance > range) return outOfRangeColor;
-        if (distance > range * 0.5f) return falloffColor;
-        return inRangeColor;
+        string zone;
+        Color color;
+        if (range > 0f && distance > range) { zone = "사거리 밖"; color = beyondRangeColor; }
+        else if (distance <= nearDistance)  { zone = "가까움"; color = nearColor; }
+        else if (distance <= midDistance)   { zone = "중간"; color = midColor; }
+        else                                { zone = "멀리"; color = farColor; }
+
+        if (debugLog && zone != lastZone)
+            Debug.Log($"[CrosshairUI] {zone} — 거리 {distance:F1}m (사거리 {range}m)");
+        lastZone = zone;
+
+        return color;
     }
+
+    private string lastZone;
 
     /// <summary>현재 들고 있는 총. 없으면 null.</summary>
     private Weapon GetActiveWeapon()

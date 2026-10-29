@@ -88,7 +88,7 @@ public class Bullet : MonoBehaviour
             System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
             foreach (var h in hits)
             {
-                if (TryProcessHit(h.collider))
+                if (TryProcessHit(h.collider, h.point))
                 {
                     transform.position = h.point;
                     return;
@@ -117,11 +117,11 @@ public class Bullet : MonoBehaviour
     void OnTriggerEnter(Collider other)
     {
         // 레이캐스트가 못 잡는 경우(저속/근접)를 위한 보조 경로.
-        TryProcessHit(other);
+        TryProcessHit(other, other.ClosestPoint(transform.position));
     }
 
     // true를 반환하면 이 충돌로 총알이 소모됨(관통이 아니면 파괴).
-    bool TryProcessHit(Collider other)
+    bool TryProcessHit(Collider other, Vector3 hitPoint)
     {
         if (destroyed) return false;
         if (other.CompareTag(shooterTag)) return false;
@@ -151,6 +151,10 @@ public class Bullet : MonoBehaviour
             hitSomething = true;
         }
 
+        // 좀비 피격 이펙트 (피 파티클 / 빨간 플래시 / 넉백 / 사운드)
+        if (zombie != null && hitSomething)
+            ZombieHitEffect.Play(zombie.gameObject, hitPoint, moveDirection);
+
         DestructibleObstacle obstacle = other.GetComponent<DestructibleObstacle>();
         if (obstacle == null) obstacle = other.GetComponentInParent<DestructibleObstacle>();
         if (obstacle != null)
@@ -158,6 +162,10 @@ public class Bullet : MonoBehaviour
             obstacle.TakeDamage(currentDamage);
             hitSomething = true;
         }
+
+        // 데미지를 줄 수 없는 트리거(건물 진입 감지 영역 등)는 통과시킴.
+        // 이게 없으면 바깥에서 문 안으로 쏜 총알이 진입 트리거 경계에서 그냥 사라졌음.
+        if (!hitSomething && other.isTrigger) return false;
 
         if (!hitSomething) { Destroy(gameObject); destroyed = true; return true; }
 

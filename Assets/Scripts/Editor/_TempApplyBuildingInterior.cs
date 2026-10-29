@@ -29,7 +29,9 @@ public static class TempApplyBuildingInterior
                                        // ㄷ자/L자처럼 네모가 아닌 건물로 보고 자동 문 처리 대상에서 제외
     const int FillGridRes = 8;        // 풋프린트 채움 비율 샘플링 격자 해상도 (8x8)
 
-    [MenuItem("Tools/Map/Setup Building Interiors (Roof Cutaway)")]
+    // 메뉴 비활성화 (2026-10-10): 재실행하면 바운딩 박스 벽/박스 콜라이더가 다시 생겨 유령 벽이 됨.
+    // 건물 벽은 _TempFixBuildingWallColliders + BuildingWallCollider가 담당. 코드는 참고용으로 유지.
+    // [MenuItem("Tools/Map/Setup Building Interiors (Roof Cutaway)")]
     static void Apply()
     {
         List<Transform> targets = new List<Transform>();

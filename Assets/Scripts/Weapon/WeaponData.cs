@@ -57,6 +57,21 @@ public class WeaponData : ItemData
     [Header("Hand Offset")]
     public Vector3 positionOffset = new Vector3(0.01f, 0.06f, -0.2f);
     public Vector3 rotationOffset = new Vector3(30f, 200f, -20f);
+
+    [Header("근접 무기: 들고 다닐 때 손 회전 (휘두를 땐 rotationOffset). 0이면 rotationOffset 그대로")]
+    [Tooltip("가만히 서 있을 때 (팔을 늘어뜨린 자세)")]
+    public Vector3 carryRotationOffset = Vector3.zero;
+    [Tooltip("움직일 때 (팔을 굽혀 흔드는 자세). 0이면 carryRotationOffset 그대로. 이동 속도에 따라 서 있을 때 값과 섞음")]
+    public Vector3 carryMoveRotationOffset = Vector3.zero;
+    [Tooltip("휘두를 때 손 위치 (손 뼈 로컬). 손 뼈 원점은 손목이라, 손바닥 중심 + 손잡이 중간쯤을 쥐도록 옮김")]
+    public Vector3 swingPositionOffset = Vector3.zero;
+    [Tooltip("근접 무기 한 번 휘두를 때 드는 스테미나 (0이면 안 듦). 모자라면 못 휘두름 → 무한 휘두르기 방지")]
+    public float staminaCost = 0f;
+    [Tooltip("켜면 들고 다닐 때도 휘두를 때와 같은 쥐는 방식(rotationOffset + swingPositionOffset)으로 고정. 이동 속도/공격에 따라 손 안에서 도끼가 돌지 않음 (carry 값은 무시)")]
+    public bool rigidGrip = false;
+
+    [Header("Back Holster (등에 멜 때 회전, 캐릭터 기준. 0이면 기본 대각선)")]
+    public Vector3 holsterRotation = Vector3.zero;
 }
 
 public enum WeaponType

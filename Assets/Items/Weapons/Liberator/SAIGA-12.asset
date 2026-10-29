@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3eb99a6aa2adbac41a16f2ce1a62f261, type: 3}
+  m_Name: SAIGA-12
+  m_EditorClassIdentifier: Assembly-CSharp::WeaponData
+  itemName: SAIGA-12
+  icon: {fileID: 21300000, guid: 36af7b4120ef7114eaf3616c06270144, type: 3}
+  itemType: 0
+  rarity: 1
+  isStackable: 0
+  maxStackSize: 1
+  weaponPrefab: {fileID: 2950192407935153802, guid: 66018b8bc3bf4054b9f18be464127885, type: 3}
+  type: 3
+  damage: 12
+  attackRate: 0.8
+  maxAmmo: 6
+  reloadTime: 2.5
+  bulletSpeed: 80
+  recoil: 0
+  effectiveRange: 15
+  pelletCount: 5
+  spreadAngle: 8
+  penetrating: 0
+  autoFire: 0
+  positionOffset: {x: 0.01, y: 0.06, z: -0.2}
+  rotationOffset: {x: 30, y: 170, z: 0}
+  holsterRotation: {x: 306.8699, y: 270, z: 90}

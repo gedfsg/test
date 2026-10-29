@@ -20,8 +20,15 @@ using UnityEngine.UI;
 
 
 [RequireComponent(typeof(RectTransform))]
-public class SlotView : MonoBehaviour, IPointerClickHandler
+public class SlotView : MonoBehaviour, IPointerClickHandler,
+    IBeginDragHandler, IDragHandler, IEndDragHandler, IDropHandler, IPointerEnterHandler, IPointerExitHandler
 {
+    public enum SlotOwner { None, Inventory, Hotbar }
+
+    /// <summary>드래그 앤 드롭용: 이 슬롯이 인벤토리 칸인지 핫바 칸인지 + 몇 번째 칸인지 (InventoryUI/WeaponHotbarUI가 설정)</summary>
+    public SlotOwner Owner { get; set; }
+    public int Index { get; set; }
+
     [Header("필수 참조")]
     [SerializeField] private Image background;
     [SerializeField] private Image icon;
@@ -107,6 +114,38 @@ public class SlotView : MonoBehaviour, IPointerClickHandler
         if (activeBar == null) return;
         activeBar.color = theme.slotActive;
         activeBar.gameObject.SetActive(isActive);
+    }
+
+    // ── 드래그 앤 드롭 (실제 처리는 SlotDragDrop) ──
+    public void OnBeginDrag(PointerEventData e) { if (e.button == PointerEventData.InputButton.Left) SlotDragDrop.Begin(this, e); }
+    public void OnDrag(PointerEventData e) => SlotDragDrop.Move(e);
+    public void OnEndDrag(PointerEventData e) => SlotDragDrop.End();
+    public void OnDrop(PointerEventData e) => SlotDragDrop.Drop(this);
+    public void OnPointerEnter(PointerEventData e) => SlotDragDrop.Hover(this, true);
+    public void OnPointerExit(PointerEventData e) => SlotDragDrop.Hover(this, false);
+
+    public Sprite IconSprite => icon != null && icon.enabled ? icon.sprite : null;
+
+    private Image dropHint;
+
+    /// <summary>드래그 중 이 칸 위에 올렸을 때 테두리 표시 (null = 끔). 초록 = 놓을 수 있음, 빨강 = 거부</summary>
+    public void SetDropHint(Color? color)
+    {
+        if (color == null) { if (dropHint != null) dropHint.enabled = false; return; }
+        if (dropHint == null)
+        {
+            var go = new GameObject("DropHint", typeof(RectTransform), typeof(Image));
+            var r = (RectTransform)go.transform;
+            r.SetParent(transform, false);
+            r.anchorMin = Vector2.zero; r.anchorMax = Vector2.one; r.offsetMin = Vector2.zero; r.offsetMax = Vector2.zero;
+            dropHint = go.GetComponent<Image>();
+            dropHint.raycastTarget = false;
+            dropHint.sprite = HudStyle.RoundedFrameThick;
+            dropHint.type = Image.Type.Sliced;
+        }
+        dropHint.transform.SetAsLastSibling();
+        dropHint.color = color.Value;
+        dropHint.enabled = true;
     }
 
     private static string ShortenName(string name) => name.Length > 8 ? name[..8] : name;

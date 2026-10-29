@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 232eea3291527f3409bc89f592f4628b, type: 3}
+  m_Name: Zombie_PoliceAmmo
+  m_EditorClassIdentifier: Assembly-CSharp::LootTable
+  minRolls: 1
+  maxRolls: 1
+  entries:
+  - item: {fileID: 11400000, guid: 0b1b7f57d9fbd0d4f89465ac7e6370f5, type: 2}
+    weight: 1
+    minAmount: 8
+    maxAmount: 15

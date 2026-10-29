@@ -277,7 +277,12 @@ public class ZombieTrainingArena : MonoBehaviour
 
         zombieNavs.Clear();
         foreach (var z in zombies)
-            if (z != null) zombieNavs.Add(z.GetComponent<NavMeshAgent>());
+        {
+            if (z == null) continue;
+            zombieNavs.Add(z.GetComponent<NavMeshAgent>());
+            // 게임 연출(공격 중 1.3초 정지)은 학습장에서 끈다 —— 지금까지 학습한 조건과 같게
+            z.attackMoveLock = false;
+        }
 
         predictions.Clear();
         foreach (var _ in zombieNavs) predictions.Add(new Queue<PendingPrediction>());

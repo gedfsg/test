@@ -20,6 +20,13 @@ public class InventoryUI : MonoBehaviour
     public Transform ammoPanelContainer;
     public GameObject ammoCellPrefab; // TypeLabel(TMP) + CountLabel(TMP)를 가진 프리팹, 선택사항
 
+    [Tooltip("탄약 칸 아이콘 (순서: P, AR, SG, SR). 칸 프리팹에 'Icon' 이름의 Image가 있으면 적용된다.")]
+    public Sprite[] ammoIcons;
+
+    [Header("소지품 개수 표시 (선택)")]
+    [Tooltip("'현재 개수 / 최대 칸' 텍스트 (예: 0 / 24). 비워두면 표시하지 않는다.")]
+    public TextMeshProUGUI capacityText;
+
     public bool isInventoryOpen = false;
 
     private PlayerInputActions inputActions;
@@ -62,6 +69,7 @@ public class InventoryUI : MonoBehaviour
         for (int i = 0; i < inventoryManager.maxCapacity; i++)
         {
             SlotView slot = Instantiate(slotPrefab, slotGrid);
+            slot.Owner = SlotView.SlotOwner.Inventory; slot.Index = i; // 드래그 앤 드롭용
             Debug.Log($"[생성] i={i}, 형제순번={slot.transform.GetSiblingIndex()}");
             if (i < inventoryManager.inventory.Count)
             {
@@ -69,7 +77,8 @@ public class InventoryUI : MonoBehaviour
                 slot.SetItem(slotData.item, slotData.amount, theme);
 
                 var captured = slotData; // 클로저 캡처
-                slot.RightClicked += _ => OpenContextMenu(captured);
+                var view = slot;
+                slot.RightClicked += _ => OpenContextMenu(captured, view);
             }
             else
             {
@@ -77,18 +86,23 @@ public class InventoryUI : MonoBehaviour
             }
         }
 
+        if (capacityText != null)
+            capacityText.text = $"{inventoryManager.inventory.Count} / {inventoryManager.maxCapacity}";
+
         UpdateAmmoPanel();
         UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)slotGrid);
     }
 
     // ── 컨텍스트 메뉴 ─────────────────────────────
 
-    private void OpenContextMenu(InventorySlot slot)
+    private void OpenContextMenu(InventorySlot slot, SlotView view = null)
     {
         var actions = ItemActionProvider.GetActions(slot);
         Vector2 mousePos = Mouse.current.position.ReadValue();
 
-        ContextMenuUI.Instance?.Show(mousePos, actions, actionType => ExecuteAction(actionType, slot));
+        // 슬롯 오른쪽 옆에 띄워서 아이템을 가리지 않게
+        ContextMenuUI.Instance?.Show(mousePos, actions, actionType => ExecuteAction(actionType, slot),
+                                     view != null ? (RectTransform)view.transform : null);
     }
 
     /// <summary>액션 실행. 새 ActionType 추가 시 여기에 케이스 추가.</summary>
@@ -101,6 +115,7 @@ public class InventoryUI : MonoBehaviour
                 break;
             case ActionType.Equip:
                 if (slot.item is WeaponData wd) EquipWeapon(wd, slot.slotId);
+                else if (slot.item is BackpackData bag) BackpackManager.Instance?.Equip(bag, slot); // 가방 교체
                 break;
             case ActionType.EquipToHotbar:
                 EquipToHotbar(slot);
@@ -157,17 +172,28 @@ public class InventoryUI : MonoBehaviour
         var hotbar = WeaponHotbarUI.Instance;
         if (hotbar == null) return;
 
-        int targetSlot = hotbar.GetActiveSlot();
+        // 슬롯 타입 제한: 총 → 선택된 총 슬롯(1/2), 소비 아이템 → 같은 아이템 칸 or 빈 소비 칸(3~5)
+        int targetSlot = hotbar.FindTargetSlot(slot.item);
+        if (targetSlot < 0)
+        {
+            Debug.Log($"[인벤토리] '{slot.item.itemName}' 핫바 등록 불가 (총은 1,2번 / 소비 아이템은 3~5번 빈 칸만)");
+            return; // 인벤토리에서 빼기 전에 막아서 아이템 손실 없음
+        }
 
         int savedAmmo = slot.currentAmmo;
         int insertIndex = inventoryManager.GetSlotIndex(slot.slotId);
 
-        ItemData currentItem = hotbar.GetActiveItem();
-        if (currentItem != null)
+        ItemData currentItem = hotbar.GetItem(targetSlot);
+        int stackCount = 0; // 같은 소비 아이템이 이미 있으면 개수 합침
+        if (currentItem == slot.item && !(slot.item is WeaponData))
         {
-            int currentAmmo = currentItem is WeaponData
+            stackCount = hotbar.GetAmmo(targetSlot);
+        }
+        else if (currentItem != null)
+        {
+            int currentAmmo = currentItem is WeaponData && targetSlot == hotbar.GetActiveSlot()
                 ? playerController.GetCurrentAmmo()
-                : hotbar.GetActiveAmmo();
+                : hotbar.GetAmmo(targetSlot);
             inventoryManager.InsertItemAt(insertIndex, currentItem, 1, currentAmmo);
         }
 
@@ -175,7 +201,7 @@ public class InventoryUI : MonoBehaviour
 
         int finalCount = slot.item is WeaponData wd
             ? (savedAmmo >= 0 ? savedAmmo : wd.maxAmmo)
-            : slot.amount;
+            : slot.amount + stackCount;
 
         hotbar.SetSlotOnly(targetSlot, slot.item, finalCount);
 
@@ -203,16 +229,23 @@ public class InventoryUI : MonoBehaviour
             (WeaponType.Sniper, "SR"),
         };
 
-        foreach (var (type, label) in ammoTypes)
-            CreateAmmoCell(type, label);
+        for (int i = 0; i < ammoTypes.Length; i++)
+            CreateAmmoCell(ammoTypes[i].type, ammoTypes[i].label, i, i == ammoTypes.Length - 1);
     }
 
-    private void CreateAmmoCell(WeaponType type, string typeLabel)
+    private void CreateAmmoCell(WeaponType type, string typeLabel, int index, bool isLast)
     {
         int current = AmmoInventory.Instance.GetAmmo(type);
         bool hasAmmo = current > 0;
 
         GameObject cell = Instantiate(ammoCellPrefab, ammoPanelContainer);
+
+        // 선택: 'Icon' Image에 탄약 종류별 아이콘, 마지막 칸은 오른쪽 'Divider' 숨김
+        var iconTf = cell.transform.Find("Icon");
+        if (iconTf != null && ammoIcons != null && index < ammoIcons.Length && ammoIcons[index] != null)
+            iconTf.GetComponent<UnityEngine.UI.Image>().sprite = ammoIcons[index];
+        var dividerTf = cell.transform.Find("Divider");
+        if (dividerTf != null) dividerTf.gameObject.SetActive(!isLast);
 
         var texts = cell.GetComponentsInChildren<TextMeshProUGUI>();
         // 프리팹 규약: 자식 TMP 순서 [0]=타입 라벨, [1]=수치

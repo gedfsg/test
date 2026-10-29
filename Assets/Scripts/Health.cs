@@ -5,6 +5,10 @@ public class Health : MonoBehaviour
 {
     public float maxHealth = 100f;
     private float currentHealth;
+    private bool dead; // 사망 처리 한 번만 (죽은 뒤 추가 피해로 onDeath가 반복 호출되던 것 방지)
+
+    [Tooltip("플레이어 사망 후 게임을 멈출 때까지 기다리는 시간(초, 실제 시간). 사망 애니메이션이 보이게")]
+    public float playerDeathFreezeDelay = 4.5f; // Dying 애니메이션(4.4초)이 끝까지 보이게
 
     public UnityEvent onDeath;
     public UnityEvent onHurt;
@@ -25,6 +29,7 @@ public class Health : MonoBehaviour
         // 데미지 텍스트를 생성하는 함수를 호출함.
         ShowDamageText(amount, isCritical);
 
+        if (dead) return;
         onHurt?.Invoke();
         if (currentHealth <= 0f)
         {
@@ -57,6 +62,7 @@ public class Health : MonoBehaviour
         currentHealth += amount;
         if (currentHealth > maxHealth)
             currentHealth = maxHealth;
+        if (currentHealth > 0f) dead = false;
     }
 
     // 스폰 시점에 maxHealth를 바꿔 끼울 때 사용 (currentHealth도 꽉 채워서 같이 맞춤).
@@ -65,15 +71,23 @@ public class Health : MonoBehaviour
     {
         maxHealth = newMax;
         currentHealth = maxHealth;
+        dead = false;
     }
 
     void Die()
     {
+        dead = true;
         onDeath?.Invoke();
 
-        // 플레이어가 죽으면 게임 정지
+        // 플레이어가 죽으면 사망 애니메이션을 보여준 뒤 게임 정지
         if (CompareTag("Player"))
-            Time.timeScale = 0f;
+            StartCoroutine(FreezeAfterDeath());
+    }
+
+    System.Collections.IEnumerator FreezeAfterDeath()
+    {
+        yield return new WaitForSecondsRealtime(playerDeathFreezeDelay);
+        Time.timeScale = 0f;
     }
 
     public void SelfDestroy()

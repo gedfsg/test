@@ -20,7 +20,7 @@ public class CameraZoom : MonoBehaviour
     [SerializeField, Range(0.1f, 0.15f)] private float aimZoomRatio = 0.12f;
 
     [Header("건물 실내 진입 시 줌 거리 (BuildingInterior에서 호출)")]
-    [SerializeField] private float indoorDistance = 33f;
+    [SerializeField] private float indoorDistance = 55f;
 
     private CameraFollow cameraFollow;
     private PlayerInputActions inputActions;

@@ -7,6 +7,9 @@ public class PickupItem : MonoBehaviour
     public ItemData itemData;
     public int amount = 1;
 
+    [Tooltip("바닥 아이템 파란 테두리/둥실 효과(ItemOutlineGlow). 앞면을 하늘색으로 덮어버려서 기본 끔")]
+    public bool addGlow = false;
+
     private GameObject promptObj;
     private TextMeshPro promptText;
     private PlayerController nearbyPlayer;
@@ -21,7 +24,7 @@ public class PickupItem : MonoBehaviour
         if (playerCollider != null && boxCollider != null)
             Physics.IgnoreCollision(playerCollider, boxCollider);
 
-        if (GetComponent<ItemOutlineGlow>() == null)
+        if (addGlow && GetComponent<ItemOutlineGlow>() == null)
             gameObject.AddComponent<ItemOutlineGlow>();
 
         CreatePrompt();
@@ -107,8 +110,9 @@ public class PickupItem : MonoBehaviour
         if (show)
         {
             bool hotbarFull = itemData is WeaponData && (WeaponHotbarUI.Instance?.IsFull() ?? false);
-            promptText.text = hotbarFull ? "핫바 가득 참" : "F키로 획득";
-            promptText.color = hotbarFull ? Color.red : Color.white;
+            // 무기 슬롯이 차 있어도 인벤토리로 들어감 (PlayerController 픽업)
+            promptText.text = hotbarFull ? "F키로 획득 (인벤토리)" : "F키로 획득";
+            promptText.color = Color.white;
             promptObj.SetActive(true);
 
             // 아이템 옆에 위치 (월드 공간)

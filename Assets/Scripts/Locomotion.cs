@@ -83,6 +83,26 @@ public class Locomotion : MonoBehaviour
     //     물리적으로 maxStepHeight를 못 넘음 - 이게 "벽을 뚫고 올라가는" 문제의 근본 차단.
     //  2) maxStepHeight 레이 하나만 믿지 않고, 사람 키 정도(1.8) 높이에서도 한 번 더
     //     체크(safetyOrigin) - 진짜 벽이면 이 레이도 거의 확실히 맞음.
+    // 턱의 앞면(세로 면)이 없고 바닥판 모서리만 있는 경우(외부 모델의 높은 바닥 등):
+    // 앞으로 쏘는 레이에는 아무것도 안 걸리는데 캐릭터는 모서리에 걸려 멈춤.
+    // → 발 바로 앞 바닥 높이를 위에서 아래로 재서, 0.15m ~ maxStepHeight 만큼 높으면 턱으로 봄
+    bool LedgeAhead(Vector3 origin, Vector3 dir)
+    {
+        float feet = rb.position.y + (capsule != null ? capsule.center.y - capsule.radius : -0.1f);
+        Vector3 top = origin + dir * 0.1f;
+        top.y = feet + maxStepHeight + 0.05f;
+        if (!Physics.Raycast(top, Vector3.down, out RaycastHit hit, maxStepHeight + 0.05f, ~0, QueryTriggerInteraction.Ignore))
+            return false;
+        float rise = hit.point.y - feet;
+        if (rise <= 0.15f || rise > maxStepHeight || hit.normal.y < 0.7f) return false; // 평평한 윗면만
+
+        // 0.5m 더 앞에서도 비슷한 높이여야 '올라설 바닥'. 울타리 가로대처럼 얇은 건 그 너머가 다시 낮아서 제외
+        Vector3 further = top + dir * 0.5f;
+        if (!Physics.Raycast(further, Vector3.down, out RaycastHit hit2, maxStepHeight + 0.05f, ~0, QueryTriggerInteraction.Ignore))
+            return false;
+        return Mathf.Abs(hit2.point.y - hit.point.y) < 0.15f;
+    }
+
     void TryStepUp(Vector3 direction)
     {
         if (direction.sqrMagnitude < 0.01f) { stepUpAccumulated = 0f; return; }
@@ -92,7 +112,8 @@ public class Locomotion : MonoBehaviour
         Vector3 origin = rb.position + dir * (radius + 0.05f);
 
         Vector3 lowOrigin = origin + Vector3.up * 0.05f; // 발밑 바로 위
-        if (!Physics.Raycast(lowOrigin, dir, stepCheckDistance, ~0, QueryTriggerInteraction.Ignore))
+        if (!Physics.Raycast(lowOrigin, dir, stepCheckDistance, ~0, QueryTriggerInteraction.Ignore)
+            && !LedgeAhead(origin, dir))
         {
             stepUpAccumulated = 0f; // 앞이 안 막혀있으면 리셋(스텝업 필요 없음)
             return;
@@ -150,4 +171,13 @@ public class Locomotion : MonoBehaviour
     public void SetSprinting(bool state) => isSprinting = state;
     public void RecoverStamina(float amount) => currentStamina = Mathf.Min(currentStamina + amount, maxStamina);
     public float GetStaminaNormalized() => currentStamina / maxStamina;
+
+    /// <summary>스테미나가 amount 이상이면 쓰고 true, 모자라면 안 쓰고 false (근접 공격용)</summary>
+    public bool TryUseStamina(float amount)
+    {
+        if (amount <= 0f) return true;
+        if (currentStamina < amount) return false;
+        currentStamina -= amount;
+        return true;
+    }
 }

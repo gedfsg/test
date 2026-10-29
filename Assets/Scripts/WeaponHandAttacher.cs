@@ -51,6 +51,9 @@ public class WeaponHandAttacher : MonoBehaviour
     [Tooltip("초당 최대 회전 각도(도). 목표 방향으로 즉시 스냅하지 않고 이 속도로 서서히 따라가게 해서, 마우스 좌표의 미세한 프레임 단위 노이즈가 총에 그대로 반영되어 떠는 것을 막는다.")]
     public float aimRotationSpeed = 720f;
 
+    [Tooltip("false면 총구 조준 회전과 왼손 IK 위치 동기화를 멈춤 (도끼처럼 애니메이션 손을 그대로 따라가야 할 때)")]
+    public bool aimAtTarget = true;
+
     [Header("발사 위치 동기화")]
     [Tooltip("Weapon(Weapon.cs)의 Fire Point로 연결된 바로 그 오브젝트. 씬에 고정된 오브젝트를 연결할 것 (총의 자식 X)")]
     public Transform firePointTarget;
@@ -59,6 +62,19 @@ public class WeaponHandAttacher : MonoBehaviour
     [SerializeField] private Transform currentLeftHandPoint;
     [SerializeField] private Transform currentMuzzlePoint;
     private Transform currentWeaponVisualRoot;
+    private Transform currentVisual; // 마지막으로 손에 붙인 무기 모델
+
+    /// <summary>손에 든 무기 모델의 로컬 회전 직접 지정 (도끼: 들고 다닐 때 ↔ 휘두를 때 전환용)</summary>
+    public void SetVisualLocalRotation(Quaternion rot)
+    {
+        if (currentVisual != null) currentVisual.localRotation = rot;
+    }
+
+    /// <summary>손에 든 무기 모델의 로컬 위치 직접 지정</summary>
+    public void SetVisualLocalPosition(Vector3 pos)
+    {
+        if (currentVisual != null) currentVisual.localPosition = pos;
+    }
 
     // 총구가 무기 루트 기준으로 갖는 "고정된" 회전 오프셋. 무기 장착 시점에 한 번만 계산해서
     // 캐싱해두고, 매 프레임 이 값을 그대로 재사용한다. 매 프레임 currentMuzzlePoint.rotation을
@@ -148,6 +164,7 @@ public class WeaponHandAttacher : MonoBehaviour
         }
 
         GameObject newVisual = Instantiate(newWeaponPrefab, handBone);
+        currentVisual = newVisual.transform;
         newVisual.transform.localPosition = posOffset;
         newVisual.transform.localRotation = Quaternion.Euler(rotOffset);
 
@@ -193,8 +210,11 @@ public class WeaponHandAttacher : MonoBehaviour
             if (handBone != null) CacheLeftHandPoint(handBone);
         }
 
-        AimMuzzleAtTarget();
-        SyncLeftHandIK();
+        if (aimAtTarget)
+        {
+            AimMuzzleAtTarget();
+            SyncLeftHandIK();
+        }
         SyncFirePoint();
     }
 

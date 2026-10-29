@@ -189,11 +189,15 @@ public class SurvivalTimerUI : MonoBehaviour
         var canvasGo = GameObject.Find("Canvas");
         var canvas = canvasGo != null ? canvasGo.GetComponent<Canvas>() : FindFirstObjectByType<Canvas>();
 
+        // 스케일러가 이미 설정돼 있으면(HudLayoutApplier가 레퍼런스 해상도 1681x936으로 맞춤) 건드리지 않음
         var scaler = canvas.GetComponent<CanvasScaler>();
         if (scaler == null) scaler = canvas.gameObject.AddComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(1920f, 1080f);
-        scaler.matchWidthOrHeight = 0.5f;
+        if (scaler.uiScaleMode != CanvasScaler.ScaleMode.ScaleWithScreenSize)
+        {
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            scaler.matchWidthOrHeight = 0.5f;
+        }
 
         audioSource = gameObject.AddComponent<AudioSource>();
         audioSource.playOnAwake = false;

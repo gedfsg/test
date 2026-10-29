@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3eb99a6aa2adbac41a16f2ce1a62f261, type: 3}
+  m_Name: UMP45
+  m_EditorClassIdentifier: Assembly-CSharp::WeaponData
+  itemName: UMP45
+  icon: {fileID: 21300000, guid: f7a8d3ac8a07b2e4aaab5aaa60c5f644, type: 3}
+  itemType: 0
+  rarity: 0
+  isStackable: 0
+  maxStackSize: 1
+  weaponPrefab: {fileID: 1770393237460800311, guid: f938f9031e864f54c98fad9a48f611a4, type: 3}
+  type: 2
+  damage: 12
+  attackRate: 0.06
+  maxAmmo: 30
+  reloadTime: 1.6
+  bulletSpeed: 120
+  recoil: 3
+  effectiveRange: 25
+  pelletCount: 8
+  spreadAngle: 15
+  penetrating: 0
+  autoFire: 1
+  positionOffset: {x: 0.01, y: 0.06, z: -0.2}
+  rotationOffset: {x: 30, y: 170, z: 0}
+  holsterRotation: {x: 306.8699, y: 270, z: 90}
