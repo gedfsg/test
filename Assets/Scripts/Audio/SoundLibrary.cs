@@ -43,6 +43,7 @@ public class SoundLibrary : ScriptableObject
     public AudioClip[] crateOpen;
     public AudioClip[] click;
     public AudioClip[] heartbeat;
+    public AudioClip[] missionNotification;
 
     [Header("반복음")]
     public AudioClip rainLoop;

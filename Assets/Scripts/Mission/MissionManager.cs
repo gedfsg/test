@@ -12,8 +12,12 @@ using UnityEngine.SceneManagement;
 ///  3) 탈출 지점 도달  : 마지막 날(escapeDay)에 열림 + 카드 4개 필요. 마지막 날이 끝날 때까지 못 가면 게임오버(구조 헬기 떠남)
 ///  → 3개 다 하면 클리어
 ///
-/// ━ 서브 미션 (랜덤 3개, 실패 없음) ━
-///  좀비 처치 / 밤에 좀비 처치 / 상자 열기 / 건물 방문 / 소비 아이템 사용 중에서 뽑음. 달성하면 아이템 또는 점수 보상
+/// ━ 서브 미션 (실패 없음) ━
+///  좀비 처치 / 밤에 좀비 처치 / 상자 열기 / 건물 방문 / 소비 아이템 사용 중에서 판마다 랜덤으로 subMissionCount개 뽑음
+///  (재시작하면 다시 뽑음 - 직전 판과 같은 조합은 피함). 뽑힌 미션은 처음엔 숨겨져 있다가 트리거가 발동하면 활성화:
+///    건물 방문 = 그 종류 건물 100m 안 접근 / 밤에 처치 = 밤 시작 / 상자 = 첫 상자 열기 / 좀비 처치 = 첫 처치 / 소비 = 첫 사용
+///  활성화되면 알림 소리 + 토스트 2초. 동시 활성(진행 중)은 최대 maxActiveSubMissions개 - 넘치면 자리 날 때까지 대기.
+///  달성하면 아이템 또는 점수 보상
 ///
 /// 씬에 따로 둘 필요 없음 - Player가 있는 씬이면 자동 생성 (DeathUI와 같은 방식).
 /// 씬에 직접 두면 Inspector 값(탈출 지점 위치 등)을 쓸 수 있음.
@@ -35,7 +39,13 @@ public class MissionManager : MonoBehaviour
     public float escapeMinDistance = 180f;
 
     [Header("서브 미션")]
-    public int subMissionCount = 3;
+    // public int subMissionCount = 3; // (이전) 시작하자마자 3개 전부 표시
+    [Tooltip("이번 판에 뽑는 서브 미션 수 (처음엔 숨김, 트리거로 하나씩 활성화)")]
+    public int subMissionCount = 5;
+    [Tooltip("동시에 진행 중(활성 + 미완료)일 수 있는 최대 수")]
+    public int maxActiveSubMissions = 3;
+    [Tooltip("이 거리(m) 안으로 건물에 다가가면 그 건물 방문 미션 활성화")]
+    public float buildingTriggerRadius = 100f;
 
     [Header("디버그")]
     public bool debugLog = true;
@@ -45,7 +55,13 @@ public class MissionManager : MonoBehaviour
     public int Score { get; private set; }
     public bool Finished { get; private set; }
     public bool Escaped { get; private set; }
-    public readonly List<SubMission> subMissions = new List<SubMission>();
+    public readonly List<SubMission> subMissions = new List<SubMission>();       // 이번 판에 뽑힌 전부 (대기 포함)
+    public readonly List<SubMission> activeSubMissions = new List<SubMission>(); // 활성화된 것 (활성화 순서, 완료 포함) - HUD 표시용
+    public int RunningSubMissionCount => activeSubMissions.FindAll(s => !s.Done).Count;
+    readonly List<SubMission> waitingSubMissions = new List<SubMission>();      // 트리거는 됐는데 자리가 없어 대기 중
+    readonly Dictionary<LootDatabase.BuildingKind, List<Bounds>> buildingAreas = new Dictionary<LootDatabase.BuildingKind, List<Bounds>>();
+    float nextTriggerCheck;
+    static List<string> lastRunTitles; // 직전 판에 뽑은 서브 미션 (재시작 때 같은 조합 피하기)
     public readonly List<KeyCardPickup> keyCardsInWorld = new List<KeyCardPickup>();
     public EscapePoint EscapePointObj { get; private set; }
 
@@ -95,7 +111,16 @@ public class MissionManager : MonoBehaviour
         PlaceKeyCards(buildings);
         PlaceEscapePoint(buildings);
         PickSubMissions(buildings);
+        CacheBuildingAreas(buildings);
         gameObject.AddComponent<MissionHUD>();
+    }
+
+    void Update()
+    {
+        if (Finished || Time.time < nextTriggerCheck) return;
+        nextTriggerCheck = Time.time + 0.25f;
+        CheckSubMissionTriggers();
+        ActivateWaiting(); // 미션 완료로 자리가 나면 대기 중인 것 활성화
     }
 
     // ── 메인 미션 ─────────────────────────────────
@@ -253,13 +278,91 @@ public class MissionManager : MonoBehaviour
         if (Has(LootDatabase.BuildingKind.Church))
             pool.Add(new SubMission { kind = SubMission.Kind.VisitBuilding, building = LootDatabase.BuildingKind.Church, title = "교회 들어가기", rewardScore = 200 });
 
-        for (int i = 0; i < subMissionCount && pool.Count > 0; i++)
+        // 랜덤 subMissionCount개. 재시작(씬 다시 로드)이면 직전 판과 같은 조합이 나오지 않게 다시 뽑음 (후보가 모자라 불가능하면 그대로)
+        var picked = new List<SubMission>();
+        for (int attempt = 0; attempt < 20; attempt++)
         {
-            int idx = Random.Range(0, pool.Count);
-            subMissions.Add(pool[idx]);
-            pool.RemoveAt(idx);
+            var left = new List<SubMission>(pool);
+            picked.Clear();
+            for (int i = 0; i < subMissionCount && left.Count > 0; i++)
+            {
+                int idx = Random.Range(0, left.Count);
+                picked.Add(left[idx]);
+                left.RemoveAt(idx);
+            }
+            if (!SameSet(picked, lastRunTitles)) break;
         }
-        if (debugLog) Debug.Log("[MissionManager] 서브 미션: " + string.Join(" / ", subMissions.ConvertAll(s => $"{s.title}(보상 {s.RewardText})")));
+        subMissions.AddRange(picked);
+        lastRunTitles = subMissions.ConvertAll(s => s.title);
+        if (debugLog) Debug.Log("[MissionManager] 서브 미션(대기): " + string.Join(" / ", subMissions.ConvertAll(s => $"{s.title}(보상 {s.RewardText})")));
+    }
+
+    static bool SameSet(List<SubMission> a, List<string> titles)
+    {
+        if (titles == null || a.Count != titles.Count) return false;
+        foreach (var s in a) if (!titles.Contains(s.title)) return false;
+        return true;
+    }
+
+    // 건물 방문 트리거용: 종류별 건물 실내 트리거 영역 (거리 = 영역 가장자리까지)
+    void CacheBuildingAreas(List<BuildingInterior> buildings)
+    {
+        foreach (var b in buildings)
+        {
+            var trig = LootWorldSpawner.FindTrigger(b);
+            if (trig == null) continue;
+            var kind = LootDatabase.Classify(b);
+            if (!buildingAreas.TryGetValue(kind, out var list)) buildingAreas[kind] = list = new List<Bounds>();
+            list.Add(trig.bounds);
+        }
+    }
+
+    /// <summary>위치/시간 트리거: 건물 100m 접근, 밤 시작 (상자/처치/소비는 각 이벤트에서 Trigger 호출)</summary>
+    void CheckSubMissionTriggers()
+    {
+        var player = GameObject.FindWithTag("Player");
+        foreach (var s in subMissions)
+        {
+            if (s.triggered) continue;
+            if (s.kind == SubMission.Kind.VisitBuilding && player != null && buildingAreas.TryGetValue(s.building, out var areas))
+            {
+                float r2 = buildingTriggerRadius * buildingTriggerRadius;
+                if (areas.Exists(a => a.SqrDistance(player.transform.position) <= r2)) Trigger(s);
+            }
+            else if (s.kind == SubMission.Kind.KillAtNight && DayNightCycle.Instance != null && DayNightCycle.Instance.IsNight)
+                Trigger(s);
+        }
+    }
+
+    /// <summary>kind 종류 서브 미션의 트리거 발동 (이벤트형: 첫 처치/첫 상자/첫 소비)</summary>
+    void TriggerKind(SubMission.Kind kind)
+    {
+        foreach (var s in subMissions) if (!s.triggered && s.kind == kind) Trigger(s);
+    }
+
+    void Trigger(SubMission s)
+    {
+        s.triggered = true;
+        waitingSubMissions.Add(s);
+        ActivateWaiting();
+    }
+
+    /// <summary>대기 중인 미션을 자리(동시 maxActiveSubMissions개)가 나는 만큼 트리거된 순서대로 활성화</summary>
+    void ActivateWaiting()
+    {
+        while (waitingSubMissions.Count > 0 && RunningSubMissionCount < maxActiveSubMissions)
+        {
+            var s = waitingSubMissions[0];
+            waitingSubMissions.RemoveAt(0);
+            s.active = true;
+            activeSubMissions.Add(s);
+
+            // 알림: 소리 + 토스트 2초
+            if (AudioManager.Library != null)
+                AudioManager.PlayUI(SoundLibrary.Pick(AudioManager.Library.missionNotification), AudioManager.Vol.Notification);
+            GetComponent<MissionHUD>()?.ShowToast($"새 서브 미션: {s.title}", $"보상 {s.RewardText}");
+            if (debugLog) Debug.Log($"[MissionManager] 서브 미션 활성화: {s.title} (진행 중 {RunningSubMissionCount}/{maxActiveSubMissions}, 대기 {waitingSubMissions.Count})");
+        }
     }
 
     void Advance(SubMission.Kind kind, LootDatabase.BuildingKind building = default)
@@ -267,22 +370,28 @@ public class MissionManager : MonoBehaviour
         if (Finished) return;
         foreach (var s in subMissions)
         {
-            if (s.Done || s.kind != kind) continue;
+            if (!s.active || s.Done || s.kind != kind) continue; // 활성화된 미션만 진행
             if (kind == SubMission.Kind.VisitBuilding && s.building != building) continue;
             s.progress++;
             if (s.Done) GiveReward(s);
         }
     }
 
+    // 이벤트형 트리거는 진행도보다 먼저: 첫 처치/첫 상자/첫 소비가 활성화와 동시에 1로 카운트됨
     void OnZombieDied(ZombieController z)
     {
+        TriggerKind(SubMission.Kind.KillZombies);
         Advance(SubMission.Kind.KillZombies);
         if (DayNightCycle.Instance != null && DayNightCycle.Instance.IsNight) Advance(SubMission.Kind.KillAtNight);
     }
 
-    void OnCrateOpened(LootCrate c) => Advance(SubMission.Kind.OpenCrates);
-    void OnBuildingEntered(BuildingInterior b) => Advance(SubMission.Kind.VisitBuilding, LootDatabase.Classify(b));
-    void OnConsumableUsed(ConsumableData d) => Advance(SubMission.Kind.UseConsumables);
+    void OnCrateOpened(LootCrate c) { TriggerKind(SubMission.Kind.OpenCrates); Advance(SubMission.Kind.OpenCrates); }
+    void OnBuildingEntered(BuildingInterior b)
+    {
+        CheckSubMissionTriggers(); // 0.25초 확인 주기 전에 바로 들어와도 접근 트리거부터 처리
+        Advance(SubMission.Kind.VisitBuilding, LootDatabase.Classify(b));
+    }
+    void OnConsumableUsed(ConsumableData d) { TriggerKind(SubMission.Kind.UseConsumables); Advance(SubMission.Kind.UseConsumables); }
 
     void GiveReward(SubMission s)
     {

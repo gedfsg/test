@@ -122,4 +122,6 @@ MonoBehaviour:
   - {fileID: 8300000, guid: eea766b2db0e95f4a9bde08b312907e1, type: 3}
   heartbeat:
   - {fileID: 8300000, guid: e6ac393142fdfe9498611cef6523817d, type: 3}
+  missionNotification:
+  - {fileID: 8300000, guid: 638811d220d356343a0d6e0d9ddf828d, type: 3}
   rainLoop: {fileID: 8300000, guid: d9a1c3718c62d0744b77bf8abe0b09c3, type: 3}

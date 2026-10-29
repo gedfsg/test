@@ -36,7 +36,7 @@ public static class SoundSystemSetup
         { "footstep", "player/footstep_" }, { "playerHurt", "player/hurt_" }, { "playerDeath", "player/death_" }, { "roll", "player/roll_" },
         { "inventoryOpen", "ui/inventory_open_" }, { "inventoryClose", "ui/inventory_close_" }, { "pickup", "ui/pickup_" },
         { "doorOpen", "ui/door_open_" }, { "doorClose", "ui/door_close_" }, { "crateOpen", "ui/crate_open_" },
-        { "click", "ui/click_" }, { "heartbeat", "ui/heartbeat_" },
+        { "click", "ui/click_" }, { "heartbeat", "ui/heartbeat_" }, { "missionNotification", "ui/notification_" },
         { "rainLoop", "weather/rain_loop_" },
     };
 

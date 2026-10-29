@@ -11,7 +11,7 @@ using UnityEngine.UI;
 ///   ○ 열쇠 카드 수집           1/4
 ///      남은 곳: 병원 · 마트 · 교회
 ///   ○ 탈출 지점 도달        7일차 개방
-///   서브 미션                 점수 300
+///   서브 미션                 점수 300     (활성화된 서브 미션만, 없으면 안내 한 줄)
 ///   ● 좀비 15마리 처치  15/15  점수 300
 ///
 /// 화살표: 다음 목표(가장 가까운 열쇠 카드 → 다 모으면 탈출 지점)가 화면 밖이면 화면 가장자리에 방향 + 거리 표시.
@@ -52,9 +52,9 @@ public class MissionHUD : MonoBehaviour
         scaler.referenceResolution = new Vector2(1681f, 936f);
         scaler.matchWidthOrHeight = 0.5f;
 
-        // 패널: 오른쪽 위 고정
-        int lines = 1 + 3 + 1 + 1 + mm.subMissions.Count; // 제목 + 메인3 + 남은 곳 + 서브 제목 + 서브들
-        float height = lines * LineH + 24f;
+        // 패널: 오른쪽 위 고정 (높이는 활성 서브 미션 수에 맞춰 Update에서 조절)
+        // int lines = 1 + 3 + 1 + 1 + mm.subMissions.Count; // (이전) 서브 미션 전부 표시
+        float height = PanelHeight(0);
         panelBg = HudStyle.NewImage(canvasGo.transform, "Panel", HudStyle.RoundedRect, HudStyle.PanelBg, Vector2.zero, new Vector2(Width, height));
         panel = panelBg.rectTransform;
         panel.anchorMin = panel.anchorMax = panel.pivot = new Vector2(1f, 1f);
@@ -68,7 +68,12 @@ public class MissionHUD : MonoBehaviour
             if (i == 1) { remainText = Text("Remain", "", HudStyle.Regular, 14f, HudStyle.TextDim, TextAlignmentOptions.MidlineLeft, new Vector2(34f, y), Width - 44f); y -= LineH; }
         }
         scoreText = Header("서브 미션", ref y);
-        foreach (var _ in mm.subMissions) Row(ref y);
+        float subY = y;
+        foreach (var _ in mm.subMissions) Row(ref y); // 최대(뽑힌 수)만큼 미리 만들고 활성화된 것만 보임
+        emptyText = Text("SubEmpty", "탐색하면 새 미션이 나타남", HudStyle.Regular, 14f, HudStyle.TextDim, TextAlignmentOptions.MidlineLeft,
+                         new Vector2(34f, subY), Width - 44f);
+
+        BuildToast(canvasGo.transform);
 
         // 목표 방향 화살표
         arrowImg = HudStyle.NewImage(canvasGo.transform, "ObjectiveArrow", HudStyle.NavArrow != null ? HudStyle.NavArrow : HudStyle.Triangle, KeyColor, Vector2.zero, new Vector2(34f, 34f));
@@ -131,14 +136,64 @@ public class MissionHUD : MonoBehaviour
                mm.CanEscape ? DoneColor : (Color?)null);
 
         scoreText.text = $"점수 {mm.Score}";
+        // for (int i = 0; i < mm.subMissions.Count; i++) // (이전) 뽑힌 미션 전부
+        var shown = mm.activeSubMissions;
         for (int i = 0; i < mm.subMissions.Count; i++)
         {
-            var s = mm.subMissions[i];
+            bool visible = i < shown.Count;
+            var (icon, l, v) = rows[3 + i];
+            icon.gameObject.SetActive(visible); l.gameObject.SetActive(visible); v.gameObject.SetActive(visible);
+            if (!visible) continue;
+            var s = shown[i];
             string prog = s.target > 1 ? $"{Mathf.Min(s.progress, s.target)}/{s.target}  " : "";
             SetRow(3 + i, s.title, prog + s.RewardText, s.Done);
         }
+        emptyText.gameObject.SetActive(shown.Count == 0);
+        panel.sizeDelta = new Vector2(Width, PanelHeight(shown.Count));
 
+        UpdateToast();
         UpdateArrow();
+    }
+
+    // 제목 + 메인3 + 남은 곳 + 서브 제목 + 서브 (없으면 안내 한 줄)
+    static float PanelHeight(int subRows) => (1 + 3 + 1 + 1 + Mathf.Max(1, subRows)) * LineH + 24f;
+
+    // ── 토스트: 서브 미션 활성화 알림 (화면 위 가운데, 2초 후 사라짐) ──
+    const float ToastDuration = 2f, ToastFade = 0.3f;
+    TextMeshProUGUI emptyText, toastTitle, toastSub;
+    CanvasGroup toastGroup;
+    readonly Queue<(string title, string sub)> toastQueue = new Queue<(string, string)>();
+    float toastUntil = -1f;
+
+    /// <summary>토스트 표시 (여러 개가 한꺼번에 오면 2초씩 차례로)</summary>
+    public void ShowToast(string title, string sub) => toastQueue.Enqueue((title, sub));
+
+    void BuildToast(Transform canvas)
+    {
+        var bg = HudStyle.NewImage(canvas, "MissionToast", HudStyle.RoundedRect, HudStyle.PanelBg, Vector2.zero, new Vector2(420f, 64f));
+        var rt = bg.rectTransform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
+        rt.pivot = new Vector2(0.5f, 1f);
+        rt.anchoredPosition = new Vector2(0f, -150f); // 상단 날짜/시간 HUD 아래
+        toastGroup = bg.gameObject.AddComponent<CanvasGroup>();
+        toastTitle = HudStyle.NewText(rt, "Title", "", HudStyle.Bold, 19f, HudStyle.Highlight, TextAlignmentOptions.Center, new Vector2(0f, 11f), new Vector2(400f, 26f));
+        toastSub = HudStyle.NewText(rt, "Sub", "", HudStyle.Regular, 15f, HudStyle.Text, TextAlignmentOptions.Center, new Vector2(0f, -14f), new Vector2(400f, 22f));
+        bg.gameObject.SetActive(false);
+    }
+
+    void UpdateToast()
+    {
+        if (toastGroup == null) return;
+        if (Time.time >= toastUntil && toastQueue.Count > 0)
+        {
+            var (title, sub) = toastQueue.Dequeue();
+            toastTitle.text = title;
+            toastSub.text = sub;
+            toastUntil = Time.time + ToastDuration;
+        }
+        float left = toastUntil - Time.time;
+        toastGroup.gameObject.SetActive(left > 0f);
+        toastGroup.alpha = Mathf.Clamp01(left / ToastFade); // 마지막 0.3초 동안 사라짐
     }
 
     /// <summary>다음 목표가 화면 밖이면 화면 가장자리에 방향 화살표 + 거리</summary>
