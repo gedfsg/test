@@ -61,6 +61,11 @@ public class ZombieEvaluator : MonoBehaviour
              "연사 간격 0.1~0.5초, 총알 70~150 m/s (매 판 무작위), 탄창 30, 재장전 1.5초, 사거리 25m, 탄 퍼짐 15°.\n" +
              "끄면 씬에 저장된 더미 값을 그대로 쓴다 (예전 평가와 같은 조건).")]
     public bool gameGuns = false;
+
+    [Header("영상 촬영용")]
+    [Tooltip("화면 위쪽에 지금 어떤 AI가 움직이는지 크게 표시한다 (영상 녹화용)")]
+    public bool showLabel = false;
+    public int labelFontSize = 30;
     public string outputFolder = "EvalResults";
     [Tooltip("끝나면 Play를 자동으로 멈춘다 (에디터 전용)")]
     public bool stopWhenDone = true;
@@ -151,6 +156,41 @@ public class ZombieEvaluator : MonoBehaviour
                   $"포획 거리 {arenas[0].captureRadius:0.0}m, 총 {(gameGuns ? "게임 총" : "씬 값")}\n결과: {episodePath}");
 
         BeginPhase(0);
+    }
+
+    private static string BrainLabel(BrainKind k)
+    {
+        switch (k)
+        {
+            case BrainKind.FSM:             return "기존 규칙 AI (FSM)";
+            case BrainKind.Heuristic:       return "규칙 기반 협동 (조율기)";
+            case BrainKind.RL:              return "조율기 + 강화학습";
+            case BrainKind.RLDeterministic: return "조율기 + 강화학습 (결정적)";
+        }
+        return k.ToString();
+    }
+
+    private GUIStyle labelStyle, subStyle;
+    void OnGUI()
+    {
+        if (!showLabel || phase < 0 || phase >= brains.Count) return;
+        if (labelStyle == null)
+        {
+            labelStyle = new GUIStyle(GUI.skin.label) { fontSize = labelFontSize, fontStyle = FontStyle.Bold, alignment = TextAnchor.UpperCenter };
+            subStyle   = new GUIStyle(GUI.skin.label) { fontSize = Mathf.RoundToInt(labelFontSize * 0.55f), alignment = TextAnchor.UpperCenter };
+            labelStyle.normal.textColor = Color.white;
+            subStyle.normal.textColor   = new Color(1f, 1f, 1f, 0.85f);
+        }
+        float speed = -1f;
+        foreach (var kv in running) if (kv.Value.HasValue) { speed = kv.Value.Value.speed; break; }
+        string sub = (speed > 0f ? $"플레이어 속도 {speed:0.0} m/s · " : "") + $"{Mathf.Min(phaseDone + 1, phaseTotal)} / {phaseTotal}판";
+
+        float w = Screen.width, h = labelFontSize * 2.6f;
+        GUI.color = new Color(0f, 0f, 0f, 0.55f);
+        GUI.DrawTexture(new Rect(w * 0.2f, 8f, w * 0.6f, h), Texture2D.whiteTexture);
+        GUI.color = Color.white;
+        GUI.Label(new Rect(0f, 12f, w, labelFontSize * 1.4f), BrainLabel(brains[phase]), labelStyle);
+        GUI.Label(new Rect(0f, 12f + labelFontSize * 1.35f, w, labelFontSize), sub, subStyle);
     }
 
     void Update()
