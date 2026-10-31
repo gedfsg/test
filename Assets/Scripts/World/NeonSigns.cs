@@ -4,7 +4,8 @@ using UnityEngine;
 
 /// <summary>
 /// 상점/바 네온 간판 (플레이테스트 4순위 분위기).
-/// 상가 건물(Kenney building-a~n) 중 signCount곳 + 마트 문 위에 빨강/파랑 네온 글자 + 색 조명.
+/// 상가 건물(Kenney building-a~n) 중 signCount곳 문 위에 빨강/파랑 네온 글자 + 색 조명.
+/// 건물 이름은 EntranceMarkers 라벨이 표시 (마트의 큰 MARKET 간판은 플레이테스트에서 지적되어 뺌).
 ///  - 글자 재질은 HDR 색(밝기 1 초과) → 포스트 프로세싱 블룸으로 번짐
 ///  - 탑뷰 카메라에서 읽히게 항상 카메라를 향함 (FaceCamera) - 벽에 붙이면 벽 방향에 따라 안 보이거나 뒤집혀 보임
 ///  - 낮엔 어둡게(꺼진 네온), 노을~새벽엔 켜짐. 일부는 고장나서 깜빡임
@@ -40,16 +41,11 @@ public class NeonSigns : MonoBehaviour
     void Start()
     {
         var shops = new List<BuildingInterior>();
-        BuildingInterior mart = null;
         foreach (var b in FindObjectsByType<BuildingInterior>(FindObjectsSortMode.None))
-        {
-            if (LootDatabase.Classify(b) == LootDatabase.BuildingKind.Mart) mart = b;
-            else if (IsShopBuilding(b.name)) shops.Add(b);
-        }
+            if (LootDatabase.Classify(b) != LootDatabase.BuildingKind.Mart && IsShopBuilding(b.name)) shops.Add(b);
 
         int placed = 0;
-        if (mart != null && Place(mart, "MARKET", Red)) placed++;
-        while (placed < signCount + (mart != null ? 1 : 0) && shops.Count > 0)
+        while (placed < signCount && shops.Count > 0)
         {
             int i = Random.Range(0, shops.Count);
             var b = shops[i];
@@ -79,10 +75,10 @@ public class NeonSigns : MonoBehaviour
         Vector3 outDir = EntranceMarkers.SnapToAxis(door - trig.bounds.center, b.transform);
         if (outDir == Vector3.zero) return false;
 
-        // 문 위 (지면 +3.4m), 벽에서 살짝 떨어뜨림
+        // 문 위 이름 라벨(지면 +3.4m) 위쪽 (지면 +4.3m), 벽에서 살짝 떨어뜨림
         var t = Terrain.activeTerrain;
         float ground = Mathf.Max(trig.bounds.min.y, t != null ? t.SampleHeight(door) + t.transform.position.y : trig.bounds.min.y);
-        Vector3 pos = new Vector3(door.x, ground + 3.4f, door.z) + outDir * 0.35f;
+        Vector3 pos = new Vector3(door.x, ground + 4.3f, door.z) + outDir * 0.35f;
 
         var go = new GameObject("Neon_" + word + "_" + b.name);
         go.transform.SetParent(transform, false);
@@ -93,8 +89,9 @@ public class NeonSigns : MonoBehaviour
         var tmp = go.AddComponent<TextMeshPro>();
         tmp.text = word;
         tmp.alignment = TextAlignmentOptions.Center;
-        tmp.rectTransform.sizeDelta = new Vector2(4f, 1.2f);
-        tmp.enableAutoSizing = true; tmp.fontSizeMin = 3f; tmp.fontSizeMax = 10f;
+        // 플레이테스트: 글자가 너무 큼 → 50%
+        tmp.rectTransform.sizeDelta = new Vector2(2f, 0.6f);
+        tmp.enableAutoSizing = true; tmp.fontSizeMin = 1.5f; tmp.fontSizeMax = 5f;
         tmp.fontStyle = FontStyles.Bold;
         tmp.color = Color.white;                       // 색은 재질(_FaceColor HDR)로
         var mat = tmp.fontMaterial;                    // 간판마다 재질 인스턴스 (밝기 따로 조절)

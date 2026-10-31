@@ -139,7 +139,7 @@ public class SurvivalDayHUD : MonoBehaviour
         }
 
         // 실내: 하늘 관련 표시 숨김 (BuildingInterior 트리거 안에 있는 동안)
-        bool indoor = hideSkyIndoors && BuildingInterior.IsAnyoneIndoors;
+        bool indoor = hideSkyIndoors && BuildingInterior.IsPlayerEnclosed;
         if (force || indoor != shownIndoor)
         {
             shownIndoor = indoor;

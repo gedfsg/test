@@ -150,7 +150,10 @@ public class LootWorldSpawner : MonoBehaviour
         for (int i = 0; i < 12; i++)
         {
             float x = Random.Range(tb.min.x + 0.8f, tb.max.x - 0.8f), z = Random.Range(tb.min.z + 0.8f, tb.max.z - 0.8f);
-            Vector3 from = new Vector3(x, tb.min.y + 2.2f, z);
+            // 트리거 바닥이 지면보다 낮은 건물(교회/옛날 집: 지면 -2.6m)은 지면 기준 (안 그러면 땅속에서 쏴서 항상 실패)
+            var terrain = Terrain.activeTerrain;
+            float floor = terrain != null ? Mathf.Max(tb.min.y, terrain.SampleHeight(new Vector3(x, 0f, z)) + terrain.transform.position.y) : tb.min.y;
+            Vector3 from = new Vector3(x, floor + 2.2f, z);
             if (!Physics.Raycast(from, Vector3.down, out RaycastHit hit, 4f, ~0, QueryTriggerInteraction.Ignore)) continue;
             if (hit.normal.y < 0.7f) continue;
             if (NavMesh.SamplePosition(hit.point, out NavMeshHit nh, 0.6f, NavMesh.AllAreas)) { point = nh.position; return true; }
