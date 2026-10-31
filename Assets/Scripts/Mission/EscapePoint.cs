@@ -2,7 +2,7 @@ using UnityEngine;
 
 /// <summary>
 /// 탈출 지점: 바닥 원 + 하늘로 솟는 빛기둥 + 점 조명.
-///  - 잠김(빨강): 총 진행률 100% 전 → 들어가면 남은 조건 안내
+///  - 잠김(빨강): 총 진행률 100% 전 또는 7일차 전 → 들어가면 남은 조건 안내
 ///  - 열림(초록): 들어가면 MissionManager.Escape() → 게임 클리어
 /// MissionManager가 Create()로 생성.
 /// </summary>

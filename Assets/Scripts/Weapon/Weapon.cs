@@ -72,6 +72,7 @@ public class Weapon : MonoBehaviour
 
     void Shoot()
     {
+        SpawnProtection.Cancel(); // 플레이어가 먼저 공격 → 스폰 보호 해제
         currentAmmo--;
 
         // 소음: 플레이어 총소리는 주변 좀비를 부름 (반경은 총 종류별, 비 오면 절반)

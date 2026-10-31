@@ -72,8 +72,6 @@ public class ZombieController : MonoBehaviour
     private float investigateUntil;   // 이 시각까지 소음 위치로 이동
     private float doorAvoidUntil;     // 이 시각까지 건물 입구에서 벗어나는 중 (플레이어 실내 + 입구 5m 안)
 
-    const float DoorAvoidRadius = 5f; // 플레이어가 실내에 있으면 입구 이 반경(m) 안 좀비는 물러남
-
     private Transform    target;
     private NavMeshAgent agent;
     private Animator     anim;
@@ -251,6 +249,20 @@ public class ZombieController : MonoBehaviour
         if (!canMove) TryWarpToNavMesh();
         canMove = agent != null && agent.enabled && agent.isOnNavMesh;
 
+        // 스폰 보호: 추격/공격 없이 느리게 어슬렁거림 (플레이어를 바라보는 "경계" 상태)
+        if (ZombieRules.IsHeld(transform.position))
+        {
+            inAttackRange = false;
+            if (canMove)
+            {
+                DoWander();
+                agent.speed = moveSpeed * ZombieRules.HeldSpeedFactor;
+            }
+            else SetAnimSpeed(0f);
+            ZombieVoiceManager.Tick(this, ZombieVoiceManager.State.Idle);
+            return;
+        }
+
         float dist = Vector3.Distance(transform.position, target.position);
 
         // 공격 범위 내 (또는 공격 동작 재생 중): NavMesh와 상관없이 제자리에서 공격
@@ -263,7 +275,7 @@ public class ZombieController : MonoBehaviour
             SetAnimSpeed(0f);
             if (!inAttackRange) return; // 동작 끝날 때까지 기다리기만
 
-            if (BuildingInterior.InSafeExit(transform.position)) return; // 건물에서 막 나온 플레이어: 입구 근처 좀비 공격 금지 (안전 창)
+            if (!ZombieRules.CanAttack(transform.position)) return; // 건물에서 막 나온 플레이어: 입구 근처 좀비 공격 금지 (안전 창)
 
             attackTimer -= Time.deltaTime;
             if (attackTimer <= 0f)
@@ -289,7 +301,7 @@ public class ZombieController : MonoBehaviour
         if (huntPlayer || dist <= detect)
         {
             isWandering = false;
-            agent.speed = moveSpeed * (isNight ? nightSpeedMultiplier : 1f) * ZombieSpawner.DifficultyMultiplier; // 밤엔 더 빠르게, 7일 넘기면 하루마다 +10%
+            agent.speed = moveSpeed * (isNight ? nightSpeedMultiplier : 1f) * ZombieRules.SpeedMultiplier; // 밤엔 더 빠르게, 7일 넘기면 하루마다 +10%
             agent.SetDestination(target.position);
             SetAnimSpeed(agent.velocity.magnitude);
             ZombieVoiceManager.Tick(this, ZombieVoiceManager.State.Chase); // 2~5초마다 신음/비명
@@ -298,7 +310,7 @@ public class ZombieController : MonoBehaviour
         else if (Time.time < investigateUntil)
         {
             isWandering = false;
-            agent.speed = moveSpeed * ZombieSpawner.DifficultyMultiplier;
+            agent.speed = moveSpeed * ZombieRules.SpeedMultiplier;
             agent.SetDestination(noisePos);
             if (!agent.pathPending && agent.remainingDistance < 1.5f) investigateUntil = 0f; // 도착 → 배회로
             SetAnimSpeed(agent.velocity.magnitude);
@@ -339,26 +351,20 @@ public class ZombieController : MonoBehaviour
     }
 
     // ── 입구 대기 금지 ───────────────────────────────
-    // 플레이어가 건물 안에 있는 동안, 그 건물 입구 반경 안의 바깥 좀비는 입구 반대쪽 랜덤 지점으로 이동.
-    // 최종 공격 좀비(huntPlayer)는 제외 - 실내도 안전지대가 아니어야 함. 이동 중이면 true
+    // 플레이어가 건물 안에 있는 동안, 그 건물 입구 반경 안의 바깥 좀비는 입구 반대쪽 랜덤 지점으로 이동. 이동 중이면 true
     bool UpdateDoorAvoid()
     {
-        BuildingInterior b = BuildingInterior.Current;
-        if (b == null || huntPlayer || !b.TryGetDoor(out Vector3 door, out Vector3 outDir))
+        if (!ZombieRules.DoorAvoidApplies(huntPlayer))
         {
             doorAvoidUntil = 0f; // 플레이어가 나오면 플래그 해제
             return false;
         }
 
-        Vector3 away = transform.position - door; away.y = 0f;
         if (Time.time >= doorAvoidUntil)
         {
-            if (away.sqrMagnitude >= DoorAvoidRadius * DoorAvoidRadius || b.ContainsPoint(transform.position)) return false;
-            Vector3 dir = away.sqrMagnitude > 0.01f ? away.normalized : outDir;
-            dir = Quaternion.Euler(0f, Random.Range(-60f, 60f), 0f) * dir;
-            if (!NavMesh.SamplePosition(transform.position + dir * Random.Range(8f, 14f), out NavMeshHit hit, 4f, NavMesh.AllAreas)) return false;
+            if (!ZombieRules.TryPickDoorAvoidDestination(transform.position, out Vector3 destination)) return false;
             agent.speed = moveSpeed;
-            agent.SetDestination(hit.position);
+            agent.SetDestination(destination);
             doorAvoidUntil = Time.time + 4f;
             isWandering = false;
         }
@@ -461,7 +467,7 @@ public class ZombieController : MonoBehaviour
 
         if (target == null) return;
         Health playerHealth = target.GetComponent<Health>();
-        if (playerHealth != null) playerHealth.TakeDamage(attackDamage * ZombieSpawner.DifficultyMultiplier);
+        if (playerHealth != null) playerHealth.TakeDamage(attackDamage * ZombieRules.DamageMultiplier);
     }
 
     bool HasParam(int hash)
@@ -473,6 +479,7 @@ public class ZombieController : MonoBehaviour
 
     void OnHurtAnim()
     {
+        SpawnProtection.Cancel(); // 던진 무기 등 어떤 공격이든 좀비가 맞으면 스폰 보호 해제
         if (!isDead && HasParam(HashHit)) anim.SetTrigger(HashHit);
     }
 

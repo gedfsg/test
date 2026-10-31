@@ -2,6 +2,14 @@ using UnityEngine;
 
 public static class GameUtils
 {
+    /// <summary>Collider.ClosestPoint인데 지원 안 되는 콜라이더(볼록하지 않은 메시 = 도로/건물 벽, 지형)면 바운딩 박스 기준.
+    /// 그런 콜라이더에 ClosestPoint를 부르면 위치를 그대로 돌려주고 콘솔 경고가 나옴</summary>
+    public static Vector3 ClosestPointSafe(Collider c, Vector3 position)
+    {
+        bool supported = c is BoxCollider || c is SphereCollider || c is CapsuleCollider || (c is MeshCollider mesh && mesh.convex);
+        return supported ? c.ClosestPoint(position) : c.bounds.ClosestPoint(position);
+    }
+
     public static bool GetMouseWorldPosition(Camera cam, float targetY, out Vector3 result)
     {
         result = Vector3.zero;

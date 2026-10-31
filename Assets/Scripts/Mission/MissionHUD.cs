@@ -11,7 +11,7 @@ using UnityEngine.UI;
 ///   메인 미션
 ///   ○ 7일 생존                3/7일
 ///   ○ 열쇠 카드 수집           1/4
-///   ○ 탈출 지점 도달      100% 필요
+///   ○ 탈출 지점 도달      100% 필요 (100%인데 7일차 전이면 7일차 개방)
 ///   서브 미션 (Day 3)          오늘 100%
 ///   ○ 좀비 15마리 처치     7/15 (46%)
 ///
@@ -148,7 +148,7 @@ public class MissionHUD : MonoBehaviour
         int goalDays = mm.SurvivalGoalDays;
         SetRow(0, $"{goalDays}일 생존", $"{mm.CompletedDays}/{goalDays}일", mm.SurvivedEnough);
         SetRow(1, "열쇠 카드 수집", $"{mm.KeyCards}/{mm.keyCardsRequired}", mm.HasAllKeyCards, KeyColor);
-        SetRow(2, "탈출 지점 도달", mm.Escaped ? "탈출!" : mm.CanEscape ? "열림!" : "100% 필요", mm.Escaped,
+        SetRow(2, "탈출 지점 도달", mm.Escaped ? "탈출!" : mm.CanEscape ? "열림!" : mm.ProgressFull ? $"{goalDays}일차 개방" : "100% 필요", mm.Escaped,
                mm.CanEscape ? DoneColor : (Color?)null);
 
         subHeaderText.text = $"서브 미션 (Day {mm.CurrentDay})";

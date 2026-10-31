@@ -59,6 +59,7 @@ public class MeleeWeapon : MonoBehaviour
 
     private void Attack()
     {
+        SpawnProtection.Cancel(); // 플레이어가 먼저 공격 → 스폰 보호 해제
         NoiseSystem.Emit(transform.position, NoiseSystem.MeleeRadius); // 휘두르는 소리 (작은 반경)
         if (useSlashTrail && slashPivot != null)
         {
@@ -127,7 +128,7 @@ public class MeleeWeapon : MonoBehaviour
             //  (좀비 콜라이더 반경 0.8m(뚱뚱이 1.0m)라 2.9m면 좀비 중심 기준 약 3.7m. 좀비는 중심~중심 1.8m에서 때림)
             //  예전 판정(머리 위 2m 높이 구, 반경 2m)도 실측으로 좀비 중심 3.6m까지 맞았음 → 사거리는 비슷하게 유지, 판정을 명확한 부채꼴로
             Transform body = zombie != null ? zombie.transform : (targetHealth != null ? targetHealth.transform : null);
-            Vector3 to = hit.ClosestPoint(origin + Vector3.up) - origin; to.y = 0f;
+            Vector3 to = GameUtils.ClosestPointSafe(hit, origin + Vector3.up) - origin; to.y = 0f;
             if (to.magnitude > range) continue;
             Vector3 toCenter = (body != null ? body.position : hit.bounds.center) - origin; toCenter.y = 0f;
             float allowedAngle = to.magnitude <= closeRange ? Mathf.Max(fanAngle, closeAngle) : fanAngle;

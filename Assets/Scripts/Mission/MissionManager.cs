@@ -9,7 +9,7 @@ using UnityEngine.SceneManagement;
 /// ━ 메인 미션: 전체 진행률 100% = 탈출 가능 ━
 ///  가중치: 열쇠 카드 1개 +15% (최대 60) / 서브 미션 완료 1개 +5% (최대 40) / 생존 하루 +1.43% (7일 10)
 ///  열쇠 카드 4개: 판마다 맵 전체 후보 중 랜덤 4곳 (KeyCardSpawnPoints). 위치 힌트 없음
-///  탈출 지점: 진행률 100% 전엔 잠김, 도달하면 클리어. 7일이 지나도 게임오버 없이 Day가 계속 늘고 좀비가 강해짐 (ZombieSpawner)
+///  탈출 지점: 진행률 100% + 7일차 이상이어야 열림, 도달하면 클리어. 7일이 지나도 게임오버 없이 Day가 계속 늘고 좀비가 강해짐 (ZombieSpawner)
 ///
 /// ━ 서브 미션 (실패 없음) ━
 ///  매일(새벽→낮) 후보 중 랜덤 개수를 새로 할당 (Day 1: 2~3개 ... Day 6+: 4~5개). 미완료는 다음날 사라짐 (패널티 없음)
@@ -44,9 +44,10 @@ public class MissionManager : MonoBehaviour
     public int CompletedSubMissions { get; private set; }
     /// <summary>전체 진행률 0~100 (100이면 탈출 지점 열림)</summary>
     public float TotalProgress { get; private set; }
-    /// <summary>진행률이 처음 100%가 됐을 때 (EscapePoint/HUD 알림용)</summary>
+    /// <summary>탈출 지점이 열렸을 때: 진행률 100% + 7일차 (EscapePoint 알림용)</summary>
     public event System.Action EscapeUnlocked;
     bool escapeUnlocked;
+    bool earlyFullNotified; // 7일차 전에 100% 달성 알림을 했는지
     public bool Finished { get; private set; }
     public bool Escaped { get; private set; }
     public readonly List<SubMission> subMissions = new List<SubMission>(); // 오늘 할당된 서브 미션
@@ -70,6 +71,8 @@ public class MissionManager : MonoBehaviour
     public float SubMissionProgress => Mathf.Min(CompletedSubMissions * SubMissionWeight, SubMissionWeightMax);
     public float SurvivalProgress => (float)CompletedDays / SurvivalGoalDays * SurvivalWeightMax; // 하루 끝날 때마다 누적, 7일차 완료 시 최대
     public bool CanEscape => !Finished && escapeUnlocked;
+    public bool ProgressFull => TotalProgress >= 100f;
+    float ComputeProgress() => Mathf.Clamp(KeyCardProgress + SubMissionProgress + SurvivalProgress, 0f, 100f);
 
     // ─────────────────────────────────────────────
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
@@ -250,30 +253,47 @@ public class MissionManager : MonoBehaviour
     {
         if (Finished) return;
         keyCardsInWorld.Remove(card);
+        float before = ComputeProgress();
         KeyCards++;
-        if (HasAllKeyCards)
-            PickupFeedbackUI.Instance?.Show("열쇠 카드 전부 획득!");
-        else
-            PickupFeedbackUI.Instance?.Show($"열쇠 카드 획득 ({KeyCards}/{keyCardsRequired})");
+        ToastProgress("열쇠 카드 획득", before, $"{KeyCards}/{keyCardsRequired}");
         if (debugLog) Debug.Log($"[MissionManager] 열쇠 카드 {KeyCards}/{keyCardsRequired} ({card.buildingLabel})");
         RefreshProgress();
     }
 
-    /// <summary>진행률 다시 계산. 처음 100%가 되면 탈출 지점 열림 이벤트 + 알림</summary>
+    // 진행률이 오른 이벤트 알림: "열쇠 카드 획득 (+15%) → 총 45%". 서브 미션 상한(40%)을 넘으면 +0%
+    void ToastProgress(string what, float before, string detail)
+    {
+        float now = ComputeProgress();
+        GetComponent<MissionHUD>()?.ShowToast($"{what} (+{Mathf.RoundToInt(now - before)}%) → 총 {Mathf.FloorToInt(now)}%", detail);
+    }
+
+    /// <summary>진행률 다시 계산. 100% + 7일차가 되면 탈출 지점 열림 이벤트 + 알림</summary>
     void RefreshProgress()
     {
-        TotalProgress = Mathf.Clamp(KeyCardProgress + SubMissionProgress + SurvivalProgress, 0f, 100f);
-        if (escapeUnlocked || TotalProgress < 100f) return;
+        TotalProgress = ComputeProgress();
+        if (escapeUnlocked || !ProgressFull) return;
+
+        // 조기 탈출 방지: 7일차 전엔 100%여도 안 열림
+        if (CurrentDay < SurvivalGoalDays)
+        {
+            if (earlyFullNotified) return;
+            earlyFullNotified = true;
+            PlaySound(l => l.missionNotification);
+            GetComponent<MissionHUD>()?.ShowToast("100% 달성!", $"탈출 지점은 {SurvivalGoalDays}일차부터 열립니다");
+            return;
+        }
+
         escapeUnlocked = true;
-        if (debugLog) Debug.Log("[MissionManager] 진행률 100% → 탈출 지점 열림");
+        if (debugLog) Debug.Log("[MissionManager] 진행률 100% + 7일차 → 탈출 지점 열림");
         PlaySound(l => l.missionNotification);
-        GetComponent<MissionHUD>()?.ShowToast("탈출 가능!", "초록 빛기둥으로 이동");
+        GetComponent<MissionHUD>()?.ShowToast("100% 달성! 탈출 지점이 활성화되었습니다", "초록 빛기둥으로 이동");
         EscapeUnlocked?.Invoke();
     }
 
     public string EscapeLockedReason()
     {
-        return $"잠김: 총 진행률 {Mathf.FloorToInt(TotalProgress)}% (100% 필요)";
+        if (ProgressFull) return $"{SurvivalGoalDays}일차까지 생존 필요 (지금 {CurrentDay}일차)";
+        return $"잠김: 총 진행률 {Mathf.FloorToInt(TotalProgress)}% (100% + {SurvivalGoalDays}일차 필요)";
     }
 
     /// <summary>탈출 지점 도달 → 클리어</summary>
@@ -375,7 +395,9 @@ public class MissionManager : MonoBehaviour
             m.progress += amount;
             if (!m.Done) continue;
 
+            float before = ComputeProgress();
             CompletedSubMissions++;
+            ToastProgress("서브 미션 완료", before, $"{m.title} · 보상 {m.RewardText}");
             GiveReward(m);
             if (subMissions.TrueForAll(x => x.Done)) // 오늘 할당량 전부 완료
             {
@@ -425,7 +447,6 @@ public class MissionManager : MonoBehaviour
                 WorldItemDrop.Spawn(player.transform.position + player.transform.forward, item, s.rewardAmount); // 가방이 꽉 차면 발밑에
         }
         else Debug.LogWarning("[MissionManager] 보상 아이템을 못 찾음: " + s.rewardItemName);
-        PickupFeedbackUI.Instance?.Show($"서브 미션 완료: {s.title} → {s.RewardText}");
         if (debugLog) Debug.Log($"[MissionManager] 서브 미션 완료: {s.title} → {s.RewardText} (진행률 +{SubMissionWeight}%)");
     }
 
