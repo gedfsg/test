@@ -47,10 +47,51 @@ public class BuildingInterior : MonoBehaviour
     static int globalInsideCount = 0;
     public static bool IsAnyoneIndoors => globalInsideCount > 0;
 
+    // 플레이어가 지금 들어가 있는 건물 (겹친 트리거면 마지막에 들어간 곳). 좀비 입구 대기 금지용
+    static readonly System.Collections.Generic.List<BuildingInterior> occupied = new System.Collections.Generic.List<BuildingInterior>();
+    public static BuildingInterior Current => occupied.Count > 0 ? occupied[occupied.Count - 1] : null;
+
+    // 건물에서 나온 직후 안전 창: 입구 SafeExitRadius 안 좀비는 SafeExitSeconds 동안 공격 안 함
+    public const float SafeExitSeconds = 1.5f, SafeExitRadius = 7f;
+    static float safeExitUntil = -1f;
+    static Vector3 safeExitDoor;
+
+    /// <summary>pos가 지금 "건물에서 막 나온 입구" 안전 반경 안인지 (공격 금지 판정)</summary>
+    public static bool InSafeExit(Vector3 pos)
+    {
+        if (Time.time >= safeExitUntil) return false;
+        float dx = pos.x - safeExitDoor.x, dz = pos.z - safeExitDoor.z;
+        return dx * dx + dz * dz < SafeExitRadius * SafeExitRadius;
+    }
+
+    /// <summary>pos가 이 건물 실내 트리거 안인지</summary>
+    public bool ContainsPoint(Vector3 pos)
+    {
+        var t = FindTriggerCollider();
+        return t != null && t.bounds.Contains(pos);
+    }
+
+    bool doorCached, hasDoor;
+    Vector3 doorPos, doorOut;
+
+    /// <summary>이 건물 문 중심 + 바깥 방향 (처음 쓸 때 한 번 계산)</summary>
+    public bool TryGetDoor(out Vector3 door, out Vector3 outDir)
+    {
+        if (!doorCached)
+        {
+            doorCached = true;
+            hasDoor = EntranceMarkers.TryGetDoor(this, out doorPos, out doorOut);
+        }
+        door = doorPos; outDir = doorOut;
+        return hasDoor;
+    }
+
     /// <summary>씬 다시 로드(재시작) 전에 호출 - static 카운터/저장값이 다음 판으로 넘어가 실내 안개가 남는 것 방지</summary>
     public static void ResetStatics()
     {
         globalInsideCount = 0;
+        occupied.Clear();
+        safeExitUntil = -1f;
         if (originalFogSaved)
         {
             RenderSettings.fog = originalFogEnabled; RenderSettings.fogMode = originalFogMode; RenderSettings.fogColor = originalFogColor;
@@ -133,6 +174,8 @@ public class BuildingInterior : MonoBehaviour
     {
         if (!other.CompareTag(playerTag)) return;
         SetCut(true);
+        occupied.Remove(this);
+        occupied.Add(this);
         PlayerEntered?.Invoke(this);
         if (darkenSurroundings) EnterIndoorFog(other.transform);
         BuildingTransition.Play();
@@ -144,6 +187,12 @@ public class BuildingInterior : MonoBehaviour
     {
         if (!other.CompareTag(playerTag)) return;
         SetCut(false);
+        occupied.Remove(this);
+        if (occupied.Count == 0 && TryGetDoor(out Vector3 door, out _))
+        {
+            safeExitDoor = door;
+            safeExitUntil = Time.time + SafeExitSeconds;
+        }
         if (darkenSurroundings) ExitIndoorFog();
         BuildingTransition.Play();
         PlayDoorSound(false);

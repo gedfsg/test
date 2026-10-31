@@ -110,7 +110,7 @@ public class ZombieVoiceManager : MonoBehaviour
         float dist = Vector3.Distance(pos, AudioManager.ListenerPosition);
         if (dist > MaxDistance) return false;
 
-        // 상태별 클립/볼륨: 신음·숨소리 0.4 (배경), 비명/단말마 0.9 (위협)
+        // 상태별 클립/볼륨: 신음 0.25 / 숨소리 0.3 / 비명 0.6 / 단말마 0.7 (분위기용) × ZombieBus
         // 추적: 25% 거친 숨소리 / 나머지 반반 신음·비명
         float roll = Random.value;
         bool breath = state == State.Chase && roll < 0.25f;
@@ -119,7 +119,12 @@ public class ZombieVoiceManager : MonoBehaviour
                        : scream ? SoundLibrary.Pick(lib.zombieScream)
                        : breath ? SoundLibrary.Pick(lib.zombieBreath)
                        : SoundLibrary.Pick(lib.zombieGroan);
-        float volume = (state == State.Death || scream) ? AudioManager.Vol.ZombieScream : AudioManager.Vol.ZombieGroan;
+        // float volume = (state == State.Death || scream) ? AudioManager.Vol.ZombieScream : AudioManager.Vol.ZombieGroan; // (이전)
+        float volume = state == State.Death ? AudioManager.Vol.ZombieDeath
+                     : scream ? AudioManager.Vol.ZombieScream
+                     : breath ? AudioManager.Vol.ZombieBreath
+                     : AudioManager.Vol.ZombieGroan;
+        volume *= AudioManager.Vol.ZombieBus;
         if (clip == null) return false;
 
         Voice slot = m.FindSlot(zombie, state, dist);

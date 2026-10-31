@@ -6,15 +6,17 @@ using UnityEngine.UI;
 /// <summary>
 /// 미션 HUD (오른쪽 위 - 다른 HUD와 안 겹치는 빈 자리) + 목표 방향 화살표.
 ///
+///   상단 중앙: 총 진행률: 68% + 진행률 바 (파랑, 100%면 초록)
+///
 ///   메인 미션
 ///   ○ 7일 생존                3/7일
 ///   ○ 열쇠 카드 수집           1/4
-///      남은 곳: 병원 · 마트 · 교회
-///   ○ 탈출 지점 도달        7일차 개방
+///   ○ 탈출 지점 도달      100% 필요
 ///   서브 미션                 점수 300     (활성화된 서브 미션만, 없으면 안내 한 줄)
 ///   ● 좀비 15마리 처치  15/15  점수 300
 ///
-/// 화살표: 다음 목표(가장 가까운 열쇠 카드 → 다 모으면 탈출 지점)가 화면 밖이면 화면 가장자리에 방향 + 거리 표시.
+/// 인벤토리를 열면 패널(가려짐)을 숨기고 한 줄 요약만 표시.
+/// 화살표: 열쇠 카드를 다 모으면 탈출 지점이 화면 밖일 때 방향 + 거리 표시 (열쇠 카드 위치는 플레이어가 직접 탐색).
 /// MissionManager가 AddComponent로 붙임. 기준 해상도는 다른 HUD와 같은 1681x936.
 /// </summary>
 public class MissionHUD : MonoBehaviour
@@ -29,7 +31,12 @@ public class MissionHUD : MonoBehaviour
     RectTransform panel;
     Image panelBg;
     readonly List<(Image icon, TextMeshProUGUI label, TextMeshProUGUI value)> rows = new List<(Image, TextMeshProUGUI, TextMeshProUGUI)>();
-    TextMeshProUGUI remainText, scoreText;
+    TextMeshProUGUI scoreText;
+    InventoryUI inventoryUI;
+    TextMeshProUGUI compactText;  // 인벤토리 열림: 메인 미션 한 줄 요약
+    TextMeshProUGUI progressText; // 상단 중앙 총 진행률
+    Image progressFill;
+    static readonly Color ProgressColor = new Color(0.25f, 0.6f, 1f);
     RectTransform arrow;
     Image arrowImg;
     TextMeshProUGUI arrowDist;
@@ -37,6 +44,7 @@ public class MissionHUD : MonoBehaviour
     void Start()
     {
         mm = GetComponent<MissionManager>();
+        inventoryUI = FindFirstObjectByType<InventoryUI>(FindObjectsInactive.Include);
         Build();
     }
 
@@ -65,7 +73,6 @@ public class MissionHUD : MonoBehaviour
         for (int i = 0; i < 3; i++)
         {
             Row(ref y);
-            if (i == 1) { remainText = Text("Remain", "", HudStyle.Regular, 14f, HudStyle.TextDim, TextAlignmentOptions.MidlineLeft, new Vector2(34f, y), Width - 44f); y -= LineH; }
         }
         scoreText = Header("서브 미션", ref y);
         float subY = y;
@@ -74,6 +81,14 @@ public class MissionHUD : MonoBehaviour
                          new Vector2(34f, subY), Width - 44f);
 
         BuildToast(canvasGo.transform);
+        BuildProgressBar(canvasGo.transform);
+
+        // 인벤토리 열림: 패널 대신 한 줄 요약 (인벤토리 창 위 빈 자리)
+        compactText = HudStyle.NewText(canvasGo.transform, "MissionCompact", "", HudStyle.SemiBold, 15f, HudStyle.Highlight, TextAlignmentOptions.MidlineRight, Vector2.zero, new Vector2(Width, LineH));
+        var cr = compactText.rectTransform;
+        cr.anchorMin = cr.anchorMax = cr.pivot = new Vector2(1f, 1f);
+        cr.anchoredPosition = new Vector2(-20f, -14f);
+        compactText.gameObject.SetActive(false);
 
         // 목표 방향 화살표
         arrowImg = HudStyle.NewImage(canvasGo.transform, "ObjectiveArrow", HudStyle.NavArrow != null ? HudStyle.NavArrow : HudStyle.Triangle, KeyColor, Vector2.zero, new Vector2(34f, 34f));
@@ -126,13 +141,17 @@ public class MissionHUD : MonoBehaviour
     {
         if (mm == null || panel == null) return;
 
+        UpdateProgressBar();
+        // 인벤토리 열림: 패널이 인벤토리를 가리지 않게 숨기고 한 줄만
+        bool inventoryOpen = inventoryUI != null && inventoryUI.isInventoryOpen;
+        panel.gameObject.SetActive(!inventoryOpen);
+        compactText.gameObject.SetActive(inventoryOpen);
+        if (inventoryOpen) compactText.text = $"진행률 {Mathf.FloorToInt(mm.TotalProgress)}% · 열쇠 {mm.KeyCards}/{mm.keyCardsRequired}";
+
         int escapeDay = mm.EscapeDay;
         SetRow(0, $"{escapeDay}일 생존", $"{Mathf.Min(mm.CurrentDay, escapeDay)}/{escapeDay}일", mm.SurvivedEnough);
         SetRow(1, "열쇠 카드 수집", $"{mm.KeyCards}/{mm.keyCardsRequired}", mm.HasAllKeyCards, KeyColor);
-        var remain = new List<string>();
-        foreach (var k in mm.keyCardsInWorld) if (k != null) remain.Add(k.buildingLabel);
-        remainText.text = remain.Count > 0 ? "남은 곳: " + string.Join(" · ", remain) : "";
-        SetRow(2, "탈출 지점 도달", mm.Escaped ? "탈출!" : mm.CanEscape ? "열림!" : $"{escapeDay}일차 개방", mm.Escaped,
+        SetRow(2, "탈출 지점 도달", mm.Escaped ? "탈출!" : mm.CanEscape ? "열림!" : "100% 필요", mm.Escaped,
                mm.CanEscape ? DoneColor : (Color?)null);
 
         scoreText.text = $"점수 {mm.Score}";
@@ -155,8 +174,31 @@ public class MissionHUD : MonoBehaviour
         UpdateArrow();
     }
 
-    // 제목 + 메인3 + 남은 곳 + 서브 제목 + 서브 (없으면 안내 한 줄)
-    static float PanelHeight(int subRows) => (1 + 3 + 1 + 1 + Mathf.Max(1, subRows)) * LineH + 24f;
+    // 제목 + 메인3 + 서브 제목 + 서브 (없으면 안내 한 줄)
+    static float PanelHeight(int subRows) => (1 + 3 + 1 + Mathf.Max(1, subRows)) * LineH + 24f;
+
+    // ── 상단 중앙 총 진행률 (날짜/시간 HUD 바로 아래) ──
+    void BuildProgressBar(Transform canvas)
+    {
+        var root = new GameObject("TotalProgress", typeof(RectTransform)).GetComponent<RectTransform>();
+        root.SetParent(canvas, false);
+        root.anchorMin = root.anchorMax = new Vector2(0.5f, 1f);
+        root.anchoredPosition = new Vector2(-25f, -150f); // SurvivalDayHUD와 같은 중심선
+        progressText = HudStyle.NewText(root, "Label", "", HudStyle.SemiBold, 16f, Color.white, TextAlignmentOptions.Center, new Vector2(0f, 8f), new Vector2(300f, 22f));
+        var bg = HudStyle.NewImage(root, "Bar", null, new Color(0f, 0f, 0f, 0.55f), new Vector2(0f, -10f), new Vector2(300f, 10f));
+        progressFill = HudStyle.NewImage(bg.rectTransform, "Fill", null, ProgressColor, Vector2.zero, Vector2.zero);
+        var f = progressFill.rectTransform;
+        f.anchorMin = Vector2.zero; f.anchorMax = new Vector2(0f, 1f); f.pivot = new Vector2(0f, 0.5f);
+        f.anchoredPosition = Vector2.zero; f.sizeDelta = Vector2.zero;
+    }
+
+    void UpdateProgressBar()
+    {
+        float p = mm.TotalProgress;
+        progressText.text = $"총 진행률: {Mathf.FloorToInt(p)}%";
+        progressFill.rectTransform.anchorMax = new Vector2(p / 100f, 1f);
+        progressFill.color = p >= 100f ? DoneColor : ProgressColor;
+    }
 
     // ── 토스트: 서브 미션 활성화 알림 (화면 위 가운데, 2초 후 사라짐) ──
     const float ToastDuration = 2f, ToastFade = 0.3f;
@@ -174,7 +216,7 @@ public class MissionHUD : MonoBehaviour
         var rt = bg.rectTransform;
         rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
         rt.pivot = new Vector2(0.5f, 1f);
-        rt.anchoredPosition = new Vector2(0f, -150f); // 상단 날짜/시간 HUD 아래
+        rt.anchoredPosition = new Vector2(0f, -185f); // 상단 날짜/시간 HUD + 진행률 바 아래
         toastGroup = bg.gameObject.AddComponent<CanvasGroup>();
         toastTitle = HudStyle.NewText(rt, "Title", "", HudStyle.Bold, 19f, HudStyle.Highlight, TextAlignmentOptions.Center, new Vector2(0f, 11f), new Vector2(400f, 26f));
         toastSub = HudStyle.NewText(rt, "Sub", "", HudStyle.Regular, 15f, HudStyle.Text, TextAlignmentOptions.Center, new Vector2(0f, -14f), new Vector2(400f, 22f));
@@ -203,17 +245,8 @@ public class MissionHUD : MonoBehaviour
         var player = GameObject.FindWithTag("Player");
         Transform target = null;
         Color color = KeyColor;
-        if (!mm.HasAllKeyCards)
-        {
-            float best = float.MaxValue;
-            foreach (var k in mm.keyCardsInWorld)
-            {
-                if (k == null || player == null) continue;
-                float d = (k.transform.position - player.transform.position).sqrMagnitude;
-                if (d < best) { best = d; target = k.transform; }
-            }
-        }
-        else if (mm.EscapePointObj != null)
+        // 열쇠 카드 방향은 안 알려줌 (직접 탐색) - 다 모은 뒤에만 탈출 지점 안내
+        if (mm.HasAllKeyCards && mm.EscapePointObj != null)
         {
             target = mm.EscapePointObj.transform;
             color = mm.CanEscape ? DoneColor : new Color(1f, 0.35f, 0.3f);

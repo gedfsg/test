@@ -70,6 +70,9 @@ public class ZombieController : MonoBehaviour
     private float retargetTimer;
     private Vector3 noisePos;         // 마지막으로 들은 소음 위치
     private float investigateUntil;   // 이 시각까지 소음 위치로 이동
+    private float doorAvoidUntil;     // 이 시각까지 건물 입구에서 벗어나는 중 (플레이어 실내 + 입구 5m 안)
+
+    const float DoorAvoidRadius = 5f; // 플레이어가 실내에 있으면 입구 이 반경(m) 안 좀비는 물러남
 
     private Transform    target;
     private NavMeshAgent agent;
@@ -260,6 +263,8 @@ public class ZombieController : MonoBehaviour
             SetAnimSpeed(0f);
             if (!inAttackRange) return; // 동작 끝날 때까지 기다리기만
 
+            if (BuildingInterior.InSafeExit(transform.position)) return; // 건물에서 막 나온 플레이어: 입구 근처 좀비 공격 금지 (안전 창)
+
             attackTimer -= Time.deltaTime;
             if (attackTimer <= 0f)
             {
@@ -275,6 +280,8 @@ public class ZombieController : MonoBehaviour
             SetAnimSpeed(0f);
             return;
         }
+
+        if (UpdateDoorAvoid()) return; // 플레이어가 실내면 입구에 몰려 있지 않고 물러남
 
         // 플레이어 감지 범위 내: 추적 (안개면 20% 감소 - WeatherManager, 밤엔 nightDetectionMultiplier배, 최종 공격 좀비는 무조건)
         bool isNight = DayNightCycle.Instance != null && DayNightCycle.Instance.CurrentPhase == DayNightCycle.Phase.Night;
@@ -329,6 +336,41 @@ public class ZombieController : MonoBehaviour
             transform.rotation,
             Quaternion.LookRotation(dir),
             Time.deltaTime * 10f);
+    }
+
+    // ── 입구 대기 금지 ───────────────────────────────
+    // 플레이어가 건물 안에 있는 동안, 그 건물 입구 반경 안의 바깥 좀비는 입구 반대쪽 랜덤 지점으로 이동.
+    // 최종 공격 좀비(huntPlayer)는 제외 - 실내도 안전지대가 아니어야 함. 이동 중이면 true
+    bool UpdateDoorAvoid()
+    {
+        BuildingInterior b = BuildingInterior.Current;
+        if (b == null || huntPlayer || !b.TryGetDoor(out Vector3 door, out Vector3 outDir))
+        {
+            doorAvoidUntil = 0f; // 플레이어가 나오면 플래그 해제
+            return false;
+        }
+
+        Vector3 away = transform.position - door; away.y = 0f;
+        if (Time.time >= doorAvoidUntil)
+        {
+            if (away.sqrMagnitude >= DoorAvoidRadius * DoorAvoidRadius || b.ContainsPoint(transform.position)) return false;
+            Vector3 dir = away.sqrMagnitude > 0.01f ? away.normalized : outDir;
+            dir = Quaternion.Euler(0f, Random.Range(-60f, 60f), 0f) * dir;
+            if (!NavMesh.SamplePosition(transform.position + dir * Random.Range(8f, 14f), out NavMeshHit hit, 4f, NavMesh.AllAreas)) return false;
+            agent.speed = moveSpeed;
+            agent.SetDestination(hit.position);
+            doorAvoidUntil = Time.time + 4f;
+            isWandering = false;
+        }
+        else if (!agent.pathPending && agent.remainingDistance < 1f)
+        {
+            doorAvoidUntil = 0f;
+            return false;
+        }
+
+        SetAnimSpeed(agent.velocity.magnitude);
+        ZombieVoiceManager.Tick(this, ZombieVoiceManager.State.Idle);
+        return true;
     }
 
     // ── 배회 ─────────────────────────────────────────

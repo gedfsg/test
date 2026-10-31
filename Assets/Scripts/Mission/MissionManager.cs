@@ -6,11 +6,10 @@ using UnityEngine.SceneManagement;
 /// <summary>
 /// 미션 시스템.
 ///
-/// ━ 메인 미션 (하나라도 못 하면 게임오버) ━
-///  1) 7일 생존       : 죽으면 게임오버 (기존 사망 화면)
-///  2) 열쇠 카드 4개   : 경찰서/병원/마트/교회 안에 1개씩 (없는 종류는 창고/집으로 대체)
-///  3) 탈출 지점 도달  : 마지막 날(escapeDay)에 열림 + 카드 4개 필요. 마지막 날이 끝날 때까지 못 가면 게임오버(구조 헬기 떠남)
-///  → 3개 다 하면 클리어
+/// ━ 메인 미션: 전체 진행률 100% = 탈출 가능 ━
+///  가중치: 열쇠 카드 1개 +15% (최대 60) / 서브 미션 완료 1개 +5% (최대 40) / 생존 하루 +1.43% (7일 10)
+///  열쇠 카드 4개: 판마다 맵 전체 후보 중 랜덤 4곳 (KeyCardSpawnPoints). 위치 힌트 없음
+///  탈출 지점: 진행률 100% 전엔 잠김, 도달하면 클리어
 ///
 /// ━ 서브 미션 (실패 없음) ━
 ///  좀비 처치 / 밤에 좀비 처치 / 상자 열기 / 건물 방문 / 소비 아이템 사용 중에서 판마다 랜덤으로 subMissionCount개 뽑음
@@ -30,9 +29,13 @@ public class MissionManager : MonoBehaviour
     public int keyCardsRequired = 4;
     [Tooltip("탈출 지점이 열리는 날. 0이면 DayNightCycle.totalDays (7일차)")]
     public int escapeDay = 0;
-    [Tooltip("열쇠 카드를 놓을 건물 종류 (앞에서부터 1개씩). 맵에 없는 종류는 창고/집 중 랜덤으로 대체")]
-    public LootDatabase.BuildingKind[] keyCardBuildings =
-        { LootDatabase.BuildingKind.Police, LootDatabase.BuildingKind.Hospital, LootDatabase.BuildingKind.Mart, LootDatabase.BuildingKind.Church };
+    [Tooltip("열쇠 카드가 플레이어 시작 지점에서 떨어져야 하는 최소 거리 (m)")]
+    public float keyCardMinPlayerDistance = 50f;
+    [Tooltip("열쇠 카드끼리 떨어져야 하는 최소 거리 (m). 후보가 모자라면 무시")]
+    public float keyCardMinSeparation = 40f;
+
+    // 진행률 가중치 (%)
+    public const float KeyCardWeight = 15f, SubMissionWeight = 5f, SubMissionWeightMax = 40f, SurvivalWeightMax = 10f;
     [Tooltip("탈출 지점 위치. 비워두면 시작 지점에서 먼 야외 NavMesh 위로 자동 선택")]
     public Transform escapePointOverride;
     [Tooltip("자동 선택 시 시작 지점에서 최소 거리 (m)")]
@@ -53,6 +56,12 @@ public class MissionManager : MonoBehaviour
     // ── 상태 ──
     public int KeyCards { get; private set; }
     public int Score { get; private set; }
+    public int CompletedSubMissions { get; private set; }
+    /// <summary>전체 진행률 0~100 (100이면 탈출 지점 열림)</summary>
+    public float TotalProgress { get; private set; }
+    /// <summary>진행률이 처음 100%가 됐을 때 (EscapePoint/HUD 알림용)</summary>
+    public event System.Action EscapeUnlocked;
+    bool escapeUnlocked;
     public bool Finished { get; private set; }
     public bool Escaped { get; private set; }
     public readonly List<SubMission> subMissions = new List<SubMission>();       // 이번 판에 뽑힌 전부 (대기 포함)
@@ -69,7 +78,10 @@ public class MissionManager : MonoBehaviour
     public int CurrentDay => DayNightCycle.Instance != null ? DayNightCycle.Instance.CurrentDay : 1;
     public bool SurvivedEnough => CurrentDay >= EscapeDay;
     public bool HasAllKeyCards => KeyCards >= keyCardsRequired;
-    public bool CanEscape => !Finished && SurvivedEnough && HasAllKeyCards;
+    public float KeyCardProgress => KeyCards * KeyCardWeight;
+    public float SubMissionProgress => Mathf.Min(CompletedSubMissions * SubMissionWeight, SubMissionWeightMax);
+    public float SurvivalProgress => Mathf.Clamp01((CurrentDay - 1f) / EscapeDay) * SurvivalWeightMax; // 하루 끝날 때마다 누적, 7일차 완료 시 최대
+    public bool CanEscape => !Finished && escapeUnlocked;
 
     // ─────────────────────────────────────────────
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
@@ -119,6 +131,7 @@ public class MissionManager : MonoBehaviour
     {
         if (Finished || Time.time < nextTriggerCheck) return;
         nextTriggerCheck = Time.time + 0.25f;
+        RefreshProgress(); // 생존 일수는 시간으로 늘어남
         CheckSubMissionTriggers();
         ActivateWaiting(); // 미션 완료로 자리가 나면 대기 중인 것 활성화
     }
@@ -128,31 +141,30 @@ public class MissionManager : MonoBehaviour
     void PlaceKeyCards(List<BuildingInterior> buildings)
     {
         Vector3 start = GameObject.FindWithTag("Player").transform.position;
-        var used = new HashSet<BuildingInterior>();
-        for (int i = 0; i < keyCardsRequired; i++)
+        var candidates = KeyCardSpawnPoints.Build(buildings);
+        candidates.RemoveAll(c => (c.pos - start).sqrMagnitude < keyCardMinPlayerDistance * keyCardMinPlayerDistance);
+        if (debugLog) Debug.Log($"[MissionManager] 열쇠 카드 후보 {candidates.Count}곳");
+
+        var picked = new List<Vector3>();
+        // 1차: 서로 keyCardMinSeparation 이상 떨어진 곳 / 2차: 모자라면 거리 무시
+        for (int pass = 0; pass < 2 && picked.Count < keyCardsRequired; pass++)
         {
-            var kind = i < keyCardBuildings.Length ? keyCardBuildings[i] : LootDatabase.BuildingKind.House;
-            var b = PickBuilding(buildings, kind, used, start);
-            if (b == null) b = PickBuilding(buildings, LootDatabase.BuildingKind.Warehouse, used, start);
-            if (b == null) b = PickBuilding(buildings, LootDatabase.BuildingKind.House, used, start);
-            if (b == null) { Debug.LogWarning("[MissionManager] 열쇠 카드 놓을 건물이 모자람"); break; }
-            used.Add(b);
-
-            var trig = LootWorldSpawner.FindTrigger(b);
-            if (trig == null || !LootWorldSpawner.TryInteriorPoint(trig.bounds, out Vector3 p)) { i--; continue; } // 다른 건물로 다시
-            var card = KeyCardPickup.Create(p, BuildingLabel(LootDatabase.Classify(b)));
-            card.transform.SetParent(transform, true);
-            keyCardsInWorld.Add(card);
-            if (debugLog) Debug.Log($"[MissionManager] 열쇠 카드 {i + 1} → {card.buildingLabel} ({b.name}) {p}");
+            var left = new List<(Vector3 pos, string label)>(candidates);
+            while (left.Count > 0 && picked.Count < keyCardsRequired)
+            {
+                int idx = Random.Range(0, left.Count);
+                var (pos, label) = left[idx];
+                left.RemoveAt(idx);
+                if (picked.Contains(pos)) continue;
+                if (pass == 0 && picked.Exists(q => (q - pos).sqrMagnitude < keyCardMinSeparation * keyCardMinSeparation)) continue;
+                picked.Add(pos);
+                var card = KeyCardPickup.Create(pos, label);
+                card.transform.SetParent(transform, true);
+                keyCardsInWorld.Add(card);
+                if (debugLog) Debug.Log($"[MissionManager] 열쇠 카드 {picked.Count} → {label} {pos}");
+            }
         }
-    }
-
-    /// <summary>kind 종류 건물 중 아직 안 쓴 것 랜덤 (집은 시작 지점 40m 안 제외 - 바로 줍지 않게)</summary>
-    static BuildingInterior PickBuilding(List<BuildingInterior> all, LootDatabase.BuildingKind kind, HashSet<BuildingInterior> used, Vector3 start)
-    {
-        var list = all.FindAll(b => !used.Contains(b) && LootDatabase.Classify(b) == kind && LootWorldSpawner.FindTrigger(b) != null
-                                    && (kind != LootDatabase.BuildingKind.House || (b.transform.position - start).sqrMagnitude > 40f * 40f));
-        return list.Count > 0 ? list[Random.Range(0, list.Count)] : null;
+        if (picked.Count < keyCardsRequired) Debug.LogError($"[MissionManager] 열쇠 카드 후보 부족: {picked.Count}/{keyCardsRequired}");
     }
 
     public static string BuildingLabel(LootDatabase.BuildingKind k) => k switch
@@ -218,23 +230,48 @@ public class MissionManager : MonoBehaviour
         return true;
     }
 
+    /// <summary>외딴 고립 구역이 아닌지: 맵 중앙 쪽 60m 지점까지 NavMesh 경로가 이어지는지.
+    /// 먼 경로는 탐색 한도로 PathPartial이 나오므로 가까운 지점으로 판정</summary>
+    public static bool IsConnectedToMap(Vector3 pos)
+    {
+        var terrain = Terrain.activeTerrain;
+        Vector3 center = terrain != null ? terrain.transform.position + terrain.terrainData.size / 2f : Vector3.zero;
+        center.y = pos.y;
+        Vector3 toCenter = center - pos;
+        Vector3 mid = pos + (toCenter.sqrMagnitude > 3600f ? toCenter.normalized * 60f : toCenter);
+        if (!NavMesh.SamplePosition(mid, out NavMeshHit mh, 8f, NavMesh.AllAreas)) return false;
+        var path = new NavMeshPath();
+        return NavMesh.CalculatePath(pos, mh.position, NavMesh.AllAreas, path) && path.status == NavMeshPathStatus.PathComplete;
+    }
+
     public void CollectKeyCard(KeyCardPickup card)
     {
         if (Finished) return;
         keyCardsInWorld.Remove(card);
         KeyCards++;
         if (HasAllKeyCards)
-            PickupFeedbackUI.Instance?.Show(SurvivedEnough ? "열쇠 카드 전부 획득! 탈출 지점으로" : $"열쇠 카드 전부 획득! {EscapeDay}일차에 탈출 지점이 열린다");
+            PickupFeedbackUI.Instance?.Show("열쇠 카드 전부 획득!");
         else
             PickupFeedbackUI.Instance?.Show($"열쇠 카드 획득 ({KeyCards}/{keyCardsRequired})");
         if (debugLog) Debug.Log($"[MissionManager] 열쇠 카드 {KeyCards}/{keyCardsRequired} ({card.buildingLabel})");
+        RefreshProgress();
+    }
+
+    /// <summary>진행률 다시 계산. 처음 100%가 되면 탈출 지점 열림 이벤트 + 알림</summary>
+    void RefreshProgress()
+    {
+        TotalProgress = Mathf.Clamp(KeyCardProgress + SubMissionProgress + SurvivalProgress, 0f, 100f);
+        if (escapeUnlocked || TotalProgress < 100f) return;
+        escapeUnlocked = true;
+        if (debugLog) Debug.Log("[MissionManager] 진행률 100% → 탈출 지점 열림");
+        PlaySound(l => l.missionNotification);
+        GetComponent<MissionHUD>()?.ShowToast("탈출 가능!", "초록 빛기둥으로 이동");
+        EscapeUnlocked?.Invoke();
     }
 
     public string EscapeLockedReason()
     {
-        if (!HasAllKeyCards && !SurvivedEnough) return $"잠김: 열쇠 카드 {KeyCards}/{keyCardsRequired} · {EscapeDay}일차에 열림";
-        if (!HasAllKeyCards) return $"잠김: 열쇠 카드 {KeyCards}/{keyCardsRequired}";
-        return $"잠김: {EscapeDay}일차에 열림 (지금 {CurrentDay}일차)";
+        return $"잠김: 총 진행률 {Mathf.FloorToInt(TotalProgress)}% (100% 필요)";
     }
 
     /// <summary>탈출 지점 도달 → 클리어</summary>
@@ -374,7 +411,12 @@ public class MissionManager : MonoBehaviour
             if (!s.active || s.Done || s.kind != kind) continue; // 활성화된 미션만 진행
             if (kind == SubMission.Kind.VisitBuilding && s.building != building) continue;
             s.progress++;
-            if (s.Done) GiveReward(s);
+            if (s.Done)
+            {
+                CompletedSubMissions++;
+                GiveReward(s);
+                RefreshProgress();
+            }
         }
     }
 

@@ -30,10 +30,15 @@ public class AudioManager : MonoBehaviour
         // public const float Gunshot = 1.0f;   // (이전) 플레이테스트: 너무 커서 낮춤
         public const float Gunshot = 0.8f;      // 긴장감, 원거리 식별
         public const float GunshotShotgun = 0.9f; // 샷건은 여전히 가장 크게
-        public const float ZombieScream = 0.9f; // 위협 표현 (추적/공격/사망)
+        // public const float ZombieScream = 0.9f; // (이전) 플레이테스트: 100마리 몰리면 시끄러움
+        public const float ZombieScream = 0.6f; // 위협 표현 (추적/공격)
+        public const float ZombieDeath = 0.7f;  // 사망 단말마
+        public const float ZombieBreath = 0.3f; // 거친 숨소리
+        public const float ZombieBus = 0.72f;   // 좀비 목소리 전체 추가 감쇠 (-2.9dB) → 신음/비명/숨/사망 모두 이전 대비 -5dB 이상
         public const float PlayerHurt = 0.9f;   // 위기감 (피격/사망)
         // public const float ZombieGroan = 0.6f; // (이전) 좀비가 많으면 시끄러워서 낮춤
-        public const float ZombieGroan = 0.4f;  // 배경 분위기
+        // public const float ZombieGroan = 0.4f; // (이전) 플레이테스트: 분위기용 수준으로 낮춤
+        public const float ZombieGroan = 0.25f; // 배경 분위기
         public const float Notification = 0.5f; // 서브 미션 활성화/완료, 점수, 실패/에러 알림
         public const float DayAmbient = 0.2f;   // 낮/평시 배경 루프
         public const float NightAmbient = 0.3f; // 밤 배경 루프

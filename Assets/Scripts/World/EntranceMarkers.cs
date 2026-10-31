@@ -41,20 +41,8 @@ public class EntranceMarkers : MonoBehaviour
         foreach (var b in FindObjectsByType<BuildingInterior>(FindObjectsSortMode.None))
         {
             if (!Colors.TryGetValue(LootDatabase.Classify(b), out Color color)) continue;
-            var kind = LootDatabase.Classify(b);
             var trig = LootWorldSpawner.FindTrigger(b);
-            // 문 찾기: 건물 자식의 벽 콜라이더 중 문 있는 것 전부 (병원은 정문이 벽 조각 3개에 걸쳐 있음) → 문 중심 평균
-            var doors = DoorCenters(b.GetComponentsInChildren<BuildingWallCollider>(true));
-            if (doors.Count == 0 && b.transform.parent != null) doors = DoorCenters(b.transform.parent.GetComponentsInChildren<BuildingWallCollider>(true));
-            if (trig == null || doors.Count == 0) { Debug.LogWarning($"[EntranceMarkers] '{b.name}' 문을 못 찾음 - 입구 표시 생략"); continue; }
-            Vector3 door = Vector3.zero;
-            foreach (var d in doors) door += d;
-            door /= doors.Count;
-
-            // 바깥 방향: 실내 트리거 중심 → 문 (건물 축에 맞춰 정렬). 병원은 트리거가 현관 마당까지 덮어서 이 방법이 대각선이 됨
-            // → HospitalEnterableSetup의 정문 구멍(바깥 3.8m / 안쪽 5m, x -310.5~-301.5) 기준 바깥 = +X 로 고정
-            Vector3 outDir = kind == LootDatabase.BuildingKind.Hospital ? Vector3.right : SnapToAxis(door - trig.bounds.center, b.transform);
-            if (outDir.sqrMagnitude < 0.01f) continue;
+            if (!TryGetDoor(b, out Vector3 door, out Vector3 outDir)) { Debug.LogWarning($"[EntranceMarkers] '{b.name}' 문을 못 찾음 - 입구 표시 생략"); continue; }
             PlaceMarker(b, door, outDir, color, trig.bounds.min.y);
             placed++;
         }
@@ -109,6 +97,24 @@ public class EntranceMarkers : MonoBehaviour
             }
             return markerMat;
         }
+    }
+
+    /// <summary>건물 문 중심(여러 벽 조각에 걸치면 평균)과 바깥 방향. 문/트리거가 없으면 false</summary>
+    public static bool TryGetDoor(BuildingInterior b, out Vector3 door, out Vector3 outDir)
+    {
+        door = outDir = Vector3.zero;
+        var trig = LootWorldSpawner.FindTrigger(b);
+        // 문 찾기: 건물 자식의 벽 콜라이더 중 문 있는 것 전부 (병원은 정문이 벽 조각 3개에 걸쳐 있음) → 문 중심 평균
+        var doors = DoorCenters(b.GetComponentsInChildren<BuildingWallCollider>(true));
+        if (doors.Count == 0 && b.transform.parent != null) doors = DoorCenters(b.transform.parent.GetComponentsInChildren<BuildingWallCollider>(true));
+        if (trig == null || doors.Count == 0) return false;
+        foreach (var d in doors) door += d;
+        door /= doors.Count;
+
+        // 바깥 방향: 실내 트리거 중심 → 문 (건물 축에 맞춰 정렬). 병원은 트리거가 현관 마당까지 덮어서 이 방법이 대각선이 됨
+        // → HospitalEnterableSetup의 정문 구멍(바깥 3.8m / 안쪽 5m, x -310.5~-301.5) 기준 바깥 = +X 로 고정
+        outDir = LootDatabase.Classify(b) == LootDatabase.BuildingKind.Hospital ? Vector3.right : SnapToAxis(door - trig.bounds.center, b.transform);
+        return outDir.sqrMagnitude > 0.01f;
     }
 
     internal static List<Vector3> DoorCenters(BuildingWallCollider[] walls) // NeonSigns도 사용
