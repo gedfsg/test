@@ -92,14 +92,13 @@ public class ZombieSpawner : MonoBehaviour
              "실내는 그대로 (파밍 위험 유지). 노을/밤/새벽은 그대로")]
     [Range(0f, 1f)] public float dayOutdoorCapRatio = 0.25f;
 
-    [Header("━━ 최종 공격 (마지막 날 좀비 떼) ━━")]
-    [Tooltip("마지막 날엔 플레이어 주변에 주기적으로 좀비 떼가 생기고, 떼 좀비는 거리 상관없이 플레이어를 추적")]
+    [Header("━━ 최종 공격 (7일차부터 매일 밤 좀비 떼) ━━")]
+    [Tooltip("7일차부터 매일 밤 플레이어 주변에 주기적으로 좀비 떼가 생기고, 떼 좀비는 거리 상관없이 플레이어를 추적")]
     public bool enableFinalAssault = true;
     [Tooltip("이 날부터 최종 공격. 0이면 DayNightCycle.totalDays (7일차)")]
     public int finalAssaultDay = 0;
-    [Tooltip("낮: 좀비 떼 간격(초) / 마리 수")]
-    public float hordeInterval = 30f;
-    public int hordeSize = 6;
+    [Tooltip("시작일 이후 하루마다 떼 마리 수 증가")]
+    public int hordeSizePerDay = 5;
     [Tooltip("밤: 좀비 떼 간격(초) / 마리 수")]
     public float nightHordeInterval = 15f;
     public int nightHordeSize = 10;
@@ -122,7 +121,7 @@ public class ZombieSpawner : MonoBehaviour
     private float countLogTimer;
     private float streamTimer;
     private float hordeTimer = 5f;            // 최종 공격 시작 후 첫 떼까지
-    private bool  finalAssaultAnnounced;
+    private int   finalAssaultAnnouncedDay;
     private readonly List<GameObject> hordeZombies = new List<GameObject>();
     private readonly List<Transform> nearIndoorPoints = new List<Transform>(); // 스트리밍용: 플레이어 근처 실내 포인트
 
@@ -254,31 +253,33 @@ public class ZombieSpawner : MonoBehaviour
 
     // ─────────────────────────────────────────────
 
-    /// <summary>마지막 날(finalAssaultDay)이면 hordeInterval마다 플레이어 25~35m 둘레에 좀비 떼 생성 (밤엔 더 자주, 더 많이)</summary>
+    /// <summary>finalAssaultDay부터 매일 밤 nightHordeInterval마다 플레이어 25~35m 둘레에 좀비 떼 생성 (하루마다 hordeSizePerDay씩 증가)</summary>
     void UpdateFinalAssault(bool isNight)
     {
         var dnc = DayNightCycle.Instance;
         if (!enableFinalAssault || dnc == null || player == null) return;
         int day = finalAssaultDay > 0 ? finalAssaultDay : dnc.totalDays;
-        if (dnc.CurrentDay < day) return;
+        hordeZombies.RemoveAll(z => z == null);
+        if (dnc.CurrentDay < day || !isNight) { hordeTimer = 5f; return; } // 밤이 시작되면 5초 뒤 첫 떼
 
-        if (!finalAssaultAnnounced)
+        if (finalAssaultAnnouncedDay != dnc.CurrentDay)
         {
-            finalAssaultAnnounced = true;
+            finalAssaultAnnouncedDay = dnc.CurrentDay;
             PickupFeedbackUI.Instance?.ShowWarning("최종 공격! 좀비 떼가 몰려온다");
             Debug.Log($"[ZombieSpawner] ☠ {dnc.CurrentDay}일차 최종 공격 시작");
         }
 
-        hordeZombies.RemoveAll(z => z == null);
         hordeTimer -= Time.deltaTime;
         if (hordeTimer > 0f) return;
-        hordeTimer = isNight ? nightHordeInterval : hordeInterval;
+        hordeTimer = nightHordeInterval;
 
-        int size = isNight ? nightHordeSize : hordeSize;
+        int extra = hordeSizePerDay * (dnc.CurrentDay - day);
+        int size = nightHordeSize + extra;
+        int maxHorde = maxHordeZombies + extra;
         int spawned = 0;
         // 떼는 한 방향에서 몰려오게: 기준 방향 ±60° 안에서 생성
         float baseAngle = Random.Range(0f, 360f);
-        for (int i = 0; i < size * 4 && spawned < size && hordeZombies.Count < maxHordeZombies; i++)
+        for (int i = 0; i < size * 4 && spawned < size && hordeZombies.Count < maxHorde; i++)
         {
             float a = (baseAngle + Random.Range(-60f, 60f)) * Mathf.Deg2Rad;
             Vector3 candidate = player.position + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * Random.Range(hordeMinDistance, hordeMaxDistance);
@@ -289,15 +290,36 @@ public class ZombieSpawner : MonoBehaviour
             if (zc != null) zc.huntPlayer = true; // 거리 상관없이 플레이어 추적
             spawned++;
         }
-        if (debugLog) Debug.Log($"[ZombieSpawner] ☠ 좀비 떼 {spawned}마리 (떼 좀비 {hordeZombies.Count}/{maxHordeZombies})");
+        if (debugLog) Debug.Log($"[ZombieSpawner] ☠ 좀비 떼 {spawned}마리 (떼 좀비 {hordeZombies.Count}/{maxHorde})");
     }
 
-    /// <summary>일차별 최대 수 비율 (1일차 startCapRatio → 하루마다 +capRatioPerDay, 최대 1)</summary>
+    /// <summary>일차별 최대 수 비율 (1일차 startCapRatio → 하루마다 +capRatioPerDay, 7일차 1 → 이후 연장 배수)</summary>
     float CapScale()
     {
-        if (!enableStreaming) return 1f;
         int day = DayNightCycle.Instance != null ? DayNightCycle.Instance.CurrentDay : 1;
-        return Mathf.Clamp(startCapRatio + capRatioPerDay * (day - 1), 0.1f, 1f);
+        if (!enableStreaming) return ExtendedCountMultiplier(day);
+        return Mathf.Clamp(startCapRatio + capRatioPerDay * (day - 1), 0.1f, 1f) * ExtendedCountMultiplier(day);
+    }
+
+    /// <summary>오늘 최대 좀비 수 (실내 + 실외, 밤 기준) - HUD 표시용</summary>
+    public int TodayZombieCap => Mathf.RoundToInt(maxIndoorZombies * CapScale()) + Mathf.RoundToInt(maxOutdoorZombies * CapScale());
+
+    // 7일 넘긴 뒤 좀비 수 배수: Day 7 = 1 기준으로 Day 8 ×1.2 / 9 ×1.5 / 10 ×1.8 / 11+ 하루마다 +0.3 (50→60→75→90→+15 비율)
+    static float ExtendedCountMultiplier(int day)
+    {
+        if (day <= 7) return 1f;
+        if (day == 8) return 1.2f;
+        return 1.5f + 0.3f * (day - 9);
+    }
+
+    /// <summary>7일 넘긴 뒤 좀비 이동속도/공격력 배수: Day 8 +10%, 하루마다 +10%</summary>
+    public static float DifficultyMultiplier
+    {
+        get
+        {
+            int day = DayNightCycle.Instance != null ? DayNightCycle.Instance.CurrentDay : 1;
+            return 1f + 0.1f * Mathf.Max(0, day - 7);
+        }
     }
 
     /// <summary>플레이어에서 despawnDistance보다 멀고 카메라에 안 보이는 좀비 삭제. 지운 수 반환</summary>

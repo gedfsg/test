@@ -109,6 +109,9 @@ public class AudioManager : MonoBehaviour
         l.transform.SetParent(transform, false);
         l.AddComponent<AudioListener>();
         listener = l.transform;
+
+        // 씬이 뜨자마자 카메라 리스너를 끔 (첫 프레임에 리스너 2개 경고 방지)
+        UnityEngine.SceneManagement.SceneManager.sceneLoaded += (scene, mode) => DisableOtherListeners();
     }
 
     void Start()
@@ -137,8 +140,7 @@ public class AudioManager : MonoBehaviour
         if (Time.unscaledTime >= nextListenerCheck)
         {
             nextListenerCheck = Time.unscaledTime + 1f;
-            foreach (var other in FindObjectsByType<AudioListener>(FindObjectsSortMode.None))
-                if (other.transform != listener && other.enabled) other.enabled = false;
+            DisableOtherListeners();
         }
 
         var cam = Camera.main;
@@ -146,6 +148,12 @@ public class AudioManager : MonoBehaviour
         else if (cam != null) listener.position = cam.transform.position;
         // 화면 기준 좌우 = 소리 좌우 (Q/E로 카메라를 돌려도 맞게 카메라 Y회전만 따라감)
         if (cam != null) listener.rotation = Quaternion.Euler(0f, cam.transform.eulerAngles.y, 0f);
+    }
+
+    void DisableOtherListeners()
+    {
+        foreach (var other in FindObjectsByType<AudioListener>(FindObjectsSortMode.None))
+            if (other.transform != listener && other.enabled) other.enabled = false;
     }
 
     /// <summary>현재 소리를 듣는 위치 (플레이어 머리). 좀비 목소리 거리 판정용</summary>

@@ -12,8 +12,8 @@ using UnityEngine.UI;
 ///   ○ 7일 생존                3/7일
 ///   ○ 열쇠 카드 수집           1/4
 ///   ○ 탈출 지점 도달      100% 필요
-///   서브 미션                 점수 300     (활성화된 서브 미션만, 없으면 안내 한 줄)
-///   ● 좀비 15마리 처치  15/15  점수 300
+///   서브 미션 (Day 3)          오늘 100%
+///   ○ 좀비 15마리 처치     7/15 (46%)
 ///
 /// 인벤토리를 열면 패널(가려짐)을 숨기고 한 줄 요약만 표시.
 /// 화살표: 열쇠 카드를 다 모으면 탈출 지점이 화면 밖일 때 방향 + 거리 표시 (열쇠 카드 위치는 플레이어가 직접 탐색).
@@ -31,7 +31,7 @@ public class MissionHUD : MonoBehaviour
     RectTransform panel;
     Image panelBg;
     readonly List<(Image icon, TextMeshProUGUI label, TextMeshProUGUI value)> rows = new List<(Image, TextMeshProUGUI, TextMeshProUGUI)>();
-    TextMeshProUGUI scoreText;
+    TextMeshProUGUI subHeaderText, subRightText;
     InventoryUI inventoryUI;
     TextMeshProUGUI compactText;  // 인벤토리 열림: 메인 미션 한 줄 요약
     TextMeshProUGUI progressText; // 상단 중앙 총 진행률
@@ -60,8 +60,7 @@ public class MissionHUD : MonoBehaviour
         scaler.referenceResolution = new Vector2(1681f, 936f);
         scaler.matchWidthOrHeight = 0.5f;
 
-        // 패널: 오른쪽 위 고정 (높이는 활성 서브 미션 수에 맞춰 Update에서 조절)
-        // int lines = 1 + 3 + 1 + 1 + mm.subMissions.Count; // (이전) 서브 미션 전부 표시
+        // 패널: 오른쪽 위 고정 (높이는 오늘 서브 미션 수에 맞춰 Update에서 조절)
         float height = PanelHeight(0);
         panelBg = HudStyle.NewImage(canvasGo.transform, "Panel", HudStyle.RoundedRect, HudStyle.PanelBg, Vector2.zero, new Vector2(Width, height));
         panel = panelBg.rectTransform;
@@ -74,11 +73,9 @@ public class MissionHUD : MonoBehaviour
         {
             Row(ref y);
         }
-        scoreText = Header("서브 미션", ref y);
-        float subY = y;
-        foreach (var _ in mm.subMissions) Row(ref y); // 최대(뽑힌 수)만큼 미리 만들고 활성화된 것만 보임
-        emptyText = Text("SubEmpty", "탐색하면 새 미션이 나타남", HudStyle.Regular, 14f, HudStyle.TextDim, TextAlignmentOptions.MidlineLeft,
-                         new Vector2(34f, subY), Width - 44f);
+        subRightText = Header("서브 미션", ref y);
+        subHeaderText = panel.Find("H_서브 미션").GetComponent<TextMeshProUGUI>();
+        for (int i = 0; i < MissionManager.MaxDailySubMissions; i++) Row(ref y); // 최대 수만큼 미리 만들고 오늘 것만 보임
 
         BuildToast(canvasGo.transform);
         BuildProgressBar(canvasGo.transform);
@@ -148,34 +145,32 @@ public class MissionHUD : MonoBehaviour
         compactText.gameObject.SetActive(inventoryOpen);
         if (inventoryOpen) compactText.text = $"진행률 {Mathf.FloorToInt(mm.TotalProgress)}% · 열쇠 {mm.KeyCards}/{mm.keyCardsRequired}";
 
-        int escapeDay = mm.EscapeDay;
-        SetRow(0, $"{escapeDay}일 생존", $"{Mathf.Min(mm.CurrentDay, escapeDay)}/{escapeDay}일", mm.SurvivedEnough);
+        int goalDays = mm.SurvivalGoalDays;
+        SetRow(0, $"{goalDays}일 생존", $"{mm.CompletedDays}/{goalDays}일", mm.SurvivedEnough);
         SetRow(1, "열쇠 카드 수집", $"{mm.KeyCards}/{mm.keyCardsRequired}", mm.HasAllKeyCards, KeyColor);
         SetRow(2, "탈출 지점 도달", mm.Escaped ? "탈출!" : mm.CanEscape ? "열림!" : "100% 필요", mm.Escaped,
                mm.CanEscape ? DoneColor : (Color?)null);
 
-        scoreText.text = $"점수 {mm.Score}";
-        // for (int i = 0; i < mm.subMissions.Count; i++) // (이전) 뽑힌 미션 전부
-        var shown = mm.activeSubMissions;
-        for (int i = 0; i < mm.subMissions.Count; i++)
+        subHeaderText.text = $"서브 미션 (Day {mm.CurrentDay})";
+        subRightText.text = mm.TodayAllDone ? "오늘 100%" : "";
+        var shown = mm.subMissions;
+        for (int i = 0; i < MissionManager.MaxDailySubMissions; i++)
         {
             bool visible = i < shown.Count;
             var (icon, l, v) = rows[3 + i];
             icon.gameObject.SetActive(visible); l.gameObject.SetActive(visible); v.gameObject.SetActive(visible);
             if (!visible) continue;
             var s = shown[i];
-            string prog = s.target > 1 ? $"{Mathf.Min(s.progress, s.target)}/{s.target}  " : "";
-            SetRow(3 + i, s.title, prog + s.RewardText, s.Done);
+            SetRow(3 + i, s.title, $"{Mathf.Min(s.progress, s.target)}/{s.target} ({s.Percent}%)", s.Done);
         }
-        emptyText.gameObject.SetActive(shown.Count == 0);
         panel.sizeDelta = new Vector2(Width, PanelHeight(shown.Count));
 
         UpdateToast();
         UpdateArrow();
     }
 
-    // 제목 + 메인3 + 서브 제목 + 서브 (없으면 안내 한 줄)
-    static float PanelHeight(int subRows) => (1 + 3 + 1 + Mathf.Max(1, subRows)) * LineH + 24f;
+    // 제목 + 메인3 + 서브 제목 + 서브
+    static float PanelHeight(int subRows) => (1 + 3 + 1 + subRows) * LineH + 24f;
 
     // ── 상단 중앙 총 진행률 (날짜/시간 HUD 바로 아래) ──
     void BuildProgressBar(Transform canvas)
@@ -202,7 +197,7 @@ public class MissionHUD : MonoBehaviour
 
     // ── 토스트: 서브 미션 활성화 알림 (화면 위 가운데, 2초 후 사라짐) ──
     const float ToastDuration = 2f, ToastFade = 0.3f;
-    TextMeshProUGUI emptyText, toastTitle, toastSub;
+    TextMeshProUGUI toastTitle, toastSub;
     CanvasGroup toastGroup;
     readonly Queue<(string title, string sub)> toastQueue = new Queue<(string, string)>();
     float toastUntil = -1f;

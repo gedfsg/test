@@ -44,13 +44,17 @@ public class SurvivalDayHUD : MonoBehaviour
     Image[] dayFills, dayBorders;
     TextMeshProUGUI[] dayNumbers;
     int shownDay = -1;
+    int totalDays = 7;
+    Image titleLineL, titleLineR;
+    ZombieSpawner spawner;
     DayNightCycle.Phase shownPhase;
     bool shownIndoor;
 
     void Start()
     {
         var dnc = DayNightCycle.Instance;
-        int totalDays = dnc != null ? dnc.totalDays : 7;
+        totalDays = dnc != null ? dnc.totalDays : 7;
+        spawner = FindFirstObjectByType<ZombieSpawner>();
         Build(totalDays);
         Refresh(force: true);
     }
@@ -71,8 +75,8 @@ public class SurvivalDayHUD : MonoBehaviour
         titleText = HudStyle.NewText(root, "Title", "생존 1일차", HudStyle.SemiBold, 19f, titleColor,
             TextAlignmentOptions.Center, new Vector2(0f, TitleY), new Vector2(200f, 30f));
         var lineColor = new Color32(200, 196, 192, 200);
-        HudStyle.NewImage(root, "TitleLineL", null, lineColor, new Vector2(-123f, TitleY + 0.5f), new Vector2(115f, 2f));
-        HudStyle.NewImage(root, "TitleLineR", null, lineColor, new Vector2(122f, TitleY + 0.5f), new Vector2(115f, 2f));
+        titleLineL = HudStyle.NewImage(root, "TitleLineL", null, lineColor, new Vector2(-123f, TitleY + 0.5f), new Vector2(115f, 2f));
+        titleLineR = HudStyle.NewImage(root, "TitleLineR", null, lineColor, new Vector2(122f, TitleY + 0.5f), new Vector2(115f, 2f));
 
         // ── 날짜 원 1~N + 연결선 ──
         float firstX = -(totalDays - 1) * CircleSpacing / 2f;
@@ -123,11 +127,15 @@ public class SurvivalDayHUD : MonoBehaviour
         var (hour, minute) = dnc.GetVirtualClock();
         clockText.text = $"{hour:00}:{minute:00}";
 
-        int day = Mathf.Clamp(dnc.CurrentDay, 1, dayFills.Length);
-        if (force || day != shownDay)
+        int realDay = dnc.CurrentDay;
+        int day = Mathf.Clamp(realDay, 1, dayFills.Length); // 7일 넘어가면 마지막 원 유지
+        if (force || realDay != shownDay)
         {
-            shownDay = day;
-            titleText.text = $"생존 {day}일차";
+            shownDay = realDay;
+            bool extended = realDay > totalDays;
+            titleText.text = extended ? $"생존 {realDay}일차 (연장)" : $"생존 {realDay}일차";
+            titleLineL.enabled = titleLineR.enabled = !extended; // 긴 제목에 양옆 선이 겹침
+            goalText.text = extended && spawner != null ? $"오늘 좀비 {spawner.TodayZombieCap}마리" : $"생존 목표 · {totalDays}일";
             for (int i = 0; i < dayFills.Length; i++)
             {
                 bool current = i + 1 == day;

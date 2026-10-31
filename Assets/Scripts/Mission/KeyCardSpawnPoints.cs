@@ -88,18 +88,13 @@ public static class KeyCardSpawnPoints
     // 소품 옆 1.5~3m 지면 NavMesh 점 (건물 안/지붕 제외, 맵 안쪽으로 걸어갈 수 있는 곳만)
     static bool TryBeside(Vector3 prop, List<Bounds> trigs, out Vector3 point)
     {
-        var terrain = Terrain.activeTerrain;
         for (int i = 0; i < 6; i++)
         {
             Vector2 d = Random.insideUnitCircle.normalized * Random.Range(1.5f, 3f);
-            Vector3 p = prop + new Vector3(d.x, 0f, d.y);
-            float ground = terrain != null ? terrain.SampleHeight(p) + terrain.transform.position.y : prop.y;
-            p.y = ground + 0.5f;
-            if (!NavMesh.SamplePosition(p, out NavMeshHit hit, 2f, NavMesh.AllAreas)) continue;
-            if (Mathf.Abs(hit.position.y - ground) > 1.5f) continue;
-            if (trigs.Exists(t => t.Contains(hit.position))) continue;
-            if (!MissionManager.IsConnectedToMap(hit.position)) continue;
-            point = hit.position;
+            if (!MissionManager.TryGroundPoint(prop.x + d.x, prop.z + d.y, prop.y, out Vector3 p)) continue;
+            if (trigs.Exists(t => t.Contains(p))) continue;
+            if (!MissionManager.IsConnectedToMap(p)) continue;
+            point = p;
             return true;
         }
         point = Vector3.zero;

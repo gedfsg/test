@@ -9,14 +9,11 @@ using UnityEngine.SceneManagement;
 /// ━ 메인 미션: 전체 진행률 100% = 탈출 가능 ━
 ///  가중치: 열쇠 카드 1개 +15% (최대 60) / 서브 미션 완료 1개 +5% (최대 40) / 생존 하루 +1.43% (7일 10)
 ///  열쇠 카드 4개: 판마다 맵 전체 후보 중 랜덤 4곳 (KeyCardSpawnPoints). 위치 힌트 없음
-///  탈출 지점: 진행률 100% 전엔 잠김, 도달하면 클리어
+///  탈출 지점: 진행률 100% 전엔 잠김, 도달하면 클리어. 7일이 지나도 게임오버 없이 Day가 계속 늘고 좀비가 강해짐 (ZombieSpawner)
 ///
 /// ━ 서브 미션 (실패 없음) ━
-///  좀비 처치 / 밤에 좀비 처치 / 상자 열기 / 건물 방문 / 소비 아이템 사용 중에서 판마다 랜덤으로 subMissionCount개 뽑음
-///  (재시작하면 다시 뽑음 - 직전 판과 같은 조합은 피함). 뽑힌 미션은 처음엔 숨겨져 있다가 트리거가 발동하면 활성화:
-///    건물 방문 = 그 종류 건물 100m 안 접근 / 밤에 처치 = 밤 시작 / 상자 = 첫 상자 열기 / 좀비 처치 = 첫 처치 / 소비 = 첫 사용
-///  활성화되면 알림 소리 + 토스트 2초. 동시 활성(진행 중)은 최대 maxActiveSubMissions개 - 넘치면 자리 날 때까지 대기.
-///  달성하면 아이템 또는 점수 보상
+///  매일(새벽→낮) 후보 중 랜덤 개수를 새로 할당 (Day 1: 2~3개 ... Day 6+: 4~5개). 미완료는 다음날 사라짐 (패널티 없음)
+///  완료할 때마다 진행률 +5% + 아이템 보상
 ///
 /// 씬에 따로 둘 필요 없음 - Player가 있는 씬이면 자동 생성 (DeathUI와 같은 방식).
 /// 씬에 직접 두면 Inspector 값(탈출 지점 위치 등)을 쓸 수 있음.
@@ -27,8 +24,6 @@ public class MissionManager : MonoBehaviour
 
     [Header("메인 미션")]
     public int keyCardsRequired = 4;
-    [Tooltip("탈출 지점이 열리는 날. 0이면 DayNightCycle.totalDays (7일차)")]
-    public int escapeDay = 0;
     [Tooltip("열쇠 카드가 플레이어 시작 지점에서 떨어져야 하는 최소 거리 (m)")]
     public float keyCardMinPlayerDistance = 50f;
     [Tooltip("열쇠 카드끼리 떨어져야 하는 최소 거리 (m). 후보가 모자라면 무시")]
@@ -41,21 +36,11 @@ public class MissionManager : MonoBehaviour
     [Tooltip("자동 선택 시 시작 지점에서 최소 거리 (m)")]
     public float escapeMinDistance = 180f;
 
-    [Header("서브 미션")]
-    // public int subMissionCount = 3; // (이전) 시작하자마자 3개 전부 표시
-    [Tooltip("이번 판에 뽑는 서브 미션 수 (처음엔 숨김, 트리거로 하나씩 활성화)")]
-    public int subMissionCount = 5;
-    [Tooltip("동시에 진행 중(활성 + 미완료)일 수 있는 최대 수")]
-    public int maxActiveSubMissions = 3;
-    [Tooltip("이 거리(m) 안으로 건물에 다가가면 그 건물 방문 미션 활성화")]
-    public float buildingTriggerRadius = 100f;
-
     [Header("디버그")]
     public bool debugLog = true;
 
     // ── 상태 ──
     public int KeyCards { get; private set; }
-    public int Score { get; private set; }
     public int CompletedSubMissions { get; private set; }
     /// <summary>전체 진행률 0~100 (100이면 탈출 지점 열림)</summary>
     public float TotalProgress { get; private set; }
@@ -64,23 +49,26 @@ public class MissionManager : MonoBehaviour
     bool escapeUnlocked;
     public bool Finished { get; private set; }
     public bool Escaped { get; private set; }
-    public readonly List<SubMission> subMissions = new List<SubMission>();       // 이번 판에 뽑힌 전부 (대기 포함)
-    public readonly List<SubMission> activeSubMissions = new List<SubMission>(); // 활성화된 것 (활성화 순서, 완료 포함) - HUD 표시용
-    public int RunningSubMissionCount => activeSubMissions.FindAll(s => !s.Done).Count;
-    readonly List<SubMission> waitingSubMissions = new List<SubMission>();      // 트리거는 됐는데 자리가 없어 대기 중
-    readonly Dictionary<LootDatabase.BuildingKind, List<Bounds>> buildingAreas = new Dictionary<LootDatabase.BuildingKind, List<Bounds>>();
-    float nextTriggerCheck;
-    static List<string> lastRunTitles; // 직전 판에 뽑은 서브 미션 (재시작 때 같은 조합 피하기)
+    public readonly List<SubMission> subMissions = new List<SubMission>(); // 오늘 할당된 서브 미션
+    public bool TodayAllDone { get; private set; }                         // "오늘 서브 100%"
+    public const int MaxDailySubMissions = 5;
+    List<BuildingInterior> buildingList;
+    float nextProgressRefresh;
+    static List<string> lastTitles; // 직전 할당 (같은 조합 연속 피하기)
+    Transform playerTf;
+    Vector3 lastPlayerPos;
+    float rainMeters;
     public readonly List<KeyCardPickup> keyCardsInWorld = new List<KeyCardPickup>();
     public EscapePoint EscapePointObj { get; private set; }
 
-    public int EscapeDay => escapeDay > 0 ? escapeDay : (DayNightCycle.Instance != null ? DayNightCycle.Instance.totalDays : 7);
+    public int SurvivalGoalDays => DayNightCycle.Instance != null ? DayNightCycle.Instance.totalDays : 7;
     public int CurrentDay => DayNightCycle.Instance != null ? DayNightCycle.Instance.CurrentDay : 1;
-    public bool SurvivedEnough => CurrentDay >= EscapeDay;
+    public int CompletedDays => Mathf.Min(CurrentDay - 1, SurvivalGoalDays);
+    public bool SurvivedEnough => CompletedDays >= SurvivalGoalDays;
     public bool HasAllKeyCards => KeyCards >= keyCardsRequired;
     public float KeyCardProgress => KeyCards * KeyCardWeight;
     public float SubMissionProgress => Mathf.Min(CompletedSubMissions * SubMissionWeight, SubMissionWeightMax);
-    public float SurvivalProgress => Mathf.Clamp01((CurrentDay - 1f) / EscapeDay) * SurvivalWeightMax; // 하루 끝날 때마다 누적, 7일차 완료 시 최대
+    public float SurvivalProgress => (float)CompletedDays / SurvivalGoalDays * SurvivalWeightMax; // 하루 끝날 때마다 누적, 7일차 완료 시 최대
     public bool CanEscape => !Finished && escapeUnlocked;
 
     // ─────────────────────────────────────────────
@@ -110,6 +98,7 @@ public class MissionManager : MonoBehaviour
 
     void OnDisable()
     {
+        if (DayNightCycle.Instance != null) DayNightCycle.Instance.onNewDay.RemoveListener(OnNewDay);
         ZombieController.AnyDied -= OnZombieDied;
         LootCrate.AnyOpened -= OnCrateOpened;
         BuildingInterior.PlayerEntered -= OnBuildingEntered;
@@ -120,20 +109,23 @@ public class MissionManager : MonoBehaviour
     void Start()
     {
         var buildings = new List<BuildingInterior>(FindObjectsByType<BuildingInterior>(FindObjectsSortMode.None));
+        buildingList = buildings;
+        playerTf = GameObject.FindWithTag("Player").transform;
+        lastPlayerPos = playerTf.position;
         PlaceKeyCards(buildings);
         PlaceEscapePoint(buildings);
-        PickSubMissions(buildings);
-        CacheBuildingAreas(buildings);
         gameObject.AddComponent<MissionHUD>();
+        AssignSubMissions(CurrentDay);
+        if (DayNightCycle.Instance != null) DayNightCycle.Instance.onNewDay.AddListener(OnNewDay);
     }
 
     void Update()
     {
-        if (Finished || Time.time < nextTriggerCheck) return;
-        nextTriggerCheck = Time.time + 0.25f;
+        if (Finished) return;
+        TrackRainDistance();
+        if (Time.time < nextProgressRefresh) return;
+        nextProgressRefresh = Time.time + 0.25f;
         RefreshProgress(); // 생존 일수는 시간으로 늘어남
-        CheckSubMissionTriggers();
-        ActivateWaiting(); // 미션 완료로 자리가 나면 대기 중인 것 활성화
     }
 
     // ── 메인 미션 ─────────────────────────────────
@@ -206,14 +198,11 @@ public class MissionManager : MonoBehaviour
         var candidates = new List<Vector3>();
         for (int i = 0; i < 400 && candidates.Count < 40; i++)
         {
-            var p = new Vector3(Random.Range(area.min.x, area.max.x), 0f, Random.Range(area.min.z, area.max.z));
-            p.y = terrain != null ? terrain.SampleHeight(p) + terrain.transform.position.y : start.y;
-            if (!NavMesh.SamplePosition(p, out NavMeshHit hit, 3f, NavMesh.AllAreas)) continue;
-            if (Mathf.Abs(hit.position.y - p.y) > 1.5f) continue;                       // 지붕/위층 제외
-            if ((hit.position - start).sqrMagnitude < escapeMinDistance * escapeMinDistance) continue;
-            if (trigs.Exists(t => t.Contains(hit.position))) continue;                   // 건물 안/바로 옆 제외
-            if (Physics.CheckSphere(hit.position + Vector3.up * 2.6f, 2f, ~0, QueryTriggerInteraction.Ignore)) continue; // 주변이 트여 있어야 (구 아래 끝이 지면 0.6m 위 - 지면에 닿으면 전부 막힘)
-            candidates.Add(hit.position);
+            if (!TryGroundPoint(Random.Range(area.min.x, area.max.x), Random.Range(area.min.z, area.max.z), start.y, out Vector3 c)) continue; // 지붕/위층/맵 아래 제외
+            if ((c - start).sqrMagnitude < escapeMinDistance * escapeMinDistance) continue;
+            if (trigs.Exists(t => t.Contains(c))) continue;                   // 건물 안/바로 옆 제외
+            if (Physics.CheckSphere(c + Vector3.up * 2.6f, 2f, ~0, QueryTriggerInteraction.Ignore)) continue; // 주변이 트여 있어야 (구 아래 끝이 지면 0.6m 위 - 지면에 닿으면 전부 막힘)
+            candidates.Add(c);
         }
         if (candidates.Count == 0) { result = Vector3.zero; return false; }
 
@@ -227,6 +216,19 @@ public class MissionManager : MonoBehaviour
             { result = c; return true; }
         }
         result = candidates[0];
+        return true;
+    }
+
+    /// <summary>(x, z)의 실제 걸을 수 있는 바닥 점. 지형 높이는 믿을 수 없음: 맵 바닥은 지형 위 Ground 콜라이더(약 15m)이고
+    /// 지형 자체는 곳곳이 0~10m라서, 지형 높이로 NavMesh를 찾으면 맵 아래 점이 나옴 (탈출 지점이 y=3에 생겨 도달 불가였음).
+    /// → 위에서 레이를 쏴 처음 닿는 면이 기준 높이 refY ±2.5m이고 평평하면 OK (지붕/나무 위/맵 아래 제외)</summary>
+    public static bool TryGroundPoint(float x, float z, float refY, out Vector3 point)
+    {
+        point = Vector3.zero;
+        if (!Physics.Raycast(new Vector3(x, refY + 150f, z), Vector3.down, out RaycastHit hit, 300f, ~0, QueryTriggerInteraction.Ignore)) return false;
+        if (Mathf.Abs(hit.point.y - refY) > 2.5f || hit.normal.y < 0.7f) return false;
+        if (!NavMesh.SamplePosition(hit.point, out NavMeshHit nav, 1.5f, NavMesh.AllAreas) || Mathf.Abs(nav.position.y - hit.point.y) > 1f) return false;
+        point = nav.position;
         return true;
     }
 
@@ -280,33 +282,40 @@ public class MissionManager : MonoBehaviour
         if (Finished) return;
         Finished = true;
         Escaped = true;
-        if (debugLog) Debug.Log($"[MissionManager] 탈출 성공! 점수 {Score}");
+        if (debugLog) Debug.Log("[MissionManager] 탈출 성공!");
         PlaySound(l => l.missionSuccess);
-        FindFirstObjectByType<DeathUI>()?.ShowEnding("탈출 성공", new Color(0.3f, 1f, 0.45f), $"{CurrentDay}일 생존 · 열쇠 카드 {KeyCards}/{keyCardsRequired} · 점수 {Score}");
-    }
-
-    /// <summary>마지막 날이 끝남 (DayNightCycle이 호출) → 탈출 못 했으면 게임오버</summary>
-    public void OnTimeUp()
-    {
-        if (Finished) return;
-        Finished = true;
-        string why = HasAllKeyCards ? "구조 헬기가 떠났다" : $"열쇠 카드를 다 못 모았다 ({KeyCards}/{keyCardsRequired})";
-        if (debugLog) Debug.Log($"[MissionManager] 시간 초과 → 미션 실패: {why}");
-        PlaySound(l => l.missionFail);
-        FindFirstObjectByType<DeathUI>()?.ShowEnding("MISSION FAILED", new Color(0.85f, 0.1f, 0.1f), $"{why} · 점수 {Score}");
+        FindFirstObjectByType<DeathUI>()?.ShowEnding("탈출 성공", new Color(0.3f, 1f, 0.45f), $"{CurrentDay}일 생존 · 열쇠 카드 {KeyCards}/{keyCardsRequired} · 서브 미션 {CompletedSubMissions}개");
     }
 
     // ── 서브 미션 ─────────────────────────────────
 
-    void PickSubMissions(List<BuildingInterior> buildings)
+    // 일차별 할당 개수 (최소, 최대)
+    static (int min, int max) DailyCount(int day)
     {
-        bool Has(LootDatabase.BuildingKind k) => buildings.Exists(b => LootDatabase.Classify(b) == k);
+        if (day <= 1) return (2, 3);
+        if (day == 2) return (2, 4);
+        if (day == 3) return (3, 4);
+        if (day <= 5) return (3, 5);
+        return (4, 5);
+    }
 
-        // 후보 (보상: 아이템 또는 점수)
+    /// <summary>새 날(새벽→낮) 시작: 어제 미완료 미션은 버리고 새로 랜덤 할당 (패널티 없음)</summary>
+    void OnNewDay(int day)
+    {
+        if (Finished) return;
+        AssignSubMissions(day);
+        RefreshProgress();
+    }
+
+    void AssignSubMissions(int day)
+    {
+        bool Has(LootDatabase.BuildingKind k) => buildingList.Exists(b => LootDatabase.Classify(b) == k);
+
+        // 후보 (보상은 아이템만)
         var pool = new List<SubMission>
         {
-            new SubMission { kind = SubMission.Kind.KillZombies, title = "좀비 15마리 처치", target = 15, rewardScore = 300 },
-            new SubMission { kind = SubMission.Kind.KillAtNight, title = "밤에 좀비 10마리 처치", target = 10, rewardScore = 500 },
+            new SubMission { kind = SubMission.Kind.KillZombies, title = "좀비 15마리 처치", target = 15, rewardItemName = "Pistol Ammo", rewardLabel = "권총탄 x20", rewardAmount = 20 },
+            new SubMission { kind = SubMission.Kind.KillAtNight, title = "밤에 좀비 10마리 처치", target = 10, rewardItemName = "MedKit", rewardLabel = "구급상자 x1", rewardAmount = 1 },
             new SubMission { kind = SubMission.Kind.OpenCrates, title = "상자 5개 열기", target = 5, rewardItemName = "MedKit", rewardLabel = "구급상자 x1", rewardAmount = 1 },
             new SubMission { kind = SubMission.Kind.UseConsumables, title = "소비 아이템 4번 사용", target = 4, rewardItemName = "CannedFood", rewardLabel = "통조림 x2", rewardAmount = 2 },
         };
@@ -315,163 +324,115 @@ public class MissionManager : MonoBehaviour
         if (Has(LootDatabase.BuildingKind.Police))
             pool.Add(new SubMission { kind = SubMission.Kind.VisitBuilding, building = LootDatabase.BuildingKind.Police, title = "경찰서 들어가기", rewardItemName = "Pistol Ammo", rewardLabel = "권총탄 x30", rewardAmount = 30 });
         if (Has(LootDatabase.BuildingKind.Church))
-            pool.Add(new SubMission { kind = SubMission.Kind.VisitBuilding, building = LootDatabase.BuildingKind.Church, title = "교회 들어가기", rewardScore = 200 });
+            pool.Add(new SubMission { kind = SubMission.Kind.VisitBuilding, building = LootDatabase.BuildingKind.Church, title = "교회 들어가기", rewardItemName = "CannedFood", rewardLabel = "통조림 x2", rewardAmount = 2 });
+        // 날씨 미션은 그 날씨인 날에만 후보 (날씨는 하루 단위로 정해져서, 아니면 그날 절대 못 깸)
+        if (WeatherManager.Current == WeatherManager.Weather.Fog)
+            pool.Add(new SubMission { kind = SubMission.Kind.KillInFog, title = "안개 속 좀비 5마리 처치", target = 5, rewardItemName = "Painkiller", rewardLabel = "진통제 x2", rewardAmount = 2 });
+        if (WeatherManager.Current == WeatherManager.Weather.Rain)
+            pool.Add(new SubMission { kind = SubMission.Kind.MoveInRain, title = "빗속 500m 이동", target = 500, rewardItemName = "CannedFood", rewardLabel = "통조림 x2", rewardAmount = 2 });
 
-        // 랜덤 subMissionCount개. 재시작(씬 다시 로드)이면 직전 판과 같은 조합이 나오지 않게 다시 뽑음 (후보가 모자라 불가능하면 그대로)
+        var (min, max) = DailyCount(day);
+        int count = Random.Range(min, max + 1);
+
+        // 랜덤 count개. 어제와 같은 조합이 나오지 않게 다시 뽑음 (후보가 모자라 불가능하면 그대로)
         var picked = new List<SubMission>();
         for (int attempt = 0; attempt < 20; attempt++)
         {
             var left = new List<SubMission>(pool);
             picked.Clear();
-            for (int i = 0; i < subMissionCount && left.Count > 0; i++)
+            for (int i = 0; i < count && left.Count > 0; i++)
             {
                 int idx = Random.Range(0, left.Count);
                 picked.Add(left[idx]);
                 left.RemoveAt(idx);
             }
-            if (!SameSet(picked, lastRunTitles)) break;
+            if (!SameSet(picked, lastTitles)) break;
         }
+        subMissions.Clear();
         subMissions.AddRange(picked);
-        lastRunTitles = subMissions.ConvertAll(s => s.title);
-        if (debugLog) Debug.Log("[MissionManager] 서브 미션(대기): " + string.Join(" / ", subMissions.ConvertAll(s => $"{s.title}(보상 {s.RewardText})")));
+        lastTitles = subMissions.ConvertAll(m => m.title);
+        TodayAllDone = false;
+
+        PlaySound(l => l.missionNotification); // notification-bell
+        GetComponent<MissionHUD>()?.ShowToast($"Day {day} 서브 미션 {subMissions.Count}개", "완료할 때마다 진행률 +5%");
+        if (debugLog) Debug.Log($"[MissionManager] Day {day} 서브 미션 {subMissions.Count}개: " + string.Join(" / ", subMissions.ConvertAll(m => $"{m.title}(보상 {m.RewardText})")));
     }
 
     static bool SameSet(List<SubMission> a, List<string> titles)
     {
         if (titles == null || a.Count != titles.Count) return false;
-        foreach (var s in a) if (!titles.Contains(s.title)) return false;
+        foreach (var m in a) if (!titles.Contains(m.title)) return false;
         return true;
     }
 
-    // 건물 방문 트리거용: 종류별 건물 실내 트리거 영역 (거리 = 영역 가장자리까지)
-    void CacheBuildingAreas(List<BuildingInterior> buildings)
-    {
-        foreach (var b in buildings)
-        {
-            var trig = LootWorldSpawner.FindTrigger(b);
-            if (trig == null) continue;
-            var kind = LootDatabase.Classify(b);
-            if (!buildingAreas.TryGetValue(kind, out var list)) buildingAreas[kind] = list = new List<Bounds>();
-            list.Add(trig.bounds);
-        }
-    }
-
-    /// <summary>위치/시간 트리거: 건물 100m 접근, 밤 시작 (상자/처치/소비는 각 이벤트에서 Trigger 호출)</summary>
-    void CheckSubMissionTriggers()
-    {
-        var player = GameObject.FindWithTag("Player");
-        foreach (var s in subMissions)
-        {
-            if (s.triggered) continue;
-            if (s.kind == SubMission.Kind.VisitBuilding && player != null && buildingAreas.TryGetValue(s.building, out var areas))
-            {
-                float r2 = buildingTriggerRadius * buildingTriggerRadius;
-                if (areas.Exists(a => a.SqrDistance(player.transform.position) <= r2)) Trigger(s);
-            }
-            else if (s.kind == SubMission.Kind.KillAtNight && DayNightCycle.Instance != null && DayNightCycle.Instance.IsNight)
-                Trigger(s);
-        }
-    }
-
-    /// <summary>kind 종류 서브 미션의 트리거 발동 (이벤트형: 첫 처치/첫 상자/첫 소비)</summary>
-    void TriggerKind(SubMission.Kind kind)
-    {
-        foreach (var s in subMissions) if (!s.triggered && s.kind == kind) Trigger(s);
-    }
-
-    void Trigger(SubMission s)
-    {
-        s.triggered = true;
-        waitingSubMissions.Add(s);
-        ActivateWaiting();
-    }
-
-    /// <summary>대기 중인 미션을 자리(동시 maxActiveSubMissions개)가 나는 만큼 트리거된 순서대로 활성화</summary>
-    void ActivateWaiting()
-    {
-        while (waitingSubMissions.Count > 0 && RunningSubMissionCount < maxActiveSubMissions)
-        {
-            var s = waitingSubMissions[0];
-            waitingSubMissions.RemoveAt(0);
-            s.active = true;
-            activeSubMissions.Add(s);
-
-            // 알림: 소리 + 토스트 2초
-            PlaySound(l => l.missionNotification); // notification-bell
-            GetComponent<MissionHUD>()?.ShowToast($"새 서브 미션: {s.title}", $"보상 {s.RewardText}");
-            if (debugLog) Debug.Log($"[MissionManager] 서브 미션 활성화: {s.title} (진행 중 {RunningSubMissionCount}/{maxActiveSubMissions}, 대기 {waitingSubMissions.Count})");
-        }
-    }
-
-    void Advance(SubMission.Kind kind, LootDatabase.BuildingKind building = default)
+    void Advance(SubMission.Kind kind, LootDatabase.BuildingKind building = default, int amount = 1)
     {
         if (Finished) return;
-        foreach (var s in subMissions)
+        foreach (var m in subMissions)
         {
-            if (!s.active || s.Done || s.kind != kind) continue; // 활성화된 미션만 진행
-            if (kind == SubMission.Kind.VisitBuilding && s.building != building) continue;
-            s.progress++;
-            if (s.Done)
+            if (m.Done || m.kind != kind) continue;
+            if (kind == SubMission.Kind.VisitBuilding && m.building != building) continue;
+            m.progress += amount;
+            if (!m.Done) continue;
+
+            CompletedSubMissions++;
+            GiveReward(m);
+            if (subMissions.TrueForAll(x => x.Done)) // 오늘 할당량 전부 완료
             {
-                CompletedSubMissions++;
-                GiveReward(s);
-                RefreshProgress();
+                TodayAllDone = true;
+                PickupFeedbackUI.Instance?.Show("오늘 서브 미션 100%!");
             }
+            RefreshProgress();
         }
     }
 
-    // 이벤트형 트리거는 진행도보다 먼저: 첫 처치/첫 상자/첫 소비가 활성화와 동시에 1로 카운트됨
     void OnZombieDied(ZombieController z)
     {
-        TriggerKind(SubMission.Kind.KillZombies);
         Advance(SubMission.Kind.KillZombies);
         if (DayNightCycle.Instance != null && DayNightCycle.Instance.IsNight) Advance(SubMission.Kind.KillAtNight);
+        if (WeatherManager.Current == WeatherManager.Weather.Fog) Advance(SubMission.Kind.KillInFog);
     }
 
-    void OnCrateOpened(LootCrate c) { TriggerKind(SubMission.Kind.OpenCrates); Advance(SubMission.Kind.OpenCrates); }
-    void OnBuildingEntered(BuildingInterior b)
+    void OnCrateOpened(LootCrate c) => Advance(SubMission.Kind.OpenCrates);
+    void OnBuildingEntered(BuildingInterior b) => Advance(SubMission.Kind.VisitBuilding, LootDatabase.Classify(b));
+    void OnConsumableUsed(ConsumableData d) => Advance(SubMission.Kind.UseConsumables);
+
+    // 빗속 이동: 비 오는 날 실외에서 걸은 거리 (m). 프레임당 10m 넘는 이동(순간이동)은 제외
+    void TrackRainDistance()
     {
-        CheckSubMissionTriggers(); // 0.25초 확인 주기 전에 바로 들어와도 접근 트리거부터 처리
-        Advance(SubMission.Kind.VisitBuilding, LootDatabase.Classify(b));
+        if (playerTf == null) return;
+        Vector3 d = playerTf.position - lastPlayerPos; d.y = 0f;
+        lastPlayerPos = playerTf.position;
+        if (WeatherManager.Current != WeatherManager.Weather.Rain || BuildingInterior.IsAnyoneIndoors || d.sqrMagnitude > 100f) return;
+        rainMeters += d.magnitude;
+        if (rainMeters < 1f) return;
+        int whole = Mathf.FloorToInt(rainMeters);
+        rainMeters -= whole;
+        Advance(SubMission.Kind.MoveInRain, default, whole);
     }
-    void OnConsumableUsed(ConsumableData d) { TriggerKind(SubMission.Kind.UseConsumables); Advance(SubMission.Kind.UseConsumables); }
 
     void GiveReward(SubMission s)
     {
         PlaySound(l => l.missionComplete);
-        if (!s.IsItemReward)
+        var item = FindItem(s.rewardItemName);
+        var player = GameObject.FindWithTag("Player");
+        if (item is AmmoData ad && AmmoInventory.Instance != null)
+            AmmoInventory.Instance.AddAmmo(ad.weaponType, s.rewardAmount); // 탄약은 탄 개수 그대로
+        else if (item != null && player != null)
         {
-            Score += s.rewardScore;
-            StartCoroutine(PlaySoundDelayed(l => l.coin, 0.6f)); // 점수 획득: 완료음 뒤에 동전 소리
+            var inv = player.GetComponent<InventoryManager>();
+            if (inv == null || !inv.AddItem(item, s.rewardAmount))
+                WorldItemDrop.Spawn(player.transform.position + player.transform.forward, item, s.rewardAmount); // 가방이 꽉 차면 발밑에
         }
-        else
-        {
-            var item = FindItem(s.rewardItemName);
-            var player = GameObject.FindWithTag("Player");
-            if (item is AmmoData ad && AmmoInventory.Instance != null)
-                AmmoInventory.Instance.AddAmmo(ad.weaponType, s.rewardAmount); // 탄약은 탄 개수 그대로
-            else if (item != null && player != null)
-            {
-                var inv = player.GetComponent<InventoryManager>();
-                if (inv == null || !inv.AddItem(item, s.rewardAmount))
-                    WorldItemDrop.Spawn(player.transform.position + player.transform.forward, item, s.rewardAmount); // 가방이 꽉 차면 발밑에
-            }
-            else Debug.LogWarning("[MissionManager] 보상 아이템을 못 찾음: " + s.rewardItemName);
-        }
+        else Debug.LogWarning("[MissionManager] 보상 아이템을 못 찾음: " + s.rewardItemName);
         PickupFeedbackUI.Instance?.Show($"서브 미션 완료: {s.title} → {s.RewardText}");
-        if (debugLog) Debug.Log($"[MissionManager] 서브 미션 완료: {s.title} → {s.RewardText} (점수 {Score})");
+        if (debugLog) Debug.Log($"[MissionManager] 서브 미션 완료: {s.title} → {s.RewardText} (진행률 +{SubMissionWeight}%)");
     }
 
     // 미션 알림/결과음 (2D). 라이브러리가 없으면 무시
     static void PlaySound(System.Func<SoundLibrary, AudioClip[]> clips)
     {
         if (AudioManager.Library != null) AudioManager.PlayUI(SoundLibrary.Pick(clips(AudioManager.Library)), AudioManager.Vol.Notification);
-    }
-
-    System.Collections.IEnumerator PlaySoundDelayed(System.Func<SoundLibrary, AudioClip[]> clips, float delay)
-    {
-        yield return new WaitForSecondsRealtime(delay);
-        PlaySound(clips);
     }
 
     /// <summary>아이템 에셋 이름으로 찾기 (Resources의 LootDatabase가 참조하는 루팅 테이블들에서 검색 - 따로 Resources 에셋 안 만들어도 됨)</summary>

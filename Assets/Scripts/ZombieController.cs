@@ -289,7 +289,7 @@ public class ZombieController : MonoBehaviour
         if (huntPlayer || dist <= detect)
         {
             isWandering = false;
-            agent.speed = moveSpeed * (isNight ? nightSpeedMultiplier : 1f); // 밤엔 더 빠르게
+            agent.speed = moveSpeed * (isNight ? nightSpeedMultiplier : 1f) * ZombieSpawner.DifficultyMultiplier; // 밤엔 더 빠르게, 7일 넘기면 하루마다 +10%
             agent.SetDestination(target.position);
             SetAnimSpeed(agent.velocity.magnitude);
             ZombieVoiceManager.Tick(this, ZombieVoiceManager.State.Chase); // 2~5초마다 신음/비명
@@ -298,7 +298,7 @@ public class ZombieController : MonoBehaviour
         else if (Time.time < investigateUntil)
         {
             isWandering = false;
-            agent.speed = moveSpeed;
+            agent.speed = moveSpeed * ZombieSpawner.DifficultyMultiplier;
             agent.SetDestination(noisePos);
             if (!agent.pathPending && agent.remainingDistance < 1.5f) investigateUntil = 0f; // 도착 → 배회로
             SetAnimSpeed(agent.velocity.magnitude);
@@ -461,7 +461,7 @@ public class ZombieController : MonoBehaviour
 
         if (target == null) return;
         Health playerHealth = target.GetComponent<Health>();
-        if (playerHealth != null) playerHealth.TakeDamage(attackDamage);
+        if (playerHealth != null) playerHealth.TakeDamage(attackDamage * ZombieSpawner.DifficultyMultiplier);
     }
 
     bool HasParam(int hash)
