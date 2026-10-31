@@ -24,7 +24,9 @@ namespace SlimUI.ModernMenu{
         public enum Theme {custom1, custom2, custom3};
         [Header("THEME SETTINGS")]
         public Theme theme;
+#pragma warning disable CS0414 // 서드파티 에셋: 대입만 하는 필드
         private int themeIndex;
+#pragma warning restore CS0414
         public ThemedUIData themeController;
 
         [Header("PANELS")]

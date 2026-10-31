@@ -37,7 +37,7 @@ public static class TempCleanupBuildInteriors
 
         // 혹시 다른 곳에 남은 잔재(FacilityMarker_* 등)도 정리
         int stray = 0;
-        foreach (Transform t in Object.FindObjectsOfType<Transform>(true))
+        foreach (Transform t in Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None))
         {
             if (t == null) continue;
             if (t.name.StartsWith("FacilityMarker_") || t.name == "Interior")

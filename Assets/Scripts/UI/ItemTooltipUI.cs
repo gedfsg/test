@@ -92,7 +92,7 @@ public class ItemTooltipUI : MonoBehaviour
         tmp.font = font;
         tmp.fontSize = size;
         tmp.color = color;
-        tmp.enableWordWrapping = true; // 설명이 길면 줄바꿈 (패널 폭 고정)
+        tmp.textWrappingMode = TextWrappingModes.Normal; // 설명이 길면 줄바꿈 (패널 폭 고정)
         tmp.raycastTarget = false;
         tmp.richText = true;
         return tmp;

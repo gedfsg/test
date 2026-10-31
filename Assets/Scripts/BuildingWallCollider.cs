@@ -88,6 +88,7 @@ public class BuildingWallCollider : MonoBehaviour
         //  파고들면 물리엔진이 겹친 두 면 중 어느 쪽이 바깥인지 헷갈려 반대편으로 밀어내는 일이 생겼음.
         //  단면만 쓰면 실내에서는 뒷면이라 아예 안 막힘 → 둘 다 실측으로 확인됨)
         AddInnerShell(verts, tris);
+        SplitLargeTriangles(verts, tris);
 
         Mesh m = new Mesh { name = src.name + "_WallCollider" };
         if (verts.Count > 65535) m.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
@@ -125,6 +126,28 @@ public class BuildingWallCollider : MonoBehaviour
             tris.Add(baseIndex);
             tris.Add(baseIndex + 2);
             tris.Add(baseIndex + 1);
+        }
+    }
+
+    // PhysX는 꼭짓점 사이가 500 유닛 넘는 삼각형에 경고를 냄 (로컬 단위가 큰 glTF 건물). 가장 긴 변을 반으로 나눠서 이하로 만듦
+    static void SplitLargeTriangles(List<Vector3> verts, List<int> tris)
+    {
+        const float maxEdge = 400f;
+        for (int i = 0; i < tris.Count; )
+        {
+            int a = tris[i], b = tris[i + 1], c = tris[i + 2];
+            float ab = (verts[a] - verts[b]).sqrMagnitude, bc = (verts[b] - verts[c]).sqrMagnitude, ca = (verts[c] - verts[a]).sqrMagnitude;
+            float longest = Mathf.Max(ab, Mathf.Max(bc, ca));
+            if (longest <= maxEdge * maxEdge) { i += 3; continue; }
+
+            // 감는 순서를 유지한 채 가장 긴 변이 p-q가 되게 돌림
+            int p = a, q = b, r = c;
+            if (longest == bc) { p = b; q = c; r = a; }
+            else if (longest == ca) { p = c; q = a; r = b; }
+            int mid = verts.Count;
+            verts.Add((verts[p] + verts[q]) * 0.5f);
+            tris[i] = p; tris[i + 1] = mid; tris[i + 2] = r; // 이 자리는 다시 검사 (i 그대로)
+            tris.Add(mid); tris.Add(q); tris.Add(r);
         }
     }
 

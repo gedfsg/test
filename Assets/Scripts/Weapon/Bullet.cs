@@ -117,7 +117,7 @@ public class Bullet : MonoBehaviour
     void OnTriggerEnter(Collider other)
     {
         // 레이캐스트가 못 잡는 경우(저속/근접)를 위한 보조 경로.
-        TryProcessHit(other, other.ClosestPoint(transform.position));
+        TryProcessHit(other, GameUtils.ClosestPointSafe(other, transform.position));
     }
 
     // true를 반환하면 이 충돌로 총알이 소모됨(관통이 아니면 파괴).

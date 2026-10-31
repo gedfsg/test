@@ -87,7 +87,7 @@ public static class HudStyle
         tmp.color = color;
         tmp.alignment = align;
         tmp.text = text;
-        tmp.enableWordWrapping = false;
+        tmp.textWrappingMode = TextWrappingModes.NoWrap;
         tmp.overflowMode = TextOverflowModes.Overflow;
         tmp.raycastTarget = false;
         return tmp;

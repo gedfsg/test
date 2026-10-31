@@ -97,7 +97,7 @@ public class WorldFallenProps : MonoBehaviour
         if (roads != null)
             foreach (var c in roads.GetComponentsInChildren<Collider>())
             {
-                Vector3 p = c.ClosestPoint(pos); p.y = pos.y;
+                Vector3 p = GameUtils.ClosestPointSafe(c, pos); p.y = pos.y;
                 float d = (p - pos).sqrMagnitude;
                 if (d < best && d > 0.01f) { best = d; toRoad = p - pos; }
             }
