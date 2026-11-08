@@ -107,6 +107,15 @@ public class MeleeWeapon : MonoBehaviour
     /// 거리는 대상 몸(콜라이더 표면)까지. 한 대상은 한 번만 맞음
     /// (예전: attackPoint가 플레이어 머리 위 2m라 실제 사거리 약 1.7m → 좀비 공격 범위 1.8m 안에서 싸워야 했음)
     /// </summary>
+    /// <summary>Collider.ClosestPoint는 Box/Sphere/Capsule/볼록 MeshCollider만 지원한다.
+    /// 그 밖의 콜라이더(볼록이 아닌 MeshCollider, TerrainCollider 등)는 경고를 내므로 바운딩 박스로 대신한다.</summary>
+    private static Vector3 SafeClosestPoint(Collider c, Vector3 p)
+    {
+        if (c is BoxCollider || c is SphereCollider || c is CapsuleCollider || (c is MeshCollider mc && mc.convex))
+            return c.ClosestPoint(p);
+        return c.bounds.ClosestPoint(p);
+    }
+
     private void FanAttack()
     {
         Transform owner = attackPoint != null ? attackPoint.root : transform.root;
@@ -123,12 +132,15 @@ public class MeleeWeapon : MonoBehaviour
             Health targetHealth = hit.GetComponentInParent<Health>();
             if (targetHealth == null) targetHealth = hit.GetComponentInChildren<Health>();
             ZombieController zombie = hit.GetComponentInParent<ZombieController>();
+            DestructibleObstacle obstacle = hit.GetComponentInParent<DestructibleObstacle>();
+            // 맞을 수 있는 게 아니면(바닥·건물·벽 등) 바로 건너뛴다
+            if (targetHealth == null && zombie == null && obstacle == null) continue;
 
             // 거리: 도끼가 몸에 닿는 거리 = 플레이어 중심 → 대상 콜라이더 표면(가장 가까운 점)까지 수평 거리
             //  (좀비 콜라이더 반경 0.8m(뚱뚱이 1.0m)라 2.9m면 좀비 중심 기준 약 3.7m. 좀비는 중심~중심 1.8m에서 때림)
             //  예전 판정(머리 위 2m 높이 구, 반경 2m)도 실측으로 좀비 중심 3.6m까지 맞았음 → 사거리는 비슷하게 유지, 판정을 명확한 부채꼴로
             Transform body = zombie != null ? zombie.transform : (targetHealth != null ? targetHealth.transform : null);
-            Vector3 to = hit.ClosestPoint(origin + Vector3.up) - origin; to.y = 0f;
+            Vector3 to = SafeClosestPoint(hit, origin + Vector3.up) - origin; to.y = 0f;
             if (to.magnitude > range) continue;
             Vector3 toCenter = (body != null ? body.position : hit.bounds.center) - origin; toCenter.y = 0f;
             float allowedAngle = to.magnitude <= closeRange ? Mathf.Max(fanAngle, closeAngle) : fanAngle;
@@ -140,7 +152,6 @@ public class MeleeWeapon : MonoBehaviour
                 if (zombie != null && done.Add(zombie)) zombie.TakeDamage(currentDamage);
             }
 
-            DestructibleObstacle obstacle = hit.GetComponentInParent<DestructibleObstacle>();
             if (obstacle != null && done.Add(obstacle)) obstacle.TakeDamage(currentDamage);
         }
 
