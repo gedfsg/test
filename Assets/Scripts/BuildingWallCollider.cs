@@ -42,19 +42,23 @@ public class BuildingWallCollider : MonoBehaviour
         Build();
     }
 
-    void Build()
+    /// <summary>
+    /// 벽 MeshCollider 생성. 런타임엔 Awake에서 호출되고, 에디터 툴(Tools → Map → Rebake NavMesh With Building Walls)이
+    /// NavMesh 굽기 직전에 임시로 호출해서 NavMesh에 벽(문 구멍 제외)을 반영한다. 만든 콜라이더 반환 (실패 시 null)
+    /// </summary>
+    public MeshCollider Build()
     {
         MeshFilter mf = GetComponent<MeshFilter>();
         if (mf == null || mf.sharedMesh == null)
         {
             Debug.LogWarning($"[BuildingWallCollider] '{name}' — 같은 오브젝트에 MeshFilter가 없어 벽 콜라이더를 못 만듭니다.");
-            return;
+            return null;
         }
         Mesh src = mf.sharedMesh;
         if (!src.isReadable)
         {
             Debug.LogWarning($"[BuildingWallCollider] '{name}' — '{src.name}' 메시의 Read/Write가 꺼져 있어 벽 콜라이더를 못 만듭니다.");
-            return;
+            return null;
         }
 
         Vector3[] srcVerts = src.vertices;
@@ -93,6 +97,7 @@ public class BuildingWallCollider : MonoBehaviour
 
         wallCollider = gameObject.AddComponent<MeshCollider>();
         wallCollider.sharedMesh = m;
+        return wallCollider;
     }
 
     // 현재 삼각형들(바깥 면) 각각에 대해, 법선 반대 방향으로 wallThickness(월드 m)만큼 옮기고

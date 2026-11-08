@@ -3,6 +3,9 @@ using TMPro;
 
 public class LootCrate : MonoBehaviour
 {
+    /// <summary>상자가 열릴 때마다 (미션: 상자 열기 수 집계용)</summary>
+    public static event System.Action<LootCrate> AnyOpened;
+
     [Header("Crate Settings")]
     public LootTable lootTable;
     public Rarity crateTier = Rarity.Common;
@@ -117,6 +120,8 @@ public class LootCrate : MonoBehaviour
     public void Open(InventoryManager inventory)
     {
         if (isOpened || lootTable == null) return;
+        AnyOpened?.Invoke(this);
+        if (AudioManager.Library != null) AudioManager.PlayUI(SoundLibrary.Pick(AudioManager.Library.crateOpen), AudioManager.Vol.UI);
 
         // 뚜껑이 있는 상자(월드 스폰 상자) = 새 방식: 파괴 안 하고 뚜껑 열림 + 바닥 드랍 + 좀비
         if (lidHinge != null) { OpenInPlace(); return; }
@@ -146,6 +151,9 @@ public class LootCrate : MonoBehaviour
         if (openEffectPrefab != null)
             Instantiate(openEffectPrefab, transform.position, Quaternion.identity);
 
+        // 예전 방식 상자는 열면 부서져 사라짐 → 나무 상자 부서지는 소리 (3D)
+        if (AudioManager.Library != null)
+            AudioManager.PlaySFX(SoundLibrary.Pick(AudioManager.Library.woodBreak), transform.position, AudioManager.Vol.Impact, AudioManager.Channel.SFX, 30f);
         Destroy(gameObject);
     }
 

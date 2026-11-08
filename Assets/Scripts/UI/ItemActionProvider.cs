@@ -25,6 +25,9 @@ public static class ItemActionProvider
                 break;
 
             case ItemType.Material:
+                // 레시피가 있는 재료만 제작 메뉴 (넝마 2개 → 붕대)
+                if (CraftingRecipe.FindByIngredient(slot.item) != null)
+                    actions.Add(new ItemAction("제작하기", ActionType.Craft));
                 actions.Add(new ItemAction("버리기", ActionType.Drop));
                 break;
 
@@ -37,7 +40,7 @@ public static class ItemActionProvider
     }
 }
 
-public enum ActionType { Use, Equip, EquipToHotbar, Drop }
+public enum ActionType { Use, Equip, EquipToHotbar, Drop, Craft }
 
 public class ItemAction
 {

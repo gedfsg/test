@@ -54,6 +54,8 @@ public class InventoryUI : MonoBehaviour
     {
         isInventoryOpen = !isInventoryOpen;
         inventoryWindow.SetActive(isInventoryOpen);
+        if (AudioManager.Library != null)
+            AudioManager.PlayUI(SoundLibrary.Pick(isInventoryOpen ? AudioManager.Library.inventoryOpen : AudioManager.Library.inventoryClose), AudioManager.Vol.UI);
 
         if (isInventoryOpen)
             UpdateUI();
@@ -123,9 +125,38 @@ public class InventoryUI : MonoBehaviour
             case ActionType.Drop:
                 DropItem(slot);
                 break;
+            case ActionType.Craft:
+                Craft(slot);
+                break;
         }
 
         UpdateUI();
+    }
+
+    /// <summary>재료 레시피로 제작: 인벤토리 전체에서 재료 N개를 빼고 결과물 추가. 모자라거나 자리가 없으면 취소</summary>
+    private void Craft(InventorySlot slot)
+    {
+        var recipe = CraftingRecipe.FindByIngredient(slot.item);
+        if (recipe == null) return;
+
+        int have = 0;
+        foreach (var s in inventoryManager.inventory) if (s.item == recipe.ingredient) have += s.amount;
+        if (have < recipe.ingredientCount)
+        {
+            PickupFeedbackUI.Instance?.ShowWarning($"{recipe.ingredient.itemName} {recipe.ingredientCount}개 필요 (현재 {have}개)");
+            return;
+        }
+
+        // 재료 차감 (여러 칸에 나뉘어 있어도 됨) → 결과물 추가 (핫바에 같은 아이템이 있으면 거기로 합쳐짐)
+        for (int i = 0; i < recipe.ingredientCount; i++) inventoryManager.RemoveItem(recipe.ingredient);
+        if (!inventoryManager.AddItem(recipe.result, recipe.resultCount))
+        {
+            inventoryManager.AddItem(recipe.ingredient, recipe.ingredientCount); // 가방이 꽉 차서 실패 → 재료 돌려줌
+            PickupFeedbackUI.Instance?.ShowWarning("가방이 가득 차서 제작할 수 없음");
+            return;
+        }
+        PickupFeedbackUI.Instance?.Show($"{recipe.result.itemName} {recipe.resultCount}개 제작 ({recipe.ingredient.itemName} -{recipe.ingredientCount})");
+        Debug.Log($"[제작] {recipe.ingredient.itemName} {recipe.ingredientCount}개 → {recipe.result.itemName} {recipe.resultCount}개");
     }
 
     private void DropItem(InventorySlot slot)
@@ -197,11 +228,18 @@ public class InventoryUI : MonoBehaviour
             inventoryManager.InsertItemAt(insertIndex, currentItem, 1, currentAmmo);
         }
 
-        inventoryManager.RemoveItemById(slot.slotId);
-
-        int finalCount = slot.item is WeaponData wd
-            ? (savedAmmo >= 0 ? savedAmmo : wd.maxAmmo)
-            : slot.amount + stackCount;
+        // 총은 그 1자루만 빼고, 소비 아이템은 인벤토리의 같은 종류를 전부 빼서 핫바에 한꺼번에 올림
+        // (예전엔 RemoveItemById가 1개만 줄여서 인벤토리에 4개가 남은 채 핫바에도 4개가 표시되던 복제 버그)
+        int finalCount;
+        if (slot.item is WeaponData wd)
+        {
+            inventoryManager.RemoveItemById(slot.slotId);
+            finalCount = savedAmmo >= 0 ? savedAmmo : wd.maxAmmo;
+        }
+        else
+        {
+            finalCount = inventoryManager.TakeAll(slot.item) + stackCount;
+        }
 
         hotbar.SetSlotOnly(targetSlot, slot.item, finalCount);
 

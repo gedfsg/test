@@ -63,6 +63,7 @@ public static class SlotDragDrop
         Cleanup(); // 아래 처리에서 UI가 다시 그려질 수 있어서 먼저 정리
         if (!ok)
         {
+            if (AudioManager.Library != null) AudioManager.PlayUI(SoundLibrary.Pick(AudioManager.Library.error), AudioManager.Vol.UI); // 못 넣는 슬롯
             PickupFeedbackUI.Instance?.ShowWarning(target.Index < WeaponHotbarUI.SlotTypeFilter.WeaponSlotCount && target.Owner == SlotView.SlotOwner.Hotbar
                 ? "1, 2번은 무기 전용" : "3~5번은 소비 아이템 전용");
             return;
@@ -116,9 +117,8 @@ public static class SlotDragDrop
             var old = hb.GetItem(dst.Index);
             if (old == slot.item && !(slot.item is WeaponData))
             {
-                // 같은 소비 아이템이면 개수 합침
-                hb.PutSlot(dst.Index, old, hb.GetAmmo(dst.Index) + slot.amount);
-                list.RemoveAt(src.Index);
+                // 같은 소비 아이템이면 개수 합침 (인벤토리의 같은 종류 칸 전부)
+                hb.PutSlot(dst.Index, old, hb.GetAmmo(dst.Index) + inv.TakeAll(slot.item));
             }
             else
             {
@@ -126,6 +126,8 @@ public static class SlotDragDrop
                 var (oldItem, oldCount) = hb.TakeSlot(dst.Index);
                 if (oldItem != null) list[src.Index] = ToInventorySlot(oldItem, oldCount); // 원래 있던 건 인벤토리 그 자리로
                 else list.RemoveAt(src.Index);
+                // 소비 아이템은 인벤토리에 남은 같은 종류 칸도 전부 같이 올림 (10개 넘어서 칸이 나뉜 경우)
+                if (!(slot.item is WeaponData)) count += inv.TakeAll(slot.item);
                 hb.PutSlot(dst.Index, slot.item, count);
             }
         }
@@ -137,7 +139,12 @@ public static class SlotDragDrop
         {
             if (hb == null) return;
             // 해제: 놓은 칸 위치에 끼워 넣음 (빈 칸이면 맨 뒤)
-            if (list.Count >= inv.maxCapacity) { PickupFeedbackUI.Instance?.ShowWarning("인벤토리가 가득 참"); return; }
+            if (list.Count >= inv.maxCapacity)
+            {
+                if (AudioManager.Library != null) AudioManager.PlayUI(SoundLibrary.Pick(AudioManager.Library.error), AudioManager.Vol.UI);
+                PickupFeedbackUI.Instance?.ShowWarning("인벤토리가 가득 참");
+                return;
+            }
             var (item, count) = hb.TakeSlot(src.Index);
             list.Insert(Mathf.Min(dst.Index, list.Count), ToInventorySlot(item, count));
         }

@@ -149,10 +149,11 @@ public class Locomotion : MonoBehaviour
 
         Vector3 rollDir = direction.normalized;
         float startTime = Time.time;
+        float speed = rollSpeed * WeatherManager.RollDistanceMultiplier; // 비: 젖은 바닥에서 미끄러져 더 멀리 (같은 시간 × 빠른 속도 = 1.3배 거리)
 
         while (Time.time < startTime + rollDuration)
         {
-            rb.linearVelocity = rollDir * rollSpeed;
+            rb.linearVelocity = rollDir * speed;
             yield return null;
         }
 
@@ -169,6 +170,8 @@ public class Locomotion : MonoBehaviour
     }
 
     public void SetSprinting(bool state) => isSprinting = state;
+    /// <summary>지금 달리는 중인지 (스태미나가 남아 있을 때만 - 발소리 간격/크기용)</summary>
+    public bool IsSprinting => isSprinting && currentStamina > 0;
     public void RecoverStamina(float amount) => currentStamina = Mathf.Min(currentStamina + amount, maxStamina);
     public float GetStaminaNormalized() => currentStamina / maxStamina;
 

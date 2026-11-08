@@ -64,6 +64,9 @@ public class WeaponHandAttacher : MonoBehaviour
     private Transform currentWeaponVisualRoot;
     private Transform currentVisual; // 마지막으로 손에 붙인 무기 모델
 
+    /// <summary>지금 손에 붙어 있는 무기 모델 (구르기 동안 허리/등으로 옮기거나 숨길 때 사용)</summary>
+    public Transform CurrentVisual => currentVisual;
+
     /// <summary>손에 든 무기 모델의 로컬 회전 직접 지정 (도끼: 들고 다닐 때 ↔ 휘두를 때 전환용)</summary>
     public void SetVisualLocalRotation(Quaternion rot)
     {

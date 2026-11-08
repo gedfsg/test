@@ -48,8 +48,8 @@ public static class LiberatorWeaponBuilder
         // AR (AR탄약, 30발) 20/25/30
         new Entry("AK-556", "AK-556", Cat.AR, Rarity.Common),
         new Entry("AR-15", "AR-15", Cat.AR, Rarity.Common),
-        new Entry("H&K G36K", "G36K", Cat.AR, Rarity.Common),
-        new Entry("FAMAS F1", "FAMAS", Cat.AR, Rarity.Common),
+        new Entry("H&K G36K", "G36K", Cat.AR, Rarity.Uncommon),
+        new Entry("FAMAS F1", "FAMAS", Cat.AR, Rarity.Uncommon),
         new Entry("L85A2", "L85A2", Cat.AR, Rarity.Rare),
         new Entry("Steyr AUG", "AUG", Cat.AR, Rarity.Rare),
         new Entry("IMI Galil-762", "Galil", Cat.AR, Rarity.Rare),
@@ -61,8 +61,8 @@ public static class LiberatorWeaponBuilder
         new Entry("AAC Honey Badger", "Honey Badger", Cat.AR, Rarity.Epic),
         // SMG (AR탄약 공유, 30발, 빠른 연사) 12/16/20
         new Entry("Skorpion", "Skorpion", Cat.SMG, Rarity.Common),
-        new Entry("H&K UMP45", "UMP45", Cat.SMG, Rarity.Common),
-        new Entry("H&K MP7", "MP7", Cat.SMG, Rarity.Common),
+        new Entry("H&K UMP45", "UMP45", Cat.SMG, Rarity.Uncommon),
+        new Entry("H&K MP7", "MP7", Cat.SMG, Rarity.Uncommon),
         new Entry("KRISS VECTOR", "Vector", Cat.SMG, Rarity.Rare),
         new Entry("FN P90", "P90", Cat.SMG, Rarity.Rare),
         new Entry("SR-3m", "SR-3M", Cat.SMG, Rarity.Epic),
@@ -248,7 +248,8 @@ public static class LiberatorWeaponBuilder
         bool isNew = d == null;
         if (isNew) d = ScriptableObject.CreateInstance<WeaponData>();
 
-        int t = (int)e.tier; // 0 Common, 1 Rare, 2 Epic
+        // 0 Common, 1 Rare, 2 Epic. Uncommon(enum 값 4)은 테두리 색만 다르고 스탯은 Common과 같음 (배열 인덱스 범위 밖 방지)
+        int t = e.tier == Rarity.Uncommon ? 0 : (int)e.tier;
         d.itemName = e.display; d.icon = icon; d.itemType = ItemType.Weapon; d.rarity = e.tier;
         d.isStackable = false; d.maxStackSize = 1;
         d.weaponPrefab = prefab;
@@ -257,7 +258,8 @@ public static class LiberatorWeaponBuilder
         switch (e.cat)
         {
             case Cat.Pistol:
-                d.type = WeaponType.Pistol; d.damage = new[] { 10f, 15f, 20f }[t]; d.maxAmmo = 15;
+                // 플레이테스트 피드백: 권총 약함 → 전부 ×1.75 (10/15/20 → 18/26/35)
+                d.type = WeaponType.Pistol; d.damage = new[] { 18f, 26f, 35f }[t]; d.maxAmmo = 15;
                 d.attackRate = 0.25f; d.autoFire = false; d.reloadTime = 1.5f;
                 d.bulletSpeed = 80f; d.effectiveRange = 25f; d.recoil = 2f;
                 d.positionOffset = new Vector3(0.01f, 0.06f, -0.2f); d.rotationOffset = new Vector3(30f, 200f, -20f); // Pistol K와 동일
@@ -283,10 +285,10 @@ public static class LiberatorWeaponBuilder
                 d.positionOffset = new Vector3(0.01f, 0.06f, -0.2f); d.rotationOffset = new Vector3(30f, 170f, 0f);
                 break;
             case Cat.Melee:
-                // 도끼: 데미지 40, 사거리 2.9m(부채꼴 90°, 2m 안은 160°), 쿨타임 0.5초, 스테미나 20
+                // 도끼: 데미지 30 (플레이테스트 피드백: 40은 너무 셈), 사거리 2.9m(부채꼴 90°, 2m 안은 160°), 쿨타임 0.5초, 스테미나 20
                 // d.type = WeaponType.Melee; d.damage = 35f; d.attackRate = 0.5f; d.effectiveRange = 2f; d.maxAmmo = 0;   // (이전)
                 // 사거리 2.9m: 좀비 공격 범위(1.8m, 뚱뚱이 2.5m)보다 길어 먼저 때릴 수 있게 (MeleeWeapon 부채꼴 90° 판정 반경으로 씀)
-                d.type = WeaponType.Melee; d.damage = 40f; d.attackRate = 0.5f; d.effectiveRange = 2.9f; d.maxAmmo = 0;
+                d.type = WeaponType.Melee; d.damage = 30f; d.attackRate = 0.5f; d.effectiveRange = 2.9f; d.maxAmmo = 0;
                 d.staminaCost = 20f; // 한 번에 20: 씬의 스테미나 회복이 초당 30이라 쿨타임 0.5초로 계속 휘두르면 초당 10씩 줄어 약 10초 뒤 못 휘두름
                 d.autoFire = false;
                 // 휘두를 때 (손 뼈 측정: 손가락 -Z, 엄지 +Y, 손바닥 +X / 도끼: 손잡이 +Z, 날 +Y):

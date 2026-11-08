@@ -74,9 +74,13 @@ public class Weapon : MonoBehaviour
     {
         currentAmmo--;
 
-        // 좀비에게 총성을 전파. 반경은 무기별로 다르다 (WeaponData.GetNoiseRadius).
-        if (weaponData != null)
-            NoiseSystem.Emit(firePoint.position, weaponData.GetNoiseRadius());
+        // 소음: 플레이어 총소리는 주변 좀비를 부름.
+        // 반경 = 무기 에셋의 noiseRadius(있으면) 아니면 총 종류별 기본값(NoiseSystem.RadiusFor), 비 오면 절반(NoiseSystem 안에서)
+        if (shooterTag == "Player")
+            NoiseSystem.Emit(firePoint != null ? firePoint.position : transform.position,
+                             weaponData != null ? weaponData.GetNoiseRadius() : NoiseSystem.RadiusFor(WeaponType.Ranged));
+
+        PlayWeaponSound(true);
 
         if (muzzleFlashLight != null)
             StartCoroutine(MuzzleFlash());
@@ -146,6 +150,23 @@ public class Weapon : MonoBehaviour
         return Quaternion.Euler(pitch, yaw, 0f) * baseDir;
     }
 
+    // 발사음/재장전음 (3D). WeaponData에 지정된 소리 우선, 없으면 총 종류별 기본 소리
+    void PlayWeaponSound(bool fire)
+    {
+        AudioClip clip = weaponData != null ? (fire ? weaponData.fireSound : weaponData.reloadSound) : null;
+        if (clip == null && AudioManager.Library != null)
+        {
+            WeaponType wType = weaponData != null ? weaponData.type : WeaponType.Pistol;
+            var lib = AudioManager.Library;
+            clip = SoundLibrary.Pick(fire ? lib.FireFor(wType) : lib.ReloadFor(wType));
+        }
+        Vector3 pos = firePoint != null ? firePoint.position : transform.position;
+        bool shotgun = weaponData != null && weaponData.type == WeaponType.Shotgun;
+        if (fire) AudioManager.PlaySFX(clip, pos, shotgun ? AudioManager.Vol.GunshotShotgun : AudioManager.Vol.Gunshot,
+                                       AudioManager.Channel.SFX, 60f, Random.Range(0.96f, 1.04f));
+        else AudioManager.PlaySFX(clip, pos, AudioManager.Vol.Impact, AudioManager.Channel.SFX, 20f);
+    }
+
     private IEnumerator MuzzleFlash()
     {
         muzzleFlashLight.enabled = true;
@@ -173,6 +194,7 @@ public class Weapon : MonoBehaviour
         float currentReloadTime = weaponData != null ? weaponData.reloadTime : 2.0f;
 
         onReloadStart?.Invoke(currentReloadTime);
+        PlayWeaponSound(false);
         yield return new WaitForSeconds(currentReloadTime);
 
         int max = weaponData != null ? weaponData.maxAmmo : 30;

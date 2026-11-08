@@ -9,6 +9,9 @@ using UnityEngine;
 [RequireComponent(typeof(Locomotion))]
 public class PlayerBuffManager : MonoBehaviour
 {
+    /// <summary>소비 아이템을 쓸 때마다 (미션: 아이템 사용 수 집계용). 인벤토리/핫바 사용 모두 여기를 거침</summary>
+    public static event System.Action<ConsumableData> AnyConsumableUsed;
+
     private Locomotion locomotion;
     private Weapon rangedWeapon;
 
@@ -41,6 +44,8 @@ public class PlayerBuffManager : MonoBehaviour
     /// <summary>소비품 데이터를 받아 해당 효과를 적용한다.</summary>
     public void ApplyConsumable(ConsumableData data, Health health)
     {
+        AnyConsumableUsed?.Invoke(data);
+
         // 1. 즉시 회복
         if (data.healAmount > 0f)
             health.Heal(data.healAmount);

@@ -9,9 +9,15 @@ public class DestructibleObstacle : MonoBehaviour
     [Header("Damage UI")]
     public GameObject damageTextPrefab;
 
+    [Header("Sound")]
+    [Tooltip("부서질 때 유리 깨지는 소리 (끄면 나무 부서지는 소리). 이름에 Glass/Window가 들어가면 자동으로 켜짐")]
+    public bool isGlass;
+
     void Start()
     {
         currentHealth = maxHealth;
+        string n = name.ToLower();
+        if (n.Contains("glass") || n.Contains("window")) isGlass = true;
     }
 
     public void TakeDamage(float damage)
@@ -23,6 +29,9 @@ public class DestructibleObstacle : MonoBehaviour
 
         if (currentHealth <= 0)
         {
+            if (AudioManager.Library != null)
+                AudioManager.PlaySFX(SoundLibrary.Pick(isGlass ? AudioManager.Library.glassBreak : AudioManager.Library.woodBreak),
+                                     transform.position, AudioManager.Vol.Impact, AudioManager.Channel.SFX, 30f);
             Destroy(gameObject);
         }
     }

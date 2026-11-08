@@ -10,7 +10,7 @@ using UnityEngine;
 [CreateAssetMenu(fileName = "LootDatabase", menuName = "Inventory/Loot Database")]
 public class LootDatabase : ScriptableObject
 {
-    public enum BuildingKind { House, Police, Mart, Church, Warehouse }
+    public enum BuildingKind { House, Police, Mart, Church, Warehouse, Hospital } // 새 종류는 끝에 추가 (에셋에 int로 저장됨)
 
     [System.Serializable]
     public class BuildingRule
@@ -59,7 +59,7 @@ public class LootDatabase : ScriptableObject
 
     public BuildingRule GetRule(BuildingKind kind) => buildingRules.Find(r => r.kind == kind);
 
-    /// <summary>건물 이름/메시 이름으로 종류 판별 (경찰서/마트/교회/창고, 나머지는 집)</summary>
+    /// <summary>건물 이름/메시 이름으로 종류 판별 (경찰서/병원/마트/교회/창고, 나머지는 집)</summary>
     public static BuildingKind Classify(BuildingInterior b)
     {
         string all = b.name;
@@ -68,6 +68,7 @@ public class LootDatabase : ScriptableObject
         all = all.ToLowerInvariant();
 
         if (all.Contains("police")) return BuildingKind.Police;
+        if (all.Contains("hospital")) return BuildingKind.Hospital; // Sketchfab 병원 모델 ((base) hospital)
         if (all.Contains("kay lousberg") || all.Contains("mart")) return BuildingKind.Mart; // Sketchfab 마트 모델
         if (all.Contains("church")) return BuildingKind.Church;
         if (all.Contains("structure") || all.Contains("farm")) return BuildingKind.Warehouse; // 창고/헛간

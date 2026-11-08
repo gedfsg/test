@@ -62,6 +62,7 @@ public class WeaponHotbarUI : MonoBehaviour
     {
         var kb = Keyboard.current;
         if (kb == null) return;
+        if (playerController != null && playerController.IsRolling) return; // 구르는 중엔 무기 교체/버리기 막음
 
         if (kb.digit1Key.wasPressedThisFrame) SelectSlot(0);
         else if (kb.digit2Key.wasPressedThisFrame) SelectSlot(1);
@@ -212,6 +213,20 @@ public class WeaponHotbarUI : MonoBehaviour
             }
         }
         return AddItemToSlot(consumable, count);
+    }
+
+    /// <summary>소비 칸(3~5)에 같은 아이템이 이미 있으면 개수만 더하고 true. 없으면 false (빈 칸에 새로 넣지 않음)</summary>
+    public bool TryStackExisting(ItemData item, int count)
+    {
+        if (item == null || count <= 0) return false;
+        for (int i = SlotTypeFilter.WeaponSlotCount; i < SLOT_COUNT; i++)
+        {
+            if (items[i] != item) continue;
+            ammos[i] += count;
+            RefreshSlot(i);
+            return true;
+        }
+        return false;
     }
 
     /// <summary>현재 선택된 슬롯에 아이템 세팅 (Equip to Hotbar용)</summary>
@@ -406,6 +421,35 @@ public class WeaponHotbarUI : MonoBehaviour
             slots[i].SetEmpty(theme, isActive);
 
         slots[i].SetNumber(i + 1, isActive, theme);
+        UpdateRarityFrame(i);
+    }
+
+    // 무기 등급 테두리: 칸 안쪽(4px 안)에 등급 색 테두리. 바깥 테두리는 선택 표시(노랑)/무기 칸(빨강)이 쓰고 있어서
+    // 같은 자리에 칠하면 선택된 무기의 등급이 가려짐 → 안쪽에 따로 그려 둘 다 보이게
+    const float RarityFrameInset = 4f;
+    private readonly UnityEngine.UI.Image[] rarityFrames = new UnityEngine.UI.Image[SLOT_COUNT];
+
+    private void UpdateRarityFrame(int i)
+    {
+        var wd = items[i] as WeaponData;
+        if (rarityFrames[i] == null)
+        {
+            if (wd == null) return; // 무기가 처음 들어올 때 만듦
+            var go = new GameObject("RarityFrame", typeof(RectTransform), typeof(UnityEngine.UI.Image));
+            var rt = (RectTransform)go.transform;
+            rt.SetParent(slots[i].transform, false);
+            rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.one * RarityFrameInset; rt.offsetMax = -Vector2.one * RarityFrameInset;
+            var frame = slots[i].transform.Find("Frame");
+            if (frame != null) rt.SetSiblingIndex(frame.GetSiblingIndex() + 1); // 아이콘 위, 선택 표시/번호 아래
+            var img = go.GetComponent<UnityEngine.UI.Image>();
+            img.sprite = HudStyle.RoundedFrameThick != null ? HudStyle.RoundedFrameThick : HudStyle.RoundedFrame;
+            img.type = UnityEngine.UI.Image.Type.Sliced;
+            img.raycastTarget = false;
+            rarityFrames[i] = img;
+        }
+        rarityFrames[i].enabled = wd != null;
+        if (wd != null) rarityFrames[i].color = RarityColors.Get(wd.rarity);
     }
 
     private void RefreshAllSlots() { for (int i = 0; i < SLOT_COUNT; i++) RefreshSlot(i); }

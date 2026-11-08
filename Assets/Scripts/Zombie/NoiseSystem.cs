@@ -3,6 +3,8 @@ using UnityEngine;
 
 /// <summary>
 /// 소음 전파. 무기가 Emit하면 반경 안의 좀비들이 듣는다.
+/// (kimozero/dev의 NoiseSystem과 하나로 합침: 무기별 기본 반경 RadiusFor, 날씨 배수 WeatherManager.NoiseMultiplier,
+///  실제 반경 반환. 듣는 쪽은 좀비다움을 거친다 —— 못 들은 척 / 늦은 반응)
 ///
 /// 사용법 (Weapon.cs의 Shoot() 안에 한 줄):
 ///     NoiseSystem.Emit(firePoint.position, noiseRadius);
@@ -13,6 +15,27 @@ using UnityEngine;
 public static class NoiseSystem
 {
     private static readonly List<ZombieController> listeners = new List<ZombieController>(64);
+
+    // 무기별 기본 소음 반경 (m) —— 팀원이 플레이테스트로 맞춘 값
+    public const float PistolRadius  = 25f;
+    public const float RifleRadius   = 35f;
+    public const float ShotgunRadius = 40f;
+    public const float SniperRadius  = 50f;
+    public const float MeleeRadius   = 8f;
+
+    public static bool debugLog = false;
+
+    public static float RadiusFor(WeaponType type)
+    {
+        switch (type)
+        {
+            case WeaponType.Pistol:  return PistolRadius;
+            case WeaponType.Shotgun: return ShotgunRadius;
+            case WeaponType.Sniper:  return SniperRadius;
+            case WeaponType.Melee:   return MeleeRadius;
+            default:                 return RifleRadius;   // AR / SMG / Ranged(하위 호환)
+        }
+    }
 
     public static int ListenerCount => listeners.Count;
 
@@ -30,11 +53,15 @@ public static class NoiseSystem
     /// position에서 radius만큼 퍼지는 소음 발생.
     /// 벽은 소리를 막지 않는다 (현실적으로도 총소리는 벽을 통과함).
     /// </summary>
-    public static void Emit(Vector3 position, float radius)
+    /// <summary>pos에서 소음 발생 (날씨 반영 —— 비 오면 반경 절반). 실제 반경을 돌려준다.</summary>
+    public static float Emit(Vector3 position, float baseRadius)
     {
-        if (radius <= 0f) return;
+        if (baseRadius <= 0f) return 0f;
+        float radius = baseRadius * WeatherManager.NoiseMultiplier;
+        if (radius <= 0f) return 0f;
 
         float sqRadius = radius * radius;
+        int heard = 0;
 
         for (int i = listeners.Count - 1; i >= 0; i--)
         {
@@ -48,8 +75,10 @@ public static class NoiseSystem
             float effectiveSq = sqRadius * sensitivity * sensitivity;
             if ((z.transform.position - position).sqrMagnitude > effectiveSq) continue;
 
-            z.HearNoise(position);
+            if (z.HearNoise(position)) heard++;
         }
+        if (debugLog) Debug.Log($"[Noise] 반경 {radius:F0}m (기본 {baseRadius:F0} × 날씨 {WeatherManager.NoiseMultiplier:F2}) → 좀비 {heard}마리 반응");
+        return radius;
     }
 
 #if UNITY_EDITOR

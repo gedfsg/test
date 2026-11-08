@@ -508,6 +508,9 @@ public class ZombieQuirks : MonoBehaviour
                     LastLungeStart = now;
                     LungeAvailableNow = false;
                     LungeStarted?.Invoke(this);
+                    // '왁!' —— 팀원 사운드 시스템의 비명 (게임에서만)
+                    if (!trainingMode && body.targetOverride == null)
+                        ZombieVoiceManager.Play(body, ZombieVoiceManager.State.Attack);
                     Label = "왁!";
                     var roar = ZombieAction.Stand();
                     roar.faceTarget = true;

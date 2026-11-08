@@ -57,6 +57,20 @@ public class ZombieController : MonoBehaviour
              "비워두면 모든 구역의 좀비가 씬에서 처음 찾은 플레이어 하나를 공유하게 된다.")]
     public Transform targetOverride;
 
+    [Header("밤 / 최종 공격 (팀원 kimozero/dev에서 옮겨 옴)")]
+    [Tooltip("밤에 감지 범위 배수 (30m → 60m). 플레이어가 가만히 있어도 주변 좀비가 몰려옴")]
+    public float nightDetectionMultiplier = 2f;
+    [Tooltip("밤에 쫓아올 때 이동 속도 배수")]
+    public float nightSpeedMultiplier = 1.2f;
+    [Tooltip("켜지면 거리 상관없이 플레이어를 추적 (ZombieSpawner의 최종 공격 좀비 떼가 켬)")]
+    public bool huntPlayer = false;
+
+    /// <summary>좀비가 죽을 때마다 (미션: 좀비 처치 수 집계용)</summary>
+    public static event System.Action<ZombieController> AnyDied;
+    /// <summary>살아있는(활성) 좀비 목록</summary>
+    public static readonly System.Collections.Generic.List<ZombieController> All =
+        new System.Collections.Generic.List<ZombieController>();
+
     [Header("Brain")]
     [Tooltip("비워두면 ZombieFSMBrain을 자동 장착. ML-Agents 도입 시 여기에 ZombieMLBrain을 넣는다.")]
     public ZombieBrain brain;
@@ -101,8 +115,13 @@ public class ZombieController : MonoBehaviour
     private static readonly int HashIsRunning = Animator.StringToHash("IsRunning");
     private static readonly int HashAttackIdx = Animator.StringToHash("AttackIndex");
 
-    /// <summary>날씨를 반영한 감지 거리 (비 오면 20% 감소 —— WeatherManager가 없으면 그대로).</summary>
-    public float DetectionRangeNow => detectionRange * WeatherManager.DetectionMultiplier;
+    /// <summary>날씨·밤을 반영한 감지 거리 (안개면 20% 감소, 밤엔 nightDetectionMultiplier배 —— 없으면 그대로).</summary>
+    public float DetectionRangeNow => detectionRange * WeatherManager.DetectionMultiplier
+                                      * (IsNightNow ? nightDetectionMultiplier : 1f);
+
+    /// <summary>게임의 밤인가 (학습장 좀비는 낮밤과 무관)</summary>
+    private bool IsNightNow => targetOverride == null && DayNightCycle.Instance != null
+                               && DayNightCycle.Instance.CurrentPhase == DayNightCycle.Phase.Night;
 
     // ── Brain이 읽어가는 몸 상태 ──────────────────────
     public bool  CanMove           => agent != null && agent.enabled && agent.isOnNavMesh;
@@ -167,8 +186,17 @@ public class ZombieController : MonoBehaviour
         EnsureAnimatorClips();
     }
 
-    void OnEnable()  { NoiseSystem.Register(this); }
-    void OnDisable() { NoiseSystem.Unregister(this); }
+    void OnEnable()
+    {
+        NoiseSystem.Register(this);
+        if (!All.Contains(this)) All.Add(this);
+    }
+    void OnDisable()
+    {
+        NoiseSystem.Unregister(this);
+        All.Remove(this);
+        ZombieVoiceManager.Forget(this);   // 목소리 쿨타임 기록 정리
+    }
 
     // ── 자가복구 셋업 ─────────────────────────────────
     void SetupAgent()
@@ -284,6 +312,18 @@ public class ZombieController : MonoBehaviour
         // NavMesh 위에 없으면 복구 시도
         if (!CanMove) TryWarpToNavMesh();
 
+        // 최종 공격 좀비 떼: 거리 상관없이 플레이어 쪽으로 (1초마다 플레이어 위치를 '들은' 것으로)
+        if (huntPlayer && targetOverride == null)
+        {
+            huntTimer -= dt;
+            if (huntTimer <= 0f)
+            {
+                huntTimer = 1f;
+                Transform p = CurrentTarget != null ? CurrentTarget : FindPlayer();
+                if (p != null) HearNoiseNow(p.position);
+            }
+        }
+
         // 1. Sense
         perception.Tick(dt);
         ZombieObservation obs = perception.Observe();
@@ -296,6 +336,26 @@ public class ZombieController : MonoBehaviour
 
         // 3. Act
         Execute(in action, in obs);
+
+        // 4. 목소리 (팀원 사운드 시스템): 추적 5~10초 / 배회 10~25초마다 신음·비명. 학습장에서는 안 냄
+        if (targetOverride == null)
+        {
+            var st = State;
+            ZombieVoiceManager.Tick(this, st == ZombieState.Chase || st == ZombieState.Attack
+                ? ZombieVoiceManager.State.Chase : ZombieVoiceManager.State.Idle);
+        }
+    }
+
+    private float huntTimer;
+    private static Transform cachedPlayer;
+    private static Transform FindPlayer()
+    {
+        if (cachedPlayer == null)
+        {
+            var go = GameObject.FindGameObjectWithTag("Player");
+            if (go != null) cachedPlayer = go.transform;
+        }
+        return cachedPlayer;
     }
 
     private ZombieAction ThinkSafely(in ZombieObservation obs, float dt)
@@ -345,7 +405,10 @@ public class ZombieController : MonoBehaviour
         {
             if (action.hasMoveTarget)
             {
-                agent.speed = moveSpeed * Mathf.Max(action.speedScale, 0.01f);
+                // 밤엔 쫓을 때 더 빠르게 (팀원 밸런스: ×1.2)
+                var stNow = State;
+                float night = IsNightNow && (stNow == ZombieState.Chase || stNow == ZombieState.Attack) ? nightSpeedMultiplier : 1f;
+                agent.speed = moveSpeed * Mathf.Max(action.speedScale, 0.01f) * night;
                 SetDestinationThrottled(action.moveTarget);
                 moveSpeedNow = agent.velocity.magnitude;
             }
@@ -480,6 +543,7 @@ public class ZombieController : MonoBehaviour
         if (t == null) return;
 
         AttackLanded?.Invoke(this, t);
+        if (targetOverride == null) ZombieVoiceManager.Play(this, ZombieVoiceManager.State.Attack);   // 공격: 즉시 비명
 
         Health playerHealth = t.GetComponent<Health>();
         if (playerHealth != null) playerHealth.TakeDamage(attackDamage);
@@ -544,13 +608,14 @@ public class ZombieController : MonoBehaviour
         ActiveBrain?.OnDamaged();
     }
 
-    /// <summary>NoiseSystem이 호출. 소음 지점을 수색 목표로 삼는다.</summary>
-    public void HearNoise(Vector3 position)
+    /// <summary>NoiseSystem이 호출. 소음 지점을 수색 목표로 삼는다. 반응했으면(늦게라도) true</summary>
+    public bool HearNoise(Vector3 position)
     {
-        if (isDead) return;
+        if (isDead) return false;
         // 좀비다움: 못 들은 척하거나 늦게 반응 (늦게 반응하면 ZombieQuirks가 나중에 HearNoiseNow를 부른다)
-        if (quirks != null && zombieQuirks && quirks.InterceptNoise(position)) return;
+        if (quirks != null && zombieQuirks && quirks.InterceptNoise(position)) return true;
         HearNoiseNow(position);
+        return true;
     }
 
     /// <summary>소리에 지금 바로 반응한다 (ZombieQuirks가 미뤄 둔 소리를 전달할 때도 쓴다).</summary>
@@ -608,10 +673,28 @@ public class ZombieController : MonoBehaviour
     }
 
     // ── 사망 ─────────────────────────────────────────
+    System.Collections.IEnumerator DeathSounds()
+    {
+        var lib = AudioManager.Library;
+        if (lib == null) yield break;
+        Vector3 pos = transform.position + Vector3.up;
+        AudioManager.PlaySFX(SoundLibrary.Pick(lib.bloodSplatter), pos, AudioManager.Vol.Impact, AudioManager.Channel.SFX, 25f);
+        yield return new WaitForSeconds(0.7f);   // 몸이 바닥에 닿는 쯤
+        AudioManager.PlaySFX(SoundLibrary.Pick(lib.bodyFall), transform.position, AudioManager.Vol.Impact, AudioManager.Channel.SFX, 25f);
+    }
+
     void Die()
     {
         if (isDead) return;
         isDead = true;
+        AnyDied?.Invoke(this);
+
+        // 사망 사운드 (팀원 사운드 시스템): 단말마 + 피 튀는 소리 + 쓰러지는 소리. 학습장에서는 안 냄
+        if (targetOverride == null)
+        {
+            ZombieVoiceManager.Play(this, ZombieVoiceManager.State.Death);
+            StartCoroutine(DeathSounds());
+        }
 
         // 좀비 종류별 드랍 (LootDatabase). 데이터베이스가 없을 때만 예전 방식(프리팹의 dropAmmoData)으로 탄약 드랍
         if (LootDatabase.Instance != null) LootDatabase.Instance.DropForZombie(gameObject);

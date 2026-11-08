@@ -10,6 +10,9 @@ using UnityEngine;
 [RequireComponent(typeof(Collider))]
 public class BuildingInterior : MonoBehaviour
 {
+    /// <summary>플레이어가 건물에 들어갈 때마다 (미션: 건물 방문 판정용)</summary>
+    public static event System.Action<BuildingInterior> PlayerEntered;
+
     [Header("1층 높이 (건물 바닥에서 이 높이 위는 전부 잘라내서 1층만 보이게 함)")]
     public float groundFloorHeight = 5f;
 
@@ -52,6 +55,7 @@ public class BuildingInterior : MonoBehaviour
         {
             RenderSettings.fog = originalFogEnabled; RenderSettings.fogMode = originalFogMode; RenderSettings.fogColor = originalFogColor;
             RenderSettings.fogStartDistance = originalFogStart; RenderSettings.fogEndDistance = originalFogEnd;
+            RenderSettings.fogDensity = originalFogDensity;
         }
         originalFogSaved = false;
         hiddenCount.Clear();
@@ -61,7 +65,7 @@ public class BuildingInterior : MonoBehaviour
     static bool originalFogEnabled;
     static FogMode originalFogMode;
     static Color originalFogColor;
-    static float originalFogStart, originalFogEnd;
+    static float originalFogStart, originalFogEnd, originalFogDensity;
 
     Renderer[] renderers;
     float cutHeightWorld;
@@ -129,8 +133,10 @@ public class BuildingInterior : MonoBehaviour
     {
         if (!other.CompareTag(playerTag)) return;
         SetCut(true);
+        PlayerEntered?.Invoke(this);
         if (darkenSurroundings) EnterIndoorFog(other.transform);
         BuildingTransition.Play();
+        PlayDoorSound(true);
         Camera.main?.GetComponent<CameraZoom>()?.SetIndoor(true);
     }
 
@@ -140,7 +146,17 @@ public class BuildingInterior : MonoBehaviour
         SetCut(false);
         if (darkenSurroundings) ExitIndoorFog();
         BuildingTransition.Play();
+        PlayDoorSound(false);
         Camera.main?.GetComponent<CameraZoom>()?.SetIndoor(false);
+    }
+
+    // 문 열고/닫는 소리 (2D). 트리거 경계에서 들락날락하거나 겹친 건물 트리거로 연달아 울리지 않게 0.5초 간격 제한
+    static float lastDoorSoundTime = -99f;
+    static void PlayDoorSound(bool entering)
+    {
+        if (AudioManager.Library == null || Time.unscaledTime < lastDoorSoundTime + 0.5f) return;
+        lastDoorSoundTime = Time.unscaledTime;
+        AudioManager.PlayUI(SoundLibrary.Pick(entering ? AudioManager.Library.doorOpen : AudioManager.Library.doorClose), AudioManager.Vol.UI);
     }
 
     void SetCut(bool cut)
@@ -352,6 +368,7 @@ public class BuildingInterior : MonoBehaviour
             originalFogColor = RenderSettings.fogColor;
             originalFogStart = RenderSettings.fogStartDistance;
             originalFogEnd = RenderSettings.fogEndDistance;
+            originalFogDensity = RenderSettings.fogDensity; // 날씨 안개(ExponentialSquared)는 밀도를 씀
             originalFogSaved = true;
         }
 
@@ -394,6 +411,10 @@ public class BuildingInterior : MonoBehaviour
             RenderSettings.fogColor = originalFogColor;
             RenderSettings.fogStartDistance = originalFogStart;
             RenderSettings.fogEndDistance = originalFogEnd;
+            RenderSettings.fogDensity = originalFogDensity;
+            // 다음에 들어갈 때 "그때의" 실외 안개를 다시 저장 (예전엔 게임 첫 진입 때 한 번만 저장해서,
+            // 그 사이 날씨가 안개로 바뀌어도 나올 때마다 첫 진입 당시 안개로 되돌림 → WeatherManager 안개와 충돌)
+            originalFogSaved = false;
         }
     }
 
