@@ -28,6 +28,13 @@ public class HunterTacticsSettings
     public float maxEncircleTime = 8f;
     [Tooltip("시간 초과로 덮칠 때 몇 초 동안 덮칠지.")]
     public float forcedCloseTime = 3f;
+    [Tooltip("켜면 '언제 덮칠지'를 조율기가 아니라 강화학습 좀비가 각자 정한다 (shoot9부터).\n" +
+             "조율기는 자리만 나눠 주고, 빈틈(closeGapDeg) 규칙으로 다 같이 덮치는 건 하지 않는다.\n" +
+             "좀비의 ZombieMLBrain.attackAsRush도 같이 켜져 있어야 한다 (학습장 yaml: rl_close, 게임: 스포너가 맞춰 준다).\n" +
+             "코앞(commitDistance) 덮치기와 아래 시간 초과 강제 덮치기는 안전장치로 남는다.")]
+    public bool rlDecidesClose = false;
+    [Tooltip("rlDecidesClose일 때 이 시간(초) 동안 아무도 끝내지 못하면 강제로 다 같이 덮친다 (maxEncircleTime 대신).")]
+    public float rlCloseTimeout = 15f;
 
     [Header("역할 (속도로 판정)")]
     [Tooltip("켜면 빠른 좀비는 앞쪽 자리, 탱커는 뒤쪽 자리, 일반 좀비는 옆 자리를 맡는다.\n" +
@@ -42,6 +49,14 @@ public class HunterTacticsSettings
     [Tooltip("켜면 탱커는 자리에서 기다리지 않고 뒤에서 곧장 밀고 들어간다 (몰이꾼).\n" +
              "플레이어는 탱커를 피해 앞으로 도망치게 되고, 그 앞을 빠른 좀비가 막는다.")]
     public bool tankPushes = true;
+    [Tooltip("켜면 탱커는 뒤에서 쫓지 않고 매복한다: 플레이어가 도망치는 방향 앞쪽(interceptAhead m)의 길목으로 가서 버티다가,\n" +
+             "플레이어가 interceptTrigger m 안으로 오면 덮친다. 느린 탱커는 뒤에서 쫓으면 영영 못 따라잡기 때문.\n" +
+             "(tankPushes가 켜져 있어야 동작. 학습장은 yaml tank_intercept로 켠다)")]
+    public bool tankIntercept = false;
+    [Tooltip("매복 지점: 플레이어 앞쪽으로 몇 m")]
+    public float interceptAhead = 10f;
+    [Tooltip("플레이어가 탱커와 이 거리(m) 안이면 매복을 풀고 덮친다")]
+    public float interceptTrigger = 6f;
 
     [Header("정보 공유")]
     [Tooltip("무리 중 누군가 플레이어를 보거나(총소리 포함) 들은 뒤 몇 초까지 무리 전체가 위치를 공유할지.\n" +
@@ -221,6 +236,11 @@ public class HunterPackTactics : MonoBehaviour
     /// <summary>무리의 현재 명령 단계가 '덮치기'인가.</summary>
     public bool IsClosing => CurrentPhase == Phase.Closing;
 
+    /// <summary>무리가 지금 쫓는 플레이어 지점 (덮치기 명령 지점과 같다). HasTarget이 false면 의미 없음.</summary>
+    public Vector3 TargetPoint { get; private set; }
+    /// <summary>무리가 플레이어 위치를 알고 있어 TargetPoint가 유효한가.</summary>
+    public bool HasTarget { get; private set; }
+
     // ─────────────────────────────────────────────
     void OnEnable()  { Active.Add(this); }
     void OnDisable() { Active.Remove(this); }
@@ -261,6 +281,7 @@ public class HunterPackTactics : MonoBehaviour
         closing       = false;
         CurrentPhase  = Phase.Searching;
         LastGapDeg    = 360f;
+        HasTarget     = false;
         orders.Clear();
         rushing.Clear();
         pushing.Clear();
@@ -280,6 +301,7 @@ public class HunterPackTactics : MonoBehaviour
         rushing.Clear();
         pushing.Clear();
         slots.Clear();
+        HasTarget = false;
 
         if (members.Count == 0) { Destroy(gameObject); return; }
 
@@ -333,6 +355,8 @@ public class HunterPackTactics : MonoBehaviour
 
         Vector3 target = OnMesh(knownPos);
         if (!seenNow) target = Toward(target, knownPos + knownVel * Mathf.Min(now - lastSeenTime, 1.5f));
+        TargetPoint = target;
+        HasTarget   = true;
 
         // 2. 앞서가기: 좀비들이 도착할 즈음 플레이어가 있을 곳
         int n = alive.Count;
@@ -358,8 +382,13 @@ public class HunterPackTactics : MonoBehaviour
         LastGapDeg = ComputeGap(target, out int near);
 
         // 4. 포위 중인가, 덮칠 때인가
+        // rlDecidesClose: 빈틈 규칙은 끄고 각 좀비의 강화학습이 덮칠 때를 정한다 (시간 초과 강제 덮치기만 남김)
+        float encircleLimit = settings.rlDecidesClose
+            ? Mathf.Max(settings.maxEncircleTime, settings.rlCloseTimeout)
+            : settings.maxEncircleTime;
         if (n <= 1) closing = true;
         else if (forcedTimer > 0f) { forcedTimer -= dt; closing = true; }
+        else if (settings.rlDecidesClose) closing = false;
         else if (closing)
         {
             // 덮치다가 빈틈이 크게 벌어지면 다시 포위로 (잦은 전환을 막는 여유 40°)
@@ -371,7 +400,7 @@ public class HunterPackTactics : MonoBehaviour
         else
         {
             encircleTimer += dt;
-            if (encircleTimer >= settings.maxEncircleTime)
+            if (encircleTimer >= encircleLimit)
             {
                 encircleTimer = 0f;
                 forcedTimer   = settings.forcedCloseTime;
@@ -406,7 +435,13 @@ public class HunterPackTactics : MonoBehaviour
             var m = alive[i];
             if (settings.useRoles && settings.tankPushes && RoleOf(m) == Role.Tank)
             {
-                orders[m] = target;   // 탱커는 슬롯을 소모하지 않고 곧장 압박해 플레이어를 포위망 쪽으로 몬다
+                // 탱커는 슬롯을 소모하지 않는다.
+                //  - 매복(tankIntercept): 도망치는 방향 앞쪽 길목에서 버티다가 가까워지면 덮친다
+                //  - 기본: 곧장 압박해 플레이어를 포위망 쪽으로 몬다
+                if (settings.tankIntercept && FlatDistance(m.transform.position, target) > settings.interceptTrigger)
+                    orders[m] = Toward(target, target + Dir(heading) * settings.interceptAhead);
+                else
+                    orders[m] = target;
                 pushing.Add(m);
             }
             else
@@ -452,7 +487,7 @@ public class HunterPackTactics : MonoBehaviour
         // 7. 각자의 이동 목표
         // [수정 2] 포위 시간이 길어질수록 고리 반경(R)을 서서히 좁혀서, 먼저 도착한 좀비가 7m 거리에서
         // 가만히 서서 더미의 총에 맞아 죽는 현상(Ring Stalling)을 방지한다.
-        float tighten = Mathf.Clamp01(encircleTimer / Mathf.Max(1f, settings.maxEncircleTime));
+        float tighten = Mathf.Clamp01(encircleTimer / Mathf.Max(1f, encircleLimit));
         float R = Mathf.Lerp(settings.ringRadius, settings.commitDistance + 1.0f, tighten * 0.65f);
 
         for (int i = 0; i < rn; i++)
@@ -687,6 +722,7 @@ public class HunterPackTactics : MonoBehaviour
             ? $" · 빠른 {runnerCount} / 일반 {alive.Count - runnerCount - tankCount} / 탱커 {tankCount}"
             : "";
         GUI.Label(new Rect(12, 36 + i * 22, 900, 22),
-            $"사냥꾼 무리 {i + 1}: {phase} · {alive.Count}마리{roleText} · 최대 빈틈 {gap} (덮치는 기준 {settings.closeGapDeg:0}°)");
+            $"사냥꾼 무리 {i + 1}: {phase} · {alive.Count}마리{roleText} · 최대 빈틈 {gap} " +
+            (settings.rlDecidesClose ? "(덮치기: 강화학습이 판단)" : $"(덮치는 기준 {settings.closeGapDeg:0}°)"));
     }
 }

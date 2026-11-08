@@ -26,6 +26,9 @@ public class LootWorldSpawner : MonoBehaviour
 
     static void AutoCreate()
     {
+        // 게임 씬(DayNightCycle 있음)에서만. 강화학습 학습장에도 Player 태그(더미)가 있어서
+        // 여기서 막지 않으면 학습장에 상자 수십 개가 깔려 장애물이 된다.
+        if (!WorldDecor.IsGameScene) return;
         if (LootDatabase.Instance == null || GameObject.FindWithTag("Player") == null) return;
         if (FindFirstObjectByType<LootWorldSpawner>() != null) return;
         new GameObject("LootWorldSpawner").AddComponent<LootWorldSpawner>();

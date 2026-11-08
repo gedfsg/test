@@ -1,0 +1,96 @@
+# zombie_lunge2: "stalker" zombie that picks WHEN to lunge (single decision, every 0.1 s).
+# v1 (zombie_lunge) learned nothing: it lunged the moment it could, from step 0, and every stat stayed flat.
+# v2: lunge is precious (cooldown 9-12 s, a failed lunge leaves the zombie panting 1.2-1.8 s),
+#     reload windows are more frequent (magazine 12-30 per episode), more exploration (beta 0.02),
+#     and success is recorded per situation (LungeBy/Success_Reloading / _Untargeted / _Targeted).
+# mlagents-learn config/zombie_lunge.yaml --run-id=zombie_lunge2 --env="BuildsLunge/My First Game.exe" --no-graphics --num-envs=2
+# continue to 10M (same run): add --resume to the line above
+# Movement stays rule-based (FSM chase + ZombieQuirks: slow stalk, 'roar' windup, burst lunge).
+# The policy only chooses lunge (1) or wait (0); lunge is masked when impossible
+# (target not visible, cooldown, inside attack range, or farther than 14 m).
+# Each zombie learns on its own (PPO, not POCA): +1 when it lands an attack on the dummy,
+# -0.03 per bullet taken, -0.5 when killed (60 hp, 15 per bullet), small time penalty.
+# Scene: Tools > Zombie > Lunge training scene (3x3). Build it into BuildsLunge/.
+# Watch in TensorBoard:
+#   Lunge/StartWhileReloading  vs Lunge/BaseReloading   (lunges timed to reloads?)
+#   Lunge/StartWhileUntargeted vs Lunge/BaseUntargeted  (lunges when the dummy aims at someone else?)
+#   Lunge/SuccessRate, Lunge/StartDistance, Lunge/WaitSeconds (should go UP if it learns to wait),
+#   LungeBy/Success_* (does a window actually pay off?), Result/AttacksPerZombieMinute, Result/KillsPerZombieMinute
+
+behaviors:
+  ZombieLunge:
+    trainer_type: ppo
+    hyperparameters:
+      batch_size: 1024
+      buffer_size: 20480
+      learning_rate: 3.0e-4
+      beta: 2.0e-2
+      epsilon: 0.2
+      lambd: 0.95
+      num_epoch: 3
+      learning_rate_schedule: linear
+    network_settings:
+      normalize: true
+      hidden_units: 128
+      num_layers: 2
+    reward_signals:
+      extrinsic:
+        gamma: 0.99
+        strength: 1.0
+    keep_checkpoints: 10
+    checkpoint_interval: 500000
+    max_steps: 10000000
+    time_horizon: 128
+    summary_freq: 20000
+
+engine_settings:
+  time_scale: 20
+  capture_frame_rate: 200
+  target_frame_rate: -1
+
+environment_parameters:
+  # arena
+  lunge_episode_seconds: 60.0
+  lunge_zombie_hp: 60.0
+  lunge_hit_stun: 0.25
+  lunge_normal_speed: 2.8
+  lunge_runner_speed: 4.0
+  lunge_runner_chance: 0.3
+  lunge_attack_reward: 1.0
+  lunge_hit_penalty: 0.03
+  lunge_kill_penalty: 0.5
+  lunge_time_penalty: 0.003
+  lunge_dummy_min: 1.5
+  lunge_dummy_max: 3.0
+  lunge_spawn_min: 10.0
+  lunge_spawn_max: 18.0
+  lunge_gunshot_radius: 35.0
+  lunge_mag_min: 12
+  lunge_mag_max: 30
+  lunge_cooldown_min: 9.0
+  lunge_cooldown_max: 12.0
+  lunge_fail_rest_min: 1.2
+  lunge_fail_rest_max: 1.8
+  # dummy: like a game player (holds ground and shoots, backs off only when close, sprints only to dodge a lunge)
+  evader_limited_sight: 1
+  dummy_shoot: 1
+  dummy_fire_interval: 0.2
+  dummy_fire_interval_max: 0.5
+  dummy_damage: 15.0
+  dummy_reload: 1.5
+  dummy_bullet_speed: 70.0
+  dummy_bullet_speed_max: 150.0
+  dummy_range: 25.0
+  dummy_spread: 15.0
+  dummy_turn_speed: 180.0
+  dummy_reaction: 0.6
+  dummy_aim_lead: 0.3
+  dummy_perception_delay: 0.4
+  dummy_sprint: 1
+  dummy_sprint_mult: 1.8
+  dummy_stamina: 100
+  dummy_sprint_cost: 25
+  dummy_stamina_regen: 15
+  dummy_sprint_dist: 4
+  dummy_backpedal: 0.8
+  dummy_flee_scale: 0.35

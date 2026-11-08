@@ -41,6 +41,10 @@ public class ZombieEvaluator : MonoBehaviour
     [Tooltip("모델 여러 개 비교: 여기에 .onnx를 넣으면 RL / RLDeterministic 단계를 모델마다 한 번씩 돈다 (RL Model 칸 대신).\n" +
              "결과의 brain 칸에는 'RLDeterministic[모델 이름]'처럼 적힌다. 비우면 RL Model 하나만 쓴다.")]
     public Object[] compareModels;
+    [Tooltip("'언제 덮칠지'를 강화학습이 정하도록 학습한 모델 (shoot9부터, yaml rl_close 1).\n" +
+             "여기 넣은 모델로 RL 단계를 돌 때만 조율기의 빈틈 규칙을 끄고 좀비가 직접 덮칠 때를 정한다.\n" +
+             "RL Model / Compare Models에도 같은 파일을 넣어야 평가된다. 조율기(Heuristic)와 FSM 단계는 항상 규칙대로.")]
+    public Object[] rlCloseModels;
 
     [Header("조건")]
     [Tooltip("더미 최고 속도(고정). 조건마다 아래 판 수만큼 돈다. 좀비 최고 속도는 3.5")]
@@ -58,6 +62,10 @@ public class ZombieEvaluator : MonoBehaviour
     [Header("실행")]
     [Tooltip("게임 배속. 너무 높으면 프레임당 물리 스텝이 밀려 실제로는 덜 빨라진다")]
     public float timeScale = 10f;
+    [Tooltip("한 프레임이 게임 시간으로 몇 초인지 고정한다 (0 = 고정 안 함, PC 속도에 따라 들쭉날쭉).\n" +
+             "shoot7b부터 학습은 0.1초 (time_scale 20, capture_frame_rate 200). 그 전 학습은 0.333초 (capture_frame_rate 60).\n" +
+             "좀비와 더미는 프레임마다 한 번 움직이므로, 학습과 같은 값으로 평가해야 조건이 같다.")]
+    public float frameGameSeconds = 0.1f;
 
     [Header("총 설정")]
     [Tooltip("켜면 모든 더미의 총을 게임 총에 맞춘다 (shoot4 학습과 같은 값):\n" +
@@ -67,6 +75,10 @@ public class ZombieEvaluator : MonoBehaviour
     [Tooltip("더미의 반응 지연(초)을 이 값으로 맞춘다. -1이면 씬에 저장된 값 그대로.\n" +
              "shoot5/6은 0.25/0.4초로 학습했다 (사람의 반응 시간). shoot4까지는 0.")]
     public float perceptionDelay = -1f;
+    [Tooltip("켜면 모든 더미가 게임 플레이어처럼 스태미나 달리기를 한다 (shoot7 학습 조건: 걷기 × 1.8, 4초).")]
+    public bool dummySprint = false;
+    [Tooltip("0보다 크면 사냥꾼 속도를 이 값들로 맞춘다 (일반 / 빠른 / 탱커). shoot7: 4.5 / 5.75 / 3.0. 0이면 씬 값 그대로.")]
+    public Vector3 zombieSpeeds = Vector3.zero;
 
     [Header("영상 촬영용")]
     [Tooltip("화면 위쪽에 지금 어떤 AI가 움직이는지 크게 표시한다 (영상 녹화용)")]
@@ -145,6 +157,8 @@ public class ZombieEvaluator : MonoBehaviour
             a.adaptiveSpeed     = false;   // 속도는 평가 도구가 정한다
             if (gameGuns && a.dummy != null) a.dummy.SetGun(0.1f, 0.5f, 70f, 150f, 30, 1.5f, 25f, 15f);
             if (perceptionDelay >= 0f && a.dummy != null) a.dummy.perceptionDelay = perceptionDelay;
+            if (dummySprint && a.dummy != null) a.dummy.sprintEnabled = true;
+            if (zombieSpeeds.x > 0f) { a.normalSpeed = zombieSpeeds.x; a.runnerSpeed = zombieSpeeds.y; a.tankSpeed = zombieSpeeds.z; }
             a.evaderSpeedJitter = 0f;      // 조건을 정확히 고정
             if (captureRadius > 0f) a.captureRadius = captureRadius;
             a.EpisodeFinished  += OnEpisodeFinished;
@@ -172,6 +186,8 @@ public class ZombieEvaluator : MonoBehaviour
 
         Application.runInBackground = true;
         Time.timeScale = timeScale;
+        // 프레임 간격 고정: captureDeltaTime(실시간) × timeScale = 한 프레임의 게임 시간
+        if (frameGameSeconds > 0f) Time.captureDeltaTime = frameGameSeconds / Mathf.Max(timeScale, 0.01f);
         startRealtime  = Time.realtimeSinceStartup;
 
         Debug.Log($"[평가] 시작: 구역 {arenas.Count}개, 뇌 {string.Join("/", brains)}, " +
@@ -237,6 +253,7 @@ public class ZombieEvaluator : MonoBehaviour
         episodeCsv?.Dispose();
         episodeCsv = null;
         Time.timeScale = 1f;
+        Time.captureDeltaTime = 0f;
     }
 
     // ── 단계(뇌) 전환 ─────────────────────────────
@@ -284,6 +301,11 @@ public class ZombieEvaluator : MonoBehaviour
             warnedNoDeterministic = true;
             Debug.LogError("[평가] 이 ML-Agents 버전에는 Deterministic Inference가 없습니다. RLDeterministic은 RL과 같게 돈다.");
         }
+
+        // 덮치기 판단을 강화학습이 하는 모델인가 (구역 리셋 때 조율기 설정과 좀비 뇌에 반영된다)
+        bool rlClose = isRL && model != null && rlCloseModels != null && System.Array.IndexOf(rlCloseModels, model) >= 0;
+        foreach (var a in arenas) a.slotRlClose = rlClose;
+        if (isRL) Debug.Log($"[평가] 덮치기 판단: {(rlClose ? "강화학습" : "조율기 규칙")}");
 
         foreach (var a in arenas)
         foreach (var z in a.zombies)
@@ -456,6 +478,7 @@ public class ZombieEvaluator : MonoBehaviour
         episodeCsv?.Dispose();
         episodeCsv = null;
         Time.timeScale = 1f;
+        Time.captureDeltaTime = 0f;
 
         float min = (Time.realtimeSinceStartup - startRealtime) / 60f;
         Debug.Log($"[평가] 완료 ({min:0.0}분). 요약: {summaryPath}");

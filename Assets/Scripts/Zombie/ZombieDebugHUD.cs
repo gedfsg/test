@@ -79,11 +79,41 @@ public class ZombieDebugHUD : MonoBehaviour
             Vector3 sp = cam.WorldToScreenPoint(world);
             if (sp.z <= 0f) continue;   // 카메라 뒤
 
+            // 좀비다움(ZombieQuirks): 지금 하는 일(반응 중 / 멈칫 / 가속)과 멍한 개체 표시
+            string extra = "";
+            var q = z.GetComponent<ZombieQuirks>();
+            if (q != null && q.isActiveAndEnabled)
+            {
+                if (q.IsDull) extra += " <color=#A0A0A0>(멍)</color>";
+                if (q.IsLunger) extra += " <color=#FF8080>(돌진형)</color>";
+                if (q.IsHesitant) extra += " <color=#80E0FF>(머뭇형)</color>";
+                if (!q.Herds)   extra += " <color=#80C0FF>(외톨이)</color>";
+                if (!string.IsNullOrEmpty(q.Label)) extra += $" <color=#{QuirkColor(q.Label)}>{q.Label}</color>";
+            }
+
             labelStyle.normal.textColor = Color.white;
             GUI.Label(
-                new Rect(sp.x - 50f, Screen.height - sp.y - 10f, 100f, 20f),
-                $"<color=#{ColorOf(z.State)}>{z.State}</color>",
+                new Rect(sp.x - 90f, Screen.height - sp.y - 10f, 180f, 20f),
+                $"<color=#{ColorOf(z.State)}>{z.State}</color>{extra}",
                 labelStyle);
+        }
+    }
+
+    static string QuirkColor(string label)
+    {
+        switch (label)
+        {
+            case "반응 중": return "FFFF40";
+            case "멍함":   return "A0A0A0";
+            case "멈칫":   return "40FFFF";
+            case "가속":   return "FF9020";
+            case "왁!":    return "FF2020";
+            case "돌진":   return "FF40FF";
+            case "머뭇":   return "66CCFF";
+            case "급발진": return "FF4D99";
+            case "헐떡":   return "8080FF";
+            case "휘청":   return "FFFFFF";
+            default:      return "FFFFFF";
         }
     }
 

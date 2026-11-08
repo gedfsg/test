@@ -12,6 +12,7 @@ using UnityEngine;
 ///   [1,2]  명령 지점 방향 (내 기준 x, z)
 ///   [3]    명령 지점까지 거리 / 30
 ///   [4]    덮치기 명령인가 (1/0) — 명령 지점이 곧 플레이어 위치 (조이기 단계, 코앞, 탱커 몰이)
+///          shoot9b부터: 자기가 고른 덮치기를 유지하는 중이어도 1 (ZombieMLBrain.RushLatched) —— 관측 크기는 그대로
 ///   [5]    무리가 본 플레이어의 가장 큰 빈틈 / 360 (작을수록 거의 갇힘)
 ///
 /// ⚠ 지형·역할 센서처럼 모델 입력이 바뀐다. 이 센서로 학습한 모델(이름에 'slot')에만 붙일 것.
@@ -24,6 +25,7 @@ public class ZombieSlotSensor : SensorComponent
     public const string SensorName        = "ZombieSlot";
 
     private ZombieController body;
+    private ZombieMLBrain    ml;
 
     public override ISensor[] CreateSensors()
     {
@@ -52,7 +54,8 @@ public class ZombieSlotSensor : SensorComponent
             buf[1] = local.x;
             buf[2] = local.z;
             buf[3] = Mathf.Clamp01(dist / ZombieObservation.ObservationRange);
-            buf[4] = rush ? 1f : 0f;
+            if (ml == null) ml = GetComponent<ZombieMLBrain>();
+            buf[4] = (rush || (ml != null && ml.RushLatched)) ? 1f : 0f;
         }
         catch (System.Exception e)
         {

@@ -428,11 +428,31 @@ public class ZombieTrainingArena : MonoBehaviour
     [Tooltip("총구 선의 폭(m, 한쪽) (yaml: zombie_aim_width). 좀비 몸 반지름 0.5 + 여유")]
     public float aimLineWidth = 1.2f;
 
+    [Tooltip("시선 벌점 (초당) (yaml: zombie_cone_penalty, shoot10부터). 0 = 꺼짐.\n" +
+             "더미가 바라보는 방향 ±coneHalfAngle° 안에 있으면 깎는다 (정면 한가운데일수록 크다).\n" +
+             "총구 선(폭 1.2m) 벌점은 총알이 빨라 사실상 못 피하는 조건이었다 → 각도로 넓혀서 '옆으로 돌아 들어가면' 실제로 피할 수 있게.\n" +
+             "덮치는 중(조율기의 덮치기 명령), 멈칫 중, 더미가 달리는 중(시선 = 달리는 방향, 앞 막기 자리와 겹침)에는 주지 않는다.")]
+    public float conePenalty = 0f;
+    [Tooltip("시선 벌점 각도 (°, 한쪽) (yaml: zombie_cone_deg)")]
+    public float coneHalfAngle = 20f;
+    [Tooltip("이 거리(m)보다 가까우면 시선 벌점을 주지 않는다 (yaml: zombie_cone_min_dist) —— 붙으면 어차피 정면이다")]
+    public float coneMinDistance = 4f;
+    private float conePenaltyNow, coneDegNow, coneMinDistNow;
+    private int   inConeSamples, coneSamples;      // 통계: 시선 안에 있던 비율
+    private float facingAngleSum;                  // 통계: 더미 시선에서 벗어난 평균 각도
+
     private float[] zombieHp = new float[0];
     private float[] zombieHpMax = new float[0];
     private float   deathPenaltyNow;
     private float   hitPenaltyNow;
     private float   hitStunNow;
+    [Tooltip("탱커 방패 (shoot8): 탱커가 맞았을 때 멈칫 시간 배율 (yaml zombie_tank_stun_scale). 0 = 멈칫 안 함.\n" +
+             "게임의 탱커는 체력 400으로 총을 버틴다. 학습장은 체력이 무한이라 그 장점이 사라져서 탱커가 그냥 '느린 좀비'였다.")]
+    public float tankStunScale = 1f;
+    [Tooltip("탱커가 맞았을 때 개별 벌점 배율 (yaml zombie_tank_hit_penalty_scale). 0 = 대신 맞아 줘도 손해 없음")]
+    public float tankHitPenaltyScale = 1f;
+    private float tankStunScaleNow = 1f, tankHitPenaltyScaleNow = 1f;
+    private int   tankHits, allHits, tankAimSteps, aimSteps;   // 통계: 탱커가 총을 대신 받은 정도
     private float   aimPenaltyNow, aimWidthNow;
     private int     inLineSamples, lineSamples;   // 통계: 총구 선 안에 있던 비율
     private ZombieAgent[] zombieAgents;
@@ -472,15 +492,21 @@ public class ZombieTrainingArena : MonoBehaviour
 
         zombieHp[zi] -= damage;
 
-        // 맞은 본인에게 바로 개별 벌점 —— 피하기의 직접 신호
-        if (hitPenaltyNow > 0f)
+        bool isTank = mixedPack && zi < roles.Length && roles[zi] == PackRole.Tank;
+        allHits++;
+        if (isTank) tankHits++;
+
+        // 맞은 본인에게 바로 개별 벌점 —— 피하기의 직접 신호 (탱커는 배율 적용: 방패 역할이면 0)
+        float pen = hitPenaltyNow * (isTank ? tankHitPenaltyScaleNow : 1f);
+        if (pen > 0f)
         {
             var hitAgent = zombies[zi].GetComponent<ZombieAgent>();
-            if (hitAgent != null && hitAgent.isActiveAndEnabled) hitAgent.AddReward(-hitPenaltyNow);
+            if (hitAgent != null && hitAgent.isActiveAndEnabled) hitAgent.AddReward(-pen);
         }
 
-        // 맞으면 멈칫한다 (ZombieController.Stun: 그동안 이동 정지, 뇌는 제자리 판단)
-        if (hitStunNow > 0f) zombies[zi].Stun(hitStunNow);
+        // 맞으면 멈칫한다 (ZombieController.Stun: 그동안 이동 정지, 뇌는 제자리 판단). 탱커는 배율 적용
+        float stun = hitStunNow * (isTank ? tankStunScaleNow : 1f);
+        if (stun > 0f) zombies[zi].Stun(stun);
 
         if (zombieHp[zi] > 0f) return;
 
@@ -534,6 +560,10 @@ public class ZombieTrainingArena : MonoBehaviour
     public float slotResidualScale = 0f;
     [Tooltip("켜면 보정을 옆으로만 허용 (ZombieMLBrain.residualLateralOnly). yaml: slot_residual_lateral (1/0)")]
     public bool  slotResidualLateral = false;
+    [Tooltip("켜면 '언제 덮칠지'를 강화학습이 정한다 (shoot9부터): 조율기의 빈틈 규칙을 끄고(HunterTacticsSettings.rlDecidesClose),\n" +
+             "좀비의 이산 행동을 덮치기 판단으로 쓴다(ZombieMLBrain.attackAsRush). yaml: rl_close (1/0), rl_close_timeout (초).\n" +
+             "평가 도구는 RL 단계에서 이 값을 모델에 맞춰 바꾼다 (ZombieEvaluator.rlCloseModels).")]
+    public bool  slotRlClose = false;
 
     private HunterPackTactics slotTactics;
     private float   slotFollowNow;
@@ -542,6 +572,10 @@ public class ZombieTrainingArena : MonoBehaviour
     private int     orderDistN;
     private int     slotClosingSteps;
     private int     slotKnownSteps;
+    // 덮치기 판단(rl_close) 통계
+    private int     rushSteps, rushEligibleSteps, rushStarts;
+    private float   rushStartDistSum, rushStartGapSum;
+    private bool[]  prevRush;
 
     /// <summary>
     /// 각 좀비가 자기 명령 지점에 가까워진 만큼 개별 보상 (잠재함수 방식).
@@ -558,6 +592,7 @@ public class ZombieTrainingArena : MonoBehaviour
 
         if (slotTactics.IsClosing) slotClosingSteps++;
         if (slotTactics.Knows)     slotKnownSteps++;
+        if (slotSettings.rlDecidesClose) AccumulateRush();
 
         for (int i = 0; i < agents.Count; i++)
         {
@@ -578,6 +613,39 @@ public class ZombieTrainingArena : MonoBehaviour
             float delta = prev - dist;
             if (Mathf.Abs(delta) > 1f) continue;
             a.AddReward(delta * slotFollowNow * 0.1f);
+        }
+    }
+
+    /// <summary>
+    /// 덮치기 판단 통계 (rl_close). 무리가 더미를 알고 강제 덮치기가 아닐 때만 센다.
+    ///   RushFraction : 그동안 좀비가 '덮치기'를 고른 비율
+    ///   RushStartDist: 덮치기를 시작한 순간 더미까지 거리 (m)
+    ///   RushStartGap : 덮치기를 시작한 순간 더미의 가장 큰 빈틈 (°, 작을수록 이미 갇힌 상태에서 덮침)
+    /// </summary>
+    private void AccumulateRush()
+    {
+        if (prevRush == null || prevRush.Length != agents.Count) prevRush = new bool[agents.Count];
+        bool eligible = slotTactics.Knows && !slotTactics.IsClosing && slotTactics.HasTarget;
+        for (int i = 0; i < agents.Count; i++)
+        {
+            var a = agents[i];
+            if (a == null || a.Body == null || !a.isActiveAndEnabled) { prevRush[i] = false; continue; }
+            var ml = a.GetComponent<ZombieMLBrain>();
+            bool rush = ml != null && ml.RushingNow;
+            if (eligible)
+            {
+                rushEligibleSteps++;
+                if (rush) rushSteps++;
+                if (rush && !prevRush[i])
+                {
+                    Vector3 d = slotTactics.TargetPoint - a.transform.position;
+                    d.y = 0f;
+                    rushStarts++;
+                    rushStartDistSum += d.magnitude;
+                    rushStartGapSum  += slotTactics.LastGapDeg;
+                }
+            }
+            prevRush[i] = rush;
         }
     }
 
@@ -1092,6 +1160,9 @@ public class ZombieTrainingArena : MonoBehaviour
 
         if (adaptiveSpeed) UpdateAdaptiveSpeed(captured);
         sr.Add("Pursuit/EvaderSpeed", currentEvaderSpeed);
+        // 더미가 달린 시간 비율 (스태미나 달리기를 켰을 때만)
+        if (dummy != null && dummy.sprintEnabled && stepCount > 0)
+            sr.Add("Pursuit/DummySprintFraction", dummy.SprintSeconds / (stepCount * Time.fixedDeltaTime));
 
         // ── 진단 ──
         // SightFraction: 에피소드 중 '좀비 누군가가 더미를 보고 있던' 시간 비율.
@@ -1138,6 +1209,16 @@ public class ZombieTrainingArena : MonoBehaviour
             if (orderDistN > 0) sr.Add("Slot/OrderDistance", orderDistSum / orderDistN);
             sr.Add("Slot/ClosingFraction", slotClosingSteps / (float)stepCount);
             sr.Add("Slot/KnownFraction",   slotKnownSteps   / (float)stepCount);
+            // 덮치기 판단 (rl_close): 고른 비율 / 시작할 때 거리 / 시작할 때 빈틈
+            if (slotSettings.rlDecidesClose)
+            {
+                if (rushEligibleSteps > 0) sr.Add("Slot/RushFraction", rushSteps / (float)rushEligibleSteps);
+                if (rushStarts > 0)
+                {
+                    sr.Add("Slot/RushStartDist", rushStartDistSum / rushStarts);
+                    sr.Add("Slot/RushStartGap",  rushStartGapSum  / rushStarts);
+                }
+            }
         }
 
         // 반격하는 더미 지표
@@ -1156,6 +1237,15 @@ public class ZombieTrainingArena : MonoBehaviour
             if (steerFreeN > 0) sr.Add("Dodge/SteerFree",    steerFreeSum / steerFreeN);
             // 사거리 안 좀비 중 총구 선(aimLineWidth) 안에 있던 비율 —— 내려가면 정면을 비켜 가는 중
             if (lineSamples > 0) sr.Add("Dodge/InAimLine", inLineSamples / (float)lineSamples);
+            // 시선(±coneHalfAngle°) 안에 있던 비율 / 더미 시선에서 벗어난 평균 각도 —— 앞은 내려가고 뒤는 올라가면 시선을 피하는 중
+            if (coneSamples > 0)
+            {
+                sr.Add("Dodge/InCone",       inConeSamples  / (float)coneSamples);
+                sr.Add("Dodge/FacingAngle",  facingAngleSum / coneSamples);
+            }
+            // 탱커 방패: 맞은 총알 중 탱커가 받은 비율 / 더미가 탱커를 겨눈 시간 비율 (탱커 1/5이면 우연 수준은 0.2 근처)
+            if (allHits  > 0) sr.Add("Shoot/TankHitShare",   tankHits / (float)allHits);
+            if (aimSteps > 0) sr.Add("Shoot/TankAimedShare", tankAimSteps / (float)aimSteps);
             if (zigAimTime  > 0.5f) sr.Add("Dodge/ZigzagAimed", zigAimFlips  / zigAimTime);
             if (zigFreeTime > 0.5f) sr.Add("Dodge/ZigzagFree",  zigFreeFlips / zigFreeTime);
             if (dummy.ShotsFired > 0) sr.Add("Shoot/HitRate", dummy.ShotsHit / (float)dummy.ShotsFired);
@@ -1223,6 +1313,9 @@ public class ZombieTrainingArena : MonoBehaviour
         adaptiveStepNow   = Mathf.Max(0f, ep.GetWithDefault("adaptive_step",  adaptiveStep));
         raiseAboveNow     = ep.GetWithDefault("adaptive_raise", raiseAbove);
         lowerBelowNow     = ep.GetWithDefault("adaptive_lower", lowerBelow);
+        // 범위도 yaml로 (shoot7부터 게임 플레이어 걷기 5 m/s 근처까지 올라갈 수 있게)
+        adaptiveMin       = ep.GetWithDefault("adaptive_min", adaptiveMin);
+        adaptiveMax       = ep.GetWithDefault("adaptive_max", adaptiveMax);
     }
 
     private void UpdateAdaptiveSpeed(bool captured)
@@ -1264,6 +1357,14 @@ public class ZombieTrainingArena : MonoBehaviour
         Transform aimed = dummy.AimTarget;
         float range = Mathf.Max(dummy.fireRange, 3f);
 
+        // 통계: 더미가 겨누는 시간 중 탱커를 겨눈 비율
+        if (aimed != null && mixedPack)
+        {
+            aimSteps++;
+            for (int i = 0; i < zombies.Count && i < roles.Length; i++)
+                if (zombies[i] != null && zombies[i].transform == aimed) { if (roles[i] == PackRole.Tank) tankAimSteps++; break; }
+        }
+
         // 총구 선 벌점: 총구에서 뻗은 직선에 가까울수록 (사거리 안, 2m 밖, 멈칫 중 제외)
         if (zombieAgents == null || zombieAgents.Length != zombies.Count)
         {
@@ -1290,6 +1391,31 @@ public class ZombieTrainingArena : MonoBehaviour
                 var ag = zombieAgents[i];
                 if (aimPenaltyNow > 0f && ag != null && ag.isActiveAndEnabled)
                     ag.AddReward(-aimPenaltyNow * (1f - perp / aimWidthNow) * dtLine);
+            }
+
+            // 시선 벌점: 더미가 바라보는 방향 ±coneDegNow° 안 (사거리 안, coneMinDistNow 밖)
+            // 더미가 달리는 중이면 시선 = 달리는 방향이라 앞을 막는 좀비가 벌을 받게 되므로 뺀다
+            if (!dummy.Sprinting)
+            {
+                for (int i = 0; i < zombies.Count; i++)
+                {
+                    var z = zombies[i];
+                    if (!Alive(z) || z.IsStunned) continue;
+                    Vector3 rel = z.transform.position - dp; rel.y = 0f;
+                    float dist = rel.magnitude;
+                    if (dist < coneMinDistNow || dist > range || dist < 0.01f) continue;
+                    // 덮치는 중이면 정면으로 가는 게 맞다 → 빼고 잰다
+                    if (slotTactics != null && slotTactics.TryGetOrder(z, out _, out bool rushing) && rushing) continue;
+
+                    float ang = Vector3.Angle(aimDir, rel);
+                    coneSamples++;
+                    facingAngleSum += ang;
+                    if (ang >= coneDegNow) continue;
+                    inConeSamples++;
+                    var ag = zombieAgents[i];
+                    if (conePenaltyNow > 0f && ag != null && ag.isActiveAndEnabled)
+                        ag.AddReward(-conePenaltyNow * (1f - ang / coneDegNow) * dtLine);
+                }
             }
         }
         for (int i = 0; i < zombies.Count; i++)
@@ -1356,12 +1482,18 @@ public class ZombieTrainingArena : MonoBehaviour
                 Vector3 d = p - prevDummyPos;
                 d.y = 0f;
                 float step = d.magnitude;
-                // 순간이동(리셋, NavMesh 복귀)은 이동으로 치지 않는다
-                if (step < 1f)
+                // 순간이동(리셋, NavMesh 복귀)은 이동으로 치지 않는다.
+                // ⚠ 예전 기준은 1m였다. 학습은 배속 20 + capture_frame_rate 60이라 한 프레임이 게임 시간 약 0.33초이고,
+                //   NavMeshAgent는 프레임마다 한 번 움직인다 → 초속 3m를 넘으면 한 프레임에 1m 넘게 '점프'해서
+                //   이동이 통째로 빠지고, 도망 속도(EvaderActualSpeed)가 0 근처로 잘못 찍혔다 (shoot7에서 발견).
+                //   리셋 순간이동은 보통 수십 m라 4m로 올려도 구분된다.
+                if (step < 4f)
                 {
                     dummyDistance += step;
                     if (dummy.IsFleeing) { dummyFleeDistance += step; dummyFleeSteps++; }
-                    AccumulateRoleDiagnostics(p, d / Time.fixedDeltaTime);
+                    if (dummyNav == null) dummyNav = dummy.GetComponent<NavMeshAgent>();
+                    // 속도는 위치 차이(프레임 단위로 뚝뚝 끊김) 대신 에이전트 속도로
+                    AccumulateRoleDiagnostics(p, dummyNav != null ? dummyNav.velocity : d / Time.fixedDeltaTime);
                 }
             }
             prevDummyPos    = p;
@@ -1442,6 +1574,9 @@ public class ZombieTrainingArena : MonoBehaviour
         obqAimSum = obqFreeSum = steerAimSum = steerFreeSum = 0f;
         obqAimN = obqFreeN = steerAimN = steerFreeN = 0;
         inLineSamples = lineSamples = 0;
+        inConeSamples = coneSamples = 0;
+        facingAngleSum = 0f;
+        tankHits = allHits = tankAimSteps = aimSteps = 0;
         zigAimTime = zigFreeTime = 0f;
         zigAimFlips = zigFreeFlips = 0;
         if (latSign.Length > 0) System.Array.Clear(latSign, 0, latSign.Length);
@@ -1475,6 +1610,9 @@ public class ZombieTrainingArena : MonoBehaviour
         orderDistN       = 0;
         slotClosingSteps = 0;
         slotKnownSteps   = 0;
+        rushSteps = rushEligibleSteps = rushStarts = 0;
+        rushStartDistSum = rushStartGapSum = 0f;
+        if (prevRush != null) System.Array.Clear(prevRush, 0, prevRush.Length);
         if (prevOrderDist != null) for (int i = 0; i < prevOrderDist.Length; i++) prevOrderDist[i] = -1f;
         if (slotTactics != null)
         {
@@ -1482,12 +1620,22 @@ public class ZombieTrainingArena : MonoBehaviour
             float residual = Academy.Instance.EnvironmentParameters.GetWithDefault("slot_residual", slotResidualScale);
             bool  lateral  = Academy.Instance.EnvironmentParameters
                 .GetWithDefault("slot_residual_lateral", slotResidualLateral ? 1f : 0f) > 0.5f;
+            // 덮치기 판단을 강화학습에 맡길지 (조율기 설정과 좀비 뇌 둘 다 맞춘다)
+            bool rlClose = Academy.Instance.EnvironmentParameters
+                .GetWithDefault("rl_close", slotRlClose ? 1f : 0f) > 0.5f;
+            slotSettings.rlDecidesClose = rlClose;
+            slotSettings.rlCloseTimeout = Academy.Instance.EnvironmentParameters
+                .GetWithDefault("rl_close_timeout", slotSettings.rlCloseTimeout);
+            // 덮치기 유지 시간 (0 = shoot9처럼 매 결정마다). 없으면 프리팹/뇌의 값 그대로
             foreach (var z in zombies)
             {
                 var ml = z != null ? z.GetComponent<ZombieMLBrain>() : null;
                 if (ml == null) continue;
                 ml.residualScale       = residual;
                 ml.residualLateralOnly = lateral;
+                ml.attackAsRush        = rlClose;
+                ml.rushHoldSeconds     = Academy.Instance.EnvironmentParameters
+                    .GetWithDefault("rl_rush_hold", ml.rushHoldSeconds);
             }
         }
         Intel.Reset();
@@ -1513,6 +1661,7 @@ public class ZombieTrainingArena : MonoBehaviour
             {
                 // 시작 속도도 yaml(adaptive_start)로 덮어쓸 수 있다.
                 // 이어 학습할 때 2.4부터 다시 시작해 실력을 되찾느라 시간을 버리지 않도록.
+                if (adaptiveSpeedNow < 0f && adaptiveWindowNow < 0) ReadAdaptiveRules();   // 범위(adaptive_min/max)를 먼저 읽는다
                 if (adaptiveSpeedNow < 0f)
                     adaptiveSpeedNow = Mathf.Clamp(
                         Academy.Instance.EnvironmentParameters.GetWithDefault("adaptive_start", adaptiveStart),
@@ -1571,8 +1720,15 @@ public class ZombieTrainingArena : MonoBehaviour
             deathPenaltyNow = ep.GetWithDefault("zombie_death_penalty", deathPenalty);
             hitPenaltyNow   = ep.GetWithDefault("zombie_hit_penalty",   hitPenalty);
             hitStunNow      = ep.GetWithDefault("zombie_hit_stun",      hitStun);
+            tankStunScaleNow       = Mathf.Max(0f, ep.GetWithDefault("zombie_tank_stun_scale",        tankStunScale));
+            tankHitPenaltyScaleNow = Mathf.Max(0f, ep.GetWithDefault("zombie_tank_hit_penalty_scale", tankHitPenaltyScale));
+            // 탱커 매복 (조율기 설정). slotTactics는 slotSettings를 그대로 참조하므로 여기서 바꾸면 바로 반영된다
+            slotSettings.tankIntercept = ep.GetWithDefault("tank_intercept", slotSettings.tankIntercept ? 1f : 0f) > 0.5f;
             aimPenaltyNow   = ep.GetWithDefault("zombie_aim_penalty",   aimPenalty);
             aimWidthNow     = Mathf.Max(0.3f, ep.GetWithDefault("zombie_aim_width", aimLineWidth));
+            conePenaltyNow  = Mathf.Max(0f,   ep.GetWithDefault("zombie_cone_penalty",  conePenalty));
+            coneDegNow      = Mathf.Clamp(    ep.GetWithDefault("zombie_cone_deg",      coneHalfAngle), 2f, 90f);
+            coneMinDistNow  = Mathf.Max(0f,   ep.GetWithDefault("zombie_cone_min_dist", coneMinDistance));
             if (zombieHp.Length != zombies.Count) { zombieHp = new float[zombies.Count]; zombieHpMax = new float[zombies.Count]; }
             for (int i = 0; i < zombies.Count; i++)
             {

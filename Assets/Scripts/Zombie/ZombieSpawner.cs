@@ -49,6 +49,13 @@ public class ZombieSpawner : MonoBehaviour
     [Tooltip("스폰 포인트 주변 N미터 안에서 랜덤 위치로 스폰 (겹침 방지)")]
     public float spawnPointJitter = 4f;
 
+    [Header("무리 스폰")]
+    [Tooltip("켜면 한 번에 나오는 좀비들(burst)이 같은 스폰 포인트 근처에서 한 무리로 나온다.\n" +
+             "끄면 예전처럼 한 마리씩 아무 포인트에서나 나온다 (흩어져서 무리 짓기가 잘 안 보임).")]
+    public bool spawnInGroups = true;
+    [Tooltip("랜덤 스폰(스폰 포인트 없을 때)에서 무리가 퍼지는 반경(m)")]
+    public float groupSpread = 3f;
+
     [Header("디버그")]
     public bool debugLog = true;
 
@@ -108,10 +115,12 @@ public class ZombieSpawner : MonoBehaviour
 
                 if (indoorSpawnPoints != null && indoorSpawnPoints.Length > 0)
                 {
+                    // 무리 스폰: 이번 burst는 한 포인트에서
+                    Transform groupPt = spawnInGroups ? indoorSpawnPoints[Random.Range(0, indoorSpawnPoints.Length)] : null;
                     for (int b = 0; b < burst; b++)
                     {
                         if (indoorZombies.Count >= maxIndoorZombies) break;
-                        SpawnAt(indoorSpawnPoints, indoorZombies);
+                        SpawnAt(indoorSpawnPoints, indoorZombies, groupPt);
                     }
                 }
                 indoorTimer = interval + Random.Range(-0.5f, 0.5f);
@@ -127,11 +136,21 @@ public class ZombieSpawner : MonoBehaviour
                 float interval = isNight ? nightOutdoorInterval : dayOutdoorInterval;
                 int burst = isNight ? nightOutdoorBurst : dayOutdoorBurst;
 
+                // 무리 스폰: 이번 burst는 한 포인트(또는 한 지점) 근처에서
+                bool hasPoints = outdoorSpawnPoints != null && outdoorSpawnPoints.Length > 0;
+                Transform groupPt = spawnInGroups && hasPoints ? outdoorSpawnPoints[Random.Range(0, outdoorSpawnPoints.Length)] : null;
+                bool hasCenter = false;
+                Vector3 groupCenter = Vector3.zero;
+                if (spawnInGroups && !hasPoints && useRandomFallback && player != null)
+                    hasCenter = TryRandomPoint(out groupCenter);
+
                 for (int b = 0; b < burst; b++)
                 {
                     if (outdoorZombies.Count >= maxOutdoorZombies) break;
-                    if (outdoorSpawnPoints != null && outdoorSpawnPoints.Length > 0)
-                        SpawnAt(outdoorSpawnPoints, outdoorZombies);
+                    if (hasPoints)
+                        SpawnAt(outdoorSpawnPoints, outdoorZombies, groupPt);
+                    else if (hasCenter)
+                        SpawnNear(groupCenter, outdoorZombies);
                     else if (useRandomFallback && player != null)
                         SpawnRandom(outdoorZombies);
                 }
@@ -142,7 +161,7 @@ public class ZombieSpawner : MonoBehaviour
 
     // ─────────────────────────────────────────────
 
-    void SpawnAt(Transform[] points, List<GameObject> list)
+    void SpawnAt(Transform[] points, List<GameObject> list, Transform fixedPoint = null)
     {
         if (zombiePrefabs == null || zombiePrefabs.Length == 0)
         {
@@ -152,7 +171,8 @@ public class ZombieSpawner : MonoBehaviour
 
         for (int i = 0; i < 3; i++)
         {
-            Transform pt = points[Random.Range(0, points.Length)];
+            // 무리 스폰이면 첫 시도는 정해진 포인트에서 (실패하면 다른 포인트)
+            Transform pt = (fixedPoint != null && i == 0) ? fixedPoint : points[Random.Range(0, points.Length)];
             if (pt == null) continue;
 
             // 스폰 포인트 주변에 랜덤 오프셋 추가 (겹침 방지)
@@ -189,6 +209,38 @@ public class ZombieSpawner : MonoBehaviour
             if (debugLog)
                 Debug.LogWarning($"[ZombieSpawner] ❌ {pt.name} 근처 NavMesh 못 찾음 (위치: {pt.position})");
         }
+    }
+
+    /// <summary>플레이어 기준 minSpawnDistance~spawnRadius 거리의 NavMesh 위 한 점 (무리 스폰의 중심)</summary>
+    bool TryRandomPoint(out Vector3 point)
+    {
+        for (int i = 0; i < 5; i++)
+        {
+            Vector2 rnd = Random.insideUnitCircle.normalized * Random.Range(minSpawnDistance, spawnRadius);
+            Vector3 candidate = player.position + new Vector3(rnd.x, 0, rnd.y);
+            if (NavMesh.SamplePosition(candidate, out NavMeshHit hit, 5f, NavMesh.AllAreas))
+            {
+                point = hit.position;
+                return true;
+            }
+        }
+        point = Vector3.zero;
+        return false;
+    }
+
+    /// <summary>center 근처 groupSpread 안에 한 마리 (무리 스폰)</summary>
+    void SpawnNear(Vector3 center, List<GameObject> list)
+    {
+        for (int i = 0; i < 5; i++)
+        {
+            Vector2 rnd = Random.insideUnitCircle * groupSpread;
+            if (NavMesh.SamplePosition(center + new Vector3(rnd.x, 0, rnd.y), out NavMeshHit hit, 2f, NavMesh.AllAreas))
+            {
+                Spawn(hit.position, list);
+                return;
+            }
+        }
+        Spawn(center, list);
     }
 
     void SpawnRandom(List<GameObject> list)

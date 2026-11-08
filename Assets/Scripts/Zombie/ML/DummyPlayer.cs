@@ -37,6 +37,28 @@ public class DummyPlayer : MonoBehaviour
     [Tooltip("배회할 때 다음 목적지를 고르는 반경")]
     public float roamRadius = 15f;
 
+    [Header("달리기 (게임 플레이어처럼 스태미나 제한) —— yaml dummy_sprint 등으로 켠다")]
+    [Tooltip("켜면 좀비가 가까이 오면 스태미나가 있는 동안 달린다 (dummy_sprint). 달리는 동안은 쏘지 않는다")]
+    public bool  sprintEnabled     = false;
+    [Tooltip("달리기 속도 = 걷기 속도 × 이 값 (dummy_sprint_mult). 게임: 9 / 5 = 1.8")]
+    public float sprintMultiplier  = 1.8f;
+    [Tooltip("최대 스태미나 (dummy_stamina). 게임: 100")]
+    public float maxStamina        = 100f;
+    [Tooltip("달릴 때 초당 소모 (dummy_sprint_cost). 게임: 25 → 꽉 찬 상태에서 4초")]
+    public float sprintCost        = 25f;
+    [Tooltip("안 달릴 때 초당 회복 (dummy_stamina_regen). 게임: 15 → 바닥에서 꽉 찰 때까지 약 6.7초")]
+    public float staminaRegen      = 15f;
+    [Tooltip("가장 가까운 좀비가 이 거리(m) 안으로 오면 달리기 시작 (dummy_sprint_dist)")]
+    public float sprintTriggerDist = 6f;
+    [Tooltip("스태미나가 이만큼(비율) 회복되기 전에는 다시 달리지 않는다 —— 바닥에서 깜빡이며 조금씩 달리는 것 방지")]
+    [Range(0f, 1f)] public float sprintResumeRatio = 0.3f;
+
+    public bool  Sprinting      { get; private set; }
+    public float Stamina01      => maxStamina > 0f ? stamina / maxStamina : 0f;
+    public float SprintSeconds  { get; private set; }   // 이번 판에 달린 시간 (통계)
+    private float stamina;
+    private bool  exhausted;
+
     [Header("도주 성향 (에피소드마다 무작위)")]
     [Tooltip("좀비가 이 거리 안에 들어오면 도망친다. 범위 안에서 매번 추첨")]
     public float minFleeDistance = 12f;
@@ -140,6 +162,9 @@ public class DummyPlayer : MonoBehaviour
     public float zombieHitRadius = 0.5f;
     [Tooltip("Scene 뷰에 총알 궤적을 그린다")]
     public bool  drawBullets     = true;
+    [Tooltip("켜면 더미 머리 위에 상태를 띄운다 (문제 찾기용): 도망/달리기/쏘기, 스태미나, 설정 속도, 실제 속도, 가고 싶은 속도, 가장 가까운 좀비 거리.\n" +
+             "'가고 싶은 속도'는 큰데 '실제 속도'가 0에 가까우면 몸이 막힌 것이고, 둘 다 0이면 갈 곳을 못 정한 것이다.")]
+    public bool  debugOverlay    = false;
 
     /// <summary>총알이 좀비에 맞았을 때 (맞은 좀비, 데미지). 학습장이 가상 체력을 깎는다.</summary>
     public event System.Action<Transform, float> ShotHit;
@@ -240,6 +265,20 @@ public class DummyPlayer : MonoBehaviour
     {
         hasFleeTarget = false;
         IsFleeing     = false;
+        Sprinting     = false;
+        exhausted     = false;
+        SprintSeconds = 0f;
+        if (Academy.IsInitialized)
+        {
+            var sp = Academy.Instance.EnvironmentParameters;
+            sprintEnabled     = sp.GetWithDefault("dummy_sprint", sprintEnabled ? 1f : 0f) > 0.5f;
+            sprintMultiplier  = Mathf.Max(1f, sp.GetWithDefault("dummy_sprint_mult",   sprintMultiplier));
+            maxStamina        = Mathf.Max(1f, sp.GetWithDefault("dummy_stamina",       maxStamina));
+            sprintCost        = sp.GetWithDefault("dummy_sprint_cost",   sprintCost);
+            staminaRegen      = sp.GetWithDefault("dummy_stamina_regen", staminaRegen);
+            sprintTriggerDist = sp.GetWithDefault("dummy_sprint_dist",   sprintTriggerDist);
+        }
+        stamina       = maxStamina;
         baseSpeed    = Random.Range(minSpeed, maxSpeed);
         agent.speed  = baseSpeed;
         fleeDistance = Random.Range(minFleeDistance, maxFleeDistance);
@@ -362,7 +401,13 @@ public class DummyPlayer : MonoBehaviour
     // 물리 스텝마다 돈다 —— 학습은 배속(20배)으로 돌아서 프레임 간격이 들쭉날쭉하기 때문.
     void FixedUpdate()
     {
-        if (!shootingNow || agent == null) return;
+        if (agent == null) return;
+        UpdateSprint(Time.fixedDeltaTime);
+        if (!shootingNow)
+        {
+            agent.speed = baseSpeed * (Sprinting ? sprintMultiplier : 1f);
+            return;
+        }
         float dt = Time.fixedDeltaTime;
         float now = Time.time;
 
@@ -394,9 +439,9 @@ public class DummyPlayer : MonoBehaviour
         }
         if (aimTarget != null && !aimTarget.gameObject.activeInHierarchy) aimTarget = null;
 
-        // 2. 시선 돌리기: 표적이 있으면 (앞을 내다본) 표적 쪽, 없으면 가는 쪽
+        // 2. 시선 돌리기: 표적이 있으면 (앞을 내다본) 표적 쪽, 없으면 가는 쪽. 달리는 중에는 가는 쪽
         float desiredYaw;
-        if (aimTarget != null)
+        if (aimTarget != null && !Sprinting)
         {
             Vector3 to = AimPoint(aimTarget) - transform.position;
             to.y = 0f;
@@ -415,7 +460,7 @@ public class DummyPlayer : MonoBehaviour
         Vector3 vel = agent.desiredVelocity;
         vel.y = 0f;
         float back = vel.sqrMagnitude > 0.01f ? Mathf.Clamp01(-Vector3.Dot(AimForward, vel.normalized)) : 0f;
-        agent.speed = baseSpeed * Mathf.Lerp(1f, backpedalFactor, back);
+        agent.speed = Sprinting ? baseSpeed * sprintMultiplier : baseSpeed * Mathf.Lerp(1f, backpedalFactor, back);
 
         // 4. 재장전: 탄이 떨어졌거나, 쏠 표적이 없는데 반 이하로 남았으면
         if (now >= reloadUntil && ammo <= 0) { ammo = magazineSizeNow; }
@@ -426,7 +471,7 @@ public class DummyPlayer : MonoBehaviour
         }
 
         // 5. 발사: 반응 시간이 지났고, 조준이 표적 쪽이고, 탄이 있으면
-        if (aimTarget != null && ammo > 0 && now >= reloadUntil && now >= nextFireTime &&
+        if (!Sprinting && aimTarget != null && ammo > 0 && now >= reloadUntil && now >= nextFireTime &&
             now - aimAcquiredTime >= reactionTime &&
             Mathf.Abs(Mathf.DeltaAngle(aimYaw, desiredYaw)) <= fireCone)
         {
@@ -445,6 +490,33 @@ public class DummyPlayer : MonoBehaviour
 
         // 6. 총알 진행: 벽에 막히거나, 좀비 몸(반지름 zombieHitRadius)을 지나가면 맞는다
         StepBullets(dt);
+    }
+
+    /// <summary>
+    /// 달리기: 도망치는 중이고 가장 가까운 좀비가 sprintTriggerDist 안이면, 스태미나가 있는 동안 달린다.
+    /// 게임 플레이어와 같은 규칙 —— 달리면 초당 sprintCost 소모, 안 달리면 staminaRegen 회복.
+    /// 바닥나면 sprintResumeRatio만큼 찰 때까지 다시 못 달린다.
+    /// </summary>
+    private void UpdateSprint(float dt)
+    {
+        if (!sprintEnabled) { Sprinting = false; return; }
+
+        bool want = false;
+        if (IsFleeing && TryNearestThreat(out Vector3 near))
+        {
+            float d = Vector3.Distance(transform.position, near);
+            want = Sprinting ? d < sprintTriggerDist * 1.5f : d < sprintTriggerDist;   // 한번 달리면 조금 더 멀어질 때까지
+        }
+        if (exhausted && stamina >= maxStamina * sprintResumeRatio) exhausted = false;
+
+        Sprinting = want && !exhausted && stamina > 0f;
+        if (Sprinting)
+        {
+            stamina -= sprintCost * dt;
+            SprintSeconds += dt;
+            if (stamina <= 0f) { stamina = 0f; exhausted = true; Sprinting = false; }
+        }
+        else stamina = Mathf.Min(maxStamina, stamina + staminaRegen * dt);
     }
 
     /// <summary>앞을 내다본 조준점: 지금 위치 + 속도 × (총알 도착 시간) × aimLead.</summary>
@@ -637,6 +709,29 @@ public class DummyPlayer : MonoBehaviour
     }
 
     // ── 도주 ──────────────────────────────────────
+    private GUIStyle overlayStyle;
+    void OnGUI()
+    {
+        if (!debugOverlay || agent == null || Camera.main == null) return;
+        Vector3 sp = Camera.main.WorldToScreenPoint(transform.position + Vector3.up * 2.2f);
+        if (sp.z < 0f) return;
+        if (overlayStyle == null)
+        {
+            overlayStyle = new GUIStyle(GUI.skin.box) { fontSize = 14, alignment = TextAnchor.UpperLeft };
+            overlayStyle.normal.textColor = Color.white;
+        }
+        float near = TryNearestThreat(out Vector3 n) ? Vector3.Distance(transform.position, n) : -1f;
+        string state = Sprinting ? "달리기" : IsFleeing ? "도망(걷기)" : (shootingNow && aimTarget != null) ? "제자리 사격" : "배회";
+        string txt =
+            $"{state}{(exhausted ? " (지침)" : "")}\n" +
+            $"스태미나 {Stamina01 * 100f:0}%\n" +
+            $"설정 속도 {agent.speed:0.0} / 실제 {agent.velocity.magnitude:0.0} / 가고 싶은 {agent.desiredVelocity.magnitude:0.0}\n" +
+            $"남은 경로 {(agent.hasPath ? agent.remainingDistance : 0f):0.0}m ({agent.pathStatus})\n" +
+            $"가장 가까운 좀비 {(near < 0f ? "-" : near.ToString("0.0") + "m")}";
+        var r = new Rect(sp.x - 110f, Screen.height - sp.y - 90f, 220f, 92f);
+        GUI.Box(r, txt, overlayStyle);
+    }
+
     private Vector3 PickFleePoint(Vector3 nearest)
     {
         // 난이도에 따라 가끔은 단순하게 도망친다 (실험 변수)

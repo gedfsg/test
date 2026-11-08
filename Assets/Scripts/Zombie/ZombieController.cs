@@ -61,6 +61,11 @@ public class ZombieController : MonoBehaviour
     [Tooltip("비워두면 ZombieFSMBrain을 자동 장착. ML-Agents 도입 시 여기에 ZombieMLBrain을 넣는다.")]
     public ZombieBrain brain;
 
+    [Header("좀비다움")]
+    [Tooltip("켜면 ZombieQuirks를 붙여 좀비답게 움직인다: 늦은 반응, 멍한 개체, 총소리 무시, 가끔 멈춤, 점점 가속.\n" +
+             "학습장(ZombieTrainingArena 안)에서는 자동으로 꺼진다. 값 조절은 프리팹에 ZombieQuirks를 미리 붙여서.")]
+    public bool zombieQuirks = true;
+
     [Header("성능")]
     [Tooltip("NavMesh 경로 재계산 간격(초). 0이면 매 프레임. 좀비가 많을수록 올릴 것.")]
     public float repathInterval = 0.15f;
@@ -86,6 +91,7 @@ public class ZombieController : MonoBehaviour
     private ZombiePerception perception;
     private ZombieFSMBrain   fallbackBrain;
     private bool             brainFailed;
+    private ZombieQuirks     quirks;
 
     private static readonly int HashIsWalking = Animator.StringToHash("IsWalking");
     private static readonly int HashSpeed     = Animator.StringToHash("Speed");
@@ -103,6 +109,10 @@ public class ZombieController : MonoBehaviour
     public bool  IsStunned         => isStunned;
     public bool  AttackReady       => attackTimer <= 0f;
     public bool  IsDead            => isDead;
+    /// <summary>공격 동작 재생 중인가 (좀비다움이 이 동안은 애니메이션 속도를 건드리지 않는다)</summary>
+    public bool  AttackAnimating   => Time.time < attackLockUntil;
+    /// <summary>러너가 아니어도 달리기 애니메이션을 쓴다 (좀비다움의 돌진 중)</summary>
+    [System.NonSerialized] public bool ForceRunAnim;
     /// <summary>지금 타겟(플레이어/더미)을 직접 보고 있는가. 뇌 종류와 상관없이 같은 시야 판정을 쓴다.</summary>
     public bool  SeesTarget        => perception != null && perception.TargetVisible;
     /// <summary>지금 쫓는 대상 (플레이어/더미). 없으면 null. 위협 센서가 상대의 조준 방향을 읽는 데 쓴다.</summary>
@@ -140,6 +150,11 @@ public class ZombieController : MonoBehaviour
         SetupBrain();
 
         if (profile != null && fallbackBrain != null) profile.ApplyTo(fallbackBrain);
+
+        // 좀비다움 (학습장에서는 붙이지 않는다 —— 붙어 있어도 스스로 꺼진다)
+        quirks = GetComponent<ZombieQuirks>();
+        if (quirks == null && zombieQuirks && GetComponentInParent<ZombieTrainingArena>() == null)
+            quirks = gameObject.AddComponent<ZombieQuirks>();
 
         perception = new ZombiePerception(this);
 
@@ -275,6 +290,9 @@ public class ZombieController : MonoBehaviour
 
         // 2. Think
         ZombieAction action = ThinkSafely(in obs, dt);
+
+        // 2.5 좀비다움: 늦은 반응 / 가끔 멈춤 / 점점 가속 (판단은 그대로, 실행만 비튼다)
+        if (quirks != null && zombieQuirks) action = quirks.Filter(in action, in obs, State, dt);
 
         // 3. Act
         Execute(in action, in obs);
@@ -428,7 +446,7 @@ public class ZombieController : MonoBehaviour
 
         bool walking = speed > 0.1f;
         anim.SetBool(HashIsWalking, walking);
-        if (HasParam(HashIsRunning)) anim.SetBool(HashIsRunning, isRunner && speed > 2f);   // 러너가 쫓아올 때만 달리기
+        if (HasParam(HashIsRunning)) anim.SetBool(HashIsRunning, (isRunner || ForceRunAnim) && speed > 2f);   // 러너가 쫓아올 때 / 돌진할 때만 달리기
 
         foreach (var p in anim.parameters)
         {
@@ -480,9 +498,15 @@ public class ZombieController : MonoBehaviour
     }
 
     // ── 외부 API (Bullet.cs / MeleeWeapon.cs가 호출) ────
+    /// <summary>마지막으로 받은 피해량 (좀비다움의 피격 경직 세기용).
+    /// 총알·도끼는 Health.TakeDamage를 직접 부르므로 체력이 줄어든 양으로 잰다.</summary>
+    public float LastDamage { get; private set; }
+    private float lastHealthSeen = -1f;
+
     public void TakeDamage(float damage)
     {
         if (isDead) return;
+        LastDamage = damage;
 
         if (health != null)
         {
@@ -506,14 +530,31 @@ public class ZombieController : MonoBehaviour
     private void NotifyBrainDamaged()
     {
         if (isDead) return;
+        if (health != null)
+        {
+            float cur = health.GetCurrentHealth();
+            float before = lastHealthSeen >= 0f ? lastHealthSeen : health.maxHealth;
+            if (before > cur) LastDamage = before - cur;
+            lastHealthSeen = cur;
+        }
 
         // 위치 힌트는 주지 않는다 — 어디서 날아온 총알인지 알 방법이 없으므로.
         // 총소리 방향은 NoiseSystem이 따로 알려준다.
+        if (quirks != null && zombieQuirks) quirks.NotifyDamaged();   // 맞으면 멍하던 좀비도 깬다
         ActiveBrain?.OnDamaged();
     }
 
     /// <summary>NoiseSystem이 호출. 소음 지점을 수색 목표로 삼는다.</summary>
     public void HearNoise(Vector3 position)
+    {
+        if (isDead) return;
+        // 좀비다움: 못 들은 척하거나 늦게 반응 (늦게 반응하면 ZombieQuirks가 나중에 HearNoiseNow를 부른다)
+        if (quirks != null && zombieQuirks && quirks.InterceptNoise(position)) return;
+        HearNoiseNow(position);
+    }
+
+    /// <summary>소리에 지금 바로 반응한다 (ZombieQuirks가 미뤄 둔 소리를 전달할 때도 쓴다).</summary>
+    public void HearNoiseNow(Vector3 position)
     {
         if (isDead) return;
         perception?.NotifyDisturbance(position);
@@ -549,6 +590,7 @@ public class ZombieController : MonoBehaviour
 
         // 이전 에피소드의 목격 기록이 남으면 새 에피소드가 오염된다
         perception = new ZombiePerception(this);
+        if (quirks != null) quirks.ResetState();
 
         foreach (var b in GetComponents<ZombieBrain>())
         {

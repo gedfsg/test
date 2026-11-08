@@ -84,6 +84,9 @@ public class HunterPackSpawner : MonoBehaviour
     [Range(0f, 360f)] public float spreadAngle = 90f;
     [Tooltip("사냥꾼끼리 최소 간격(m)")]
     public float minSeparation = 4f;
+    [Tooltip("켜면 탱커(무리 중간 속도의 0.85배 이하)는 나머지 무리의 반대편(플레이어 앞쪽)에서 나온다.\n" +
+             "조율기의 탱커 매복(Tank Intercept)과 같이 쓴다 —— 느린 탱커가 뒤에서 나오면 길목에 영영 못 간다.")]
+    public bool tankAmbushSpawn = false;
     [Tooltip("켜면 등장 즉시 플레이어 위치를 안다 (학습장 조건과 같음).\n끄면 시야나 소리로 직접 찾아야 한다.")]
     public bool alertOnSpawn = true;
 
@@ -248,6 +251,8 @@ public class HunterPackSpawner : MonoBehaviour
             return false;
         }
 
+        if (tankAmbushSpawn) MoveTanksToAmbush(members, positions);
+
         // 자리보다 마리가 많으면(위치를 다 못 찾은 경우) 앞에서부터 자른다 —— 순서는 이미 섞여 있다
         var pack = new Pack();
         var summary = new System.Text.StringBuilder();
@@ -279,6 +284,13 @@ public class HunterPackSpawner : MonoBehaviour
             pack.tactics = HunterPackTactics.Create("사냥꾼 무리 조율기", transform, pack.members, player, slotSettings,
                                                     takeControl: tactic == HunterTactic.Slot);
             if (alertOnSpawn) pack.tactics.Alert(player.position);
+            // 조율기+RL: '언제 덮칠지'를 RL이 정하는 모델(shoot9~)이면 slotSettings.rlDecidesClose를 켠다 → 좀비 뇌도 맞춘다
+            if (tactic == HunterTactic.SlotRL)
+                foreach (var m in pack.members)
+                {
+                    var ml = m != null ? m.GetComponent<ZombieMLBrain>() : null;
+                    if (ml != null) ml.attackAsRush = slotSettings.rlDecidesClose;
+                }
         }
 
         ShowWarning();
@@ -359,6 +371,51 @@ public class HunterPackSpawner : MonoBehaviour
             if (result.Count < Mathf.CeilToInt(count * 0.5f)) result.Clear();
         }
         return result;
+    }
+
+    /// <summary>
+    /// 탱커(속도가 무리 중간값의 0.85배 이하)의 등장 위치를 나머지 무리의 반대편으로 옮긴다.
+    /// 플레이어는 무리 반대쪽으로 도망치므로, 탱커가 처음부터 그 길목 근처에 있게 된다.
+    /// </summary>
+    private void MoveTanksToAmbush(List<(GameObject prefab, float speed)> members, List<Vector3> positions)
+    {
+        int n = Mathf.Min(members.Count, positions.Count);
+        if (n < 2) return;
+        var speeds = new List<float>();
+        for (int i = 0; i < n; i++) if (members[i].speed > 0f) speeds.Add(members[i].speed);
+        if (speeds.Count < 2) return;   // 속도를 프로필에 맡긴 경우는 판정하지 않는다
+        speeds.Sort();
+        float median = speeds[speeds.Count / 2];
+
+        var tanks = new List<int>();
+        Vector3 others = Vector3.zero; int otherCount = 0;
+        for (int i = 0; i < n; i++)
+        {
+            if (members[i].speed > 0f && members[i].speed <= median * 0.85f) tanks.Add(i);
+            else { others += positions[i] - player.position; otherCount++; }
+        }
+        if (tanks.Count == 0 || otherCount == 0) return;
+
+        Vector3 away = -Flat(others / otherCount);
+        if (away.sqrMagnitude < 0.01f) return;
+        float baseAng = Mathf.Atan2(away.x, away.z) * Mathf.Rad2Deg;
+        var path = new NavMeshPath();
+        foreach (int ti in tanks)
+        {
+            var keep = new List<Vector3>(positions); keep.RemoveAt(ti);
+            for (int tries = 0; tries < 15; tries++)
+            {
+                float ang  = baseAng + Random.Range(-30f, 30f);
+                float dist = Random.Range(minDistance, maxDistance);
+                Vector3 cand = player.position + Quaternion.Euler(0f, ang, 0f) * Vector3.forward * dist;
+                if (!NavMesh.SamplePosition(cand, out NavMeshHit hit, 4f, NavMesh.AllAreas)) continue;
+                if (TooClose(hit.position, keep)) continue;
+                if (!NavMesh.CalculatePath(hit.position, player.position, NavMesh.AllAreas, path) ||
+                    path.status != NavMeshPathStatus.PathComplete) continue;
+                positions[ti] = hit.position;
+                break;
+            }
+        }
     }
 
     private bool TooClose(Vector3 p, List<Vector3> others)

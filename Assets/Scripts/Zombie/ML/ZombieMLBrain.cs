@@ -40,6 +40,21 @@ public class ZombieMLBrain : ZombieBrain
              "총 쏘는 더미 상대로 자유 보정을 줬더니 피하는 대신 속도를 줄여 머뭇거렸다 (3.1 → 2.6 m/s, 더 오래 맞음).\n" +
              "⚠ 학습 때 값(yaml slot_residual_lateral)과 같아야 한다.")]
     public bool residualLateralOnly = false;
+    [Tooltip("켜면 이산 행동(원래 '공격' 칸)을 '덮치기' 판단으로 쓴다 (shoot9부터).\n" +
+             "  1 = 자리 대신 플레이어에게 곧장 간다 (옆 보정은 그대로) / 0 = 조율기가 정한 자리로 간다.\n" +
+             "공격은 autoAttackInRange가 맡으므로 이 칸이 비어 있었다 → 모델 구조를 바꾸지 않고 재활용한다.\n" +
+             "조율기 HunterTacticsSettings.rlDecidesClose와 같이 켠다. ⚠ 학습 때 값(yaml rl_close)과 같아야 한다.")]
+    public bool attackAsRush = false;
+    [Tooltip("덮치기를 한 번 고르면 최소 몇 초 동안 유지할지 (shoot9b부터 1.5). 0이면 매 결정마다 새로 정한다 (shoot9).\n" +
+             "shoot9는 0.1초마다 켜졌다 꺼졌다 해서 선택 하나의 효과가 너무 작아 아무것도 배우지 못했다.\n" +
+             "⚠ 학습 때 값(yaml rl_rush_hold)과 같아야 한다.")]
+    public float rushHoldSeconds = 1.5f;
+
+    /// <summary>이번 프레임에 정책이 '덮치기'를 골라 플레이어에게 곧장 가고 있는가 (학습 통계용).</summary>
+    public bool RushingNow { get; private set; }
+    /// <summary>덮치기 유지 중인가 (정책이 고른 덮치기가 아직 안 끝남). 자리 센서가 관측으로 넣는다.</summary>
+    public bool RushLatched => attackAsRush && (rushHoldSeconds > 0f ? Time.time < rushUntil : attackAction);
+    private float rushUntil = -1f;
 
     private ZombieController body;
 
@@ -84,10 +99,13 @@ public class ZombieMLBrain : ZombieBrain
         lastObs = obs;
         hasObs  = true;
         HasSteer = false;
+        RushingNow = false;
 
         if (obs.isStunned) return ZombieAction.Stand();
 
-        bool attack = (attackAction && (!requireRangeForAttack || obs.InAttackRange))
+        // attackAsRush면 이산 행동은 '덮치기'라서 공격으로 쓰지 않는다 (공격은 사거리 자동 공격만)
+        bool policyAttack = !attackAsRush && attackAction;
+        bool attack = (policyAttack && (!requireRangeForAttack || obs.InAttackRange))
                    || (autoAttackInRange && obs.targetVisible && obs.InAttackRange);
 
         // ⚠ 공격해도 이동은 멈추지 않는다.
@@ -129,6 +147,14 @@ public class ZombieMLBrain : ZombieBrain
         if (body == null) body = GetComponent<ZombieController>();
         var pack = HunterPackTactics.PackOf(body);
         if (pack == null || !pack.TryGetOrder(body, out Vector3 order, out _)) return false;
+
+        // 덮치기 판단 (attackAsRush): 정책이 1을 내면 자리 대신 플레이어 지점이 기준 방향이 된다
+        // (rushHoldSeconds > 0이면 한 번 고른 덮치기를 그 시간 동안 유지 → SetActions에서 rushUntil을 연장)
+        if (RushLatched && pack.HasTarget)
+        {
+            order = pack.TargetPoint;
+            RushingNow = true;
+        }
 
         Vector3 baseDir = order - transform.position;
         baseDir.y = 0f;
@@ -188,6 +214,8 @@ public class ZombieMLBrain : ZombieBrain
     {
         moveAction   = move;
         attackAction = attack;
+        if (attackAsRush && attack && rushHoldSeconds > 0f)
+            rushUntil = Mathf.Max(rushUntil, Time.time + rushHoldSeconds);
     }
 
     public override void OnResetEpisode()
@@ -195,5 +223,7 @@ public class ZombieMLBrain : ZombieBrain
         hasObs       = false;
         moveAction   = Vector2.zero;
         attackAction = false;
+        RushingNow   = false;
+        rushUntil    = -1f;
     }
 }

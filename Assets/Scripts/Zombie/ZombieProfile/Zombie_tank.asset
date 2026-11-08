@@ -15,7 +15,7 @@ MonoBehaviour:
   displayName: "\uD0F1\uCEE4 \uC880\uBE44"
   debugColor: {r: 1, g: 1, b: 1, a: 1}
   maxHealth: 400
-  moveSpeed: 1
+  moveSpeed: 1.4
   attackRange: 2.5
   attackDamage: 30
   attackCooldown: 1.5
