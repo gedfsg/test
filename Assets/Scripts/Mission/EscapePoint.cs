@@ -2,7 +2,7 @@ using UnityEngine;
 
 /// <summary>
 /// 탈출 지점: 바닥 원 + 하늘로 솟는 빛기둥 + 점 조명.
-///  - 잠김(빨강): 총 진행률 100% 전 또는 7일차 전 → 들어가면 남은 조건 안내
+///  - 잠김(빨강): 7일차 메인 미션 "탈출 지점 도달"이 공개되기 전 → 들어가면 열리는 날 안내
 ///  - 열림(초록): 들어가면 MissionManager.Escape() → 게임 클리어
 /// MissionManager가 Create()로 생성.
 /// </summary>
@@ -78,7 +78,7 @@ public class EscapePoint : MonoBehaviour
         if (mm == null) return;
 
         // 잠김/열림 색 + 은은한 깜빡임
-        bool open = mm.CanEscape;
+        bool open = mm.CanEscape || mm.Escaped; // 탈출한 뒤에도 초록 유지 (CanEscape는 Finished면 false)
         Color c = open ? OpenColor : LockedColor;
         float pulse = 0.75f + Mathf.Sin(Time.time * 3f) * 0.25f;
         ringMat.color = new Color(c.r, c.g, c.b, 0.12f * pulse); // 낮게: 가까이서 보면 지름 6m 원판이 화면을 크게 덮음 (플레이테스트 확인)

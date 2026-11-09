@@ -71,9 +71,80 @@ public static class HudAssetBuilder
         WriteColorSprite("BulletSR", 64, 64, (x, y) => BulletTwoTone(x, y, 32f, 7f, 2f, 40f, 62f, headFrom: 44f, gap: 2f, rimTo: 7f, tanHead: false));
         WriteSprite("Flashlight", 64, 64, FlashlightCoverage, Vector4.zero);
 
+        WriteMissionSprites();
+
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
         Debug.Log("[HudAssetBuilder] ✅ Pretendard 폰트 3종 + HUD 스프라이트 21종 생성 완료");
+    }
+
+    // ── 미션/시간 패널용 (레퍼런스 ui.jpg) ── 폰트/기존 스프라이트는 건드리지 않고 이것만 다시 만들 수 있게 메뉴 분리
+    [MenuItem("Tools/HUD/Build Mission HUD Sprites")]
+    public static void BuildMissionSprites()
+    {
+        Directory.CreateDirectory(SpriteOutDir);
+        WriteMissionSprites();
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+        Debug.Log("[HudAssetBuilder] 미션 HUD 스프라이트 7종 생성 완료");
+    }
+
+    static void WriteMissionSprites()
+    {
+        // 모서리를 45° 깎은 패널 (9-slice 16): 채움 / 테두리(깎인 모서리 부분만 두껍게 = 금색 강조)
+        WriteSprite("ChamferPanel", 64, 64, (x, y) => ChamferCoverage(x, y, 0f, 12f), new Vector4(16, 16, 16, 16));
+        WriteSprite("ChamferFrame", 64, 64, ChamferFrameCoverage, new Vector4(16, 16, 16, 16));
+        // 아이콘 (흰색 → 틴트)
+        WriteSprite("Check", 64, 64, (x, y) => SegmentDist(x, y, 10f, 33f, 26f, 17f) <= 5f || SegmentDist(x, y, 26f, 17f, 54f, 47f) <= 5f ? 1f : 0f, Vector4.zero);
+        WriteSprite("Diamond", 64, 64, (x, y) => Mathf.Abs(x - 32f) + Mathf.Abs(y - 32f) <= 24f ? 1f : 0f, Vector4.zero);
+        WriteSprite("Search", 64, 64, SearchCoverage, Vector4.zero);
+        WriteSprite("Pin", 64, 64, PinCoverage, Vector4.zero);
+        // 진행 바: 주황 그라데이션 (왼쪽 진한 주황 → 오른쪽 밝은 주황), 색을 직접 구움 → Image 색은 흰색
+        WriteColorSprite("BarOrange", 64, 8, (x, y) => Color.Lerp(new Color32(0xFF, 0x8A, 0x00, 0xFF), new Color32(0xFF, 0xC2, 0x4A, 0xFF), x / 64f));
+    }
+
+    // 깎인 사각형 (0~64, inset 만큼 안쪽, 모서리 c): 4변 + 4개 대각선 반평면
+    static float ChamferCoverage(float x, float y, float inset, float c)
+    {
+        float lo = inset, hi = 64f - inset;
+        if (x < lo || x > hi || y < lo || y > hi) return 0f;
+        float cc = c + inset * 1.4142f - inset * 2f; // 대각선도 inset만큼 안쪽으로 (45° 변의 수직 거리)
+        if ((x - lo) + (y - lo) < cc || (hi - x) + (y - lo) < cc || (x - lo) + (hi - y) < cc || (hi - x) + (hi - y) < cc) return 0f;
+        return 1f;
+    }
+
+    static float ChamferFrameCoverage(float x, float y)
+    {
+        if (ChamferCoverage(x, y, 0f, 12f) == 0f) return 0f;
+        if (ChamferCoverage(x, y, 2.5f, 12f) == 0f) return 1f;           // 변: 2.5px
+        // 깎인 모서리 근처는 두껍게 (모서리 강조)
+        bool nearCorner = (x < 20f || x > 44f) && (y < 20f || y > 44f);
+        return nearCorner && ChamferCoverage(x, y, 5f, 12f) == 0f ? 1f : 0f;
+    }
+
+    static float SegmentDist(float x, float y, float ax, float ay, float bx, float by)
+    {
+        Vector2 p = new Vector2(x, y), a = new Vector2(ax, ay), b = new Vector2(bx, by);
+        float t = Mathf.Clamp01(Vector2.Dot(p - a, b - a) / (b - a).sqrMagnitude);
+        return Vector2.Distance(p, a + (b - a) * t);
+    }
+
+    // 돋보기: 링 + 오른쪽 아래 손잡이
+    static float SearchCoverage(float x, float y)
+    {
+        float d = Vector2.Distance(new Vector2(x, y), new Vector2(27f, 37f));
+        if (d <= 20f && d >= 14f) return 1f;
+        return SegmentDist(x, y, 41f, 23f, 56f, 8f) <= 5f ? 1f : 0f;
+    }
+
+    // 위치 핀: 원형 머리(가운데 구멍) + 아래 뾰족
+    static float PinCoverage(float x, float y)
+    {
+        float d = Vector2.Distance(new Vector2(x, y), new Vector2(32f, 40f));
+        if (d <= 7f) return 0f;
+        if (d <= 20f) return 1f;
+        var tri = new[] { new Vector2(32f, 2f), new Vector2(15f, 30f), new Vector2(49f, 30f) };
+        return InPolygon(new Vector2(x, y), tri) ? 1f : 0f;
     }
 
     // ── 폰트 ──

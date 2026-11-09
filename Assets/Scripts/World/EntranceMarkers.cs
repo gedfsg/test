@@ -50,11 +50,15 @@ public class EntranceMarkers : MonoBehaviour
             var kind = LootDatabase.Classify(b);
             bool landmark = Colors.TryGetValue(kind, out Color color);
             if (!landmark) color = NeutralColor;
+            string label = MissionManager.BuildingLabel(kind);
+            // 미션 장소로 지정된 민가/창고 (주유소/카페/서점/발전소): 그 이름 + 색, 문 위 조명
+            if (MissionPlaces.TryGetByBuilding(b, out var place)) { label = place.label; color = place.color; landmark = true; }
             var trig = LootWorldSpawner.FindTrigger(b);
             if (!TryGetDoor(b, out Vector3 door, out Vector3 outDir)) { Debug.LogWarning($"[EntranceMarkers] '{b.name}' 문을 못 찾음 - 입구 표시 생략"); continue; }
             PlaceMarker(b, door, outDir, color, trig.bounds.min.y, landmark);
             PlaceExitMat(b, door, outDir, color, trig);
-            PlaceLabel(b, door, outDir, trig.bounds.min.y, MissionManager.BuildingLabel(kind));
+            // PlaceLabel(b, door, outDir, trig.bounds.min.y, MissionManager.BuildingLabel(kind)); // (이전) 종류 이름만
+            PlaceLabel(b, door, outDir, trig.bounds.min.y, label);
             placed++;
         }
         Debug.Log($"[EntranceMarkers] 입구 표시 {placed}곳");

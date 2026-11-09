@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a7edb3588e9322a4ab7931b19ee54d55, type: 3}
+  m_Name: Sub_Walk
+  m_EditorClassIdentifier: Assembly-CSharp::SubMissionData
+  type: 7
+  title: "500m \uC774\uB3D9"
+  target: 500
+  trigger: 4
+  triggerRadius: 10
+  rewardItemName: Bread
+  rewardLabel: "\uBE75 x2"
+  rewardAmount: 2
