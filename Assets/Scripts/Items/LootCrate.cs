@@ -27,6 +27,7 @@ public class LootCrate : MonoBehaviour
     private TextMeshPro promptText;
     private PlayerController nearbyPlayer;
     private bool isOpened = false;
+    public bool IsOpened => isOpened; // 서브 미션 "상자 3개 열기" 발견 조건 (안 열린 상자 근처)
 
     private static TMP_FontAsset cachedKoreanFont;
     private static bool fontSearched = false;

@@ -41,6 +41,15 @@ public static class HudStyle
     public static Sprite ShellSG => Load(ref shellSG, "ShellSG");
     public static Sprite BulletSR => Load(ref bulletSR, "BulletSR");
     public static Sprite Flashlight => Load(ref flashlight, "Flashlight");
+    // 미션/시간 패널 (레퍼런스 ui.jpg) - HudAssetBuilder.BuildMissionSprites
+    static Sprite chamferPanel, chamferFrame, check, diamond, search, pin, barOrange;
+    public static Sprite ChamferPanel => Load(ref chamferPanel, "ChamferPanel");
+    public static Sprite ChamferFrame => Load(ref chamferFrame, "ChamferFrame");
+    public static Sprite Check => Load(ref check, "Check");
+    public static Sprite Diamond => Load(ref diamond, "Diamond");
+    public static Sprite Search => Load(ref search, "Search");
+    public static Sprite Pin => Load(ref pin, "Pin");
+    public static Sprite BarOrange => Load(ref barOrange, "BarOrange");
     static Sprite Load(ref Sprite cache, string name) => cache != null ? cache : cache = Resources.Load<Sprite>("HUD/Sprites/" + name);
     public static Sprite Sun         => sun         != null ? sun         : sun         = Resources.Load<Sprite>("HUD/Sprites/Sun");
     public static Sprite Moon        => moon        != null ? moon        : moon        = Resources.Load<Sprite>("HUD/Sprites/Moon");
@@ -87,7 +96,7 @@ public static class HudStyle
         tmp.color = color;
         tmp.alignment = align;
         tmp.text = text;
-        tmp.enableWordWrapping = false;
+        tmp.textWrappingMode = TextWrappingModes.NoWrap;
         tmp.overflowMode = TextOverflowModes.Overflow;
         tmp.raycastTarget = false;
         return tmp;

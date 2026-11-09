@@ -110,7 +110,7 @@ public class ZombieVoiceManager : MonoBehaviour
         float dist = Vector3.Distance(pos, AudioManager.ListenerPosition);
         if (dist > MaxDistance) return false;
 
-        // 상태별 클립/볼륨: 신음·숨소리 0.4 (배경), 비명/단말마 0.9 (위협)
+        // 상태별 클립/볼륨: 신음 0.25 / 숨소리 0.3 / 비명 0.6 / 단말마 0.7 (분위기용) × ZombieBus
         // 추적: 25% 거친 숨소리 / 나머지 반반 신음·비명
         float roll = Random.value;
         bool growl  = state == State.Growl;
@@ -121,8 +121,12 @@ public class ZombieVoiceManager : MonoBehaviour
                        : (breath || growl) ? SoundLibrary.Pick(lib.zombieBreath)
                        : SoundLibrary.Pick(lib.zombieGroan);
         if (growl && clip == null) clip = SoundLibrary.Pick(lib.zombieGroan);   // 숨소리가 없으면 신음으로
-        float volume = (state == State.Death || scream) ? AudioManager.Vol.ZombieScream
-                     : growl ? GrowlVolume : AudioManager.Vol.ZombieGroan;
+        float volume = state == State.Death ? AudioManager.Vol.ZombieDeath
+                     : scream ? AudioManager.Vol.ZombieScream
+                     : growl  ? GrowlVolume
+                     : breath ? AudioManager.Vol.ZombieBreath
+                     : AudioManager.Vol.ZombieGroan;
+        volume *= AudioManager.Vol.ZombieBus;
         if (clip == null) return false;
 
         Voice slot = m.FindSlot(zombie, state, dist);
@@ -148,8 +152,8 @@ public class ZombieVoiceManager : MonoBehaviour
         return true;
     }
 
-    /// <summary>돌진 예고 그르렁 볼륨 —— 배경 신음(0.4)보다 크고 비명(0.9)보다 작게, 가까이서 확실히 들리게</summary>
-    public const float GrowlVolume = 0.7f;
+    /// <summary>돌진 예고 그르렁 볼륨 —— 숨소리(0.3)보다 크고 비명(0.6)보다 작게, 가까이서 확실히 들리게 (× ZombieBus)</summary>
+    public const float GrowlVolume = 0.45f;
 
     Voice FindSlot(ZombieController zombie, State state, float dist)
     {

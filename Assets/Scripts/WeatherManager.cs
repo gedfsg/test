@@ -1,11 +1,13 @@
 using UnityEngine;
+using UnityEngine.Rendering.PostProcessing;
 using UnityEngine.SceneManagement;
 
 /// <summary>
 /// 날씨 3종 (논문 4.2절): 맑음 / 비 / 안개. 새 사이클(DayNightCycle 새벽→낮) 시작마다 가중치 랜덤 (50 / 30 / 20). 1일차는 맑음.
 ///  - 비: 빗방울 파티클(플레이어 머리 위 10m, 따라다님) + 땅에 튀는 물방울(옵션) + 빗소리 루프(코드 생성) + 조명 60%
 ///        소음 반경 ×0.5 (NoiseMultiplier → NoiseSystem), 구르기 거리 ×1.3 (RollDistanceMultiplier → Locomotion)
-///  - 안개: 회색(100,100,100) ExponentialSquared 안개 + 카메라 가시거리 축소 + 손전등 range 70%
+///  - 안개: 낮 회색(140,140,140) / 밤 보라(80,80,110) ExponentialSquared 안개(기본 줌에서 밀도 0.02, far 80m) + 손전등 range 70%
+///          + 바닥 안개 파티클(플레이어 주변 30m, 1~3m 높이, 큰 소프트 파티클 25개) + 비네트 0.38→0.5
 ///          좀비 감지 거리 ×0.8 (DetectionMultiplier → ZombieController)
 ///          탑뷰 카메라가 플레이어에서 40~80m 떨어져 있어서 밀도/가시거리는 "플레이어 기준"이 되게 카메라 거리로 보정
 ///  - 전환: transitionTime(1.5초) 동안 안개 밀도/파티클 양/소리 크기/배수들을 같이 Lerp
@@ -46,13 +48,36 @@ public class WeatherManager : MonoBehaviour
     // public float fogStartFromPlayer = 20f;
     // public float fogEndFromPlayer = 50f;
     [Header("안개 (ExponentialSquared)")]
-    public Color fogColor = new Color32(100, 100, 100, 255);
-    [Tooltip("플레이어 기준 밀도 (스펙 0.02). 카메라가 플레이어에서 떨어진 만큼 보정해서 적용")]
+    // public Color fogColor = new Color32(100, 100, 100, 255); // (이전) 낮 색 - 밤은 DayNightCycle.nightFogColor 사용
+    [Tooltip("낮 안개 색 (밝은 회색)")]
+    public Color fogColor = new Color32(140, 140, 140, 255);
+    [Tooltip("밤 안개 색 (보라 톤). 해 밝기에 따라 낮 색과 섞임")]
+    public Color fogNightColor = new Color32(80, 80, 110, 255);
+    // [Tooltip("플레이어 기준 밀도 (스펙 0.02). 카메라가 플레이어에서 떨어진 만큼 보정해서 적용")]
+    // (이전) 0.02 × 가시거리/(카메라거리+가시거리) → 기본 줌(40m)에서 실제 적용 0.012라 너무 옅었음
+    [Tooltip("기본 줌(카메라 거리 40m)에서 실제 적용되는 밀도. 줌아웃하면 그만큼 낮춰서 플레이어 주변 농도 유지")]
     public float fogDensity = 0.02f;
-    [Tooltip("플레이어 기준 가시거리 (m). 카메라 far = 카메라→플레이어 거리 + 이 값 (평상시 far는 원래 값으로 복원)")]
-    public float fogVisibility = 60f;
+    // public float fogVisibility = 60f; // (이전) 기본 줌에서 far 100m
+    [Tooltip("플레이어 너머 가시거리 (m). 카메라 far = 카메라→플레이어 거리 + 이 값 → 기본 줌에서 80m (평상시 far는 원래 값으로 복원)")]
+    public float fogVisibility = 40f;
     public float fogDetectionMultiplier = 0.8f;
     [Range(0f, 1f)] public float fogFlashlightRange = 0.7f;
+    [Tooltip("안개 때 비네트 세기 (평상시 0.38 = Atmosphere_Profile 값). 가장자리를 더 어둡게")]
+    [Range(0f, 1f)] public float fogVignetteIntensity = 0.5f;
+
+    [Header("안개 - 바닥 안개 파티클 (플레이어 따라다님)")]
+    public bool groundFog = true;
+    [Tooltip("동시에 떠 있는 개수 (크게 + 적게 → 성능 부담 적음)")]
+    public int groundFogCount = 25;
+    public float groundFogRadius = 30f;
+    [Tooltip("파티클 크기 범위 (m)")]
+    public Vector2 groundFogSize = new Vector2(3f, 8f);
+    [Tooltip("바닥에서의 높이 범위 (m)")]
+    public Vector2 groundFogHeight = new Vector2(1f, 3f);
+    [Tooltip("알파 범위 (흰색/연회색)")]
+    public Vector2 groundFogAlpha = new Vector2(0.3f, 0.5f);
+    [Tooltip("바람에 흘러가는 속도 (m/s, 월드)")]
+    public Vector3 groundFogWind = new Vector3(0.6f, 0f, 0.25f);
 
     [Header("비")]
     public int rainPerSecond = 1500;
@@ -72,8 +97,12 @@ public class WeatherManager : MonoBehaviour
     public bool debugKey = true;
 
     Weather current = Weather.Clear;
-    ParticleSystem rain, splash;
+    ParticleSystem rain, splash, groundFogPs;
+    Material groundFogMat;
     AudioSource rainAudio;
+    Vignette vignette;              // PostFX_Volume 프로필(런타임 복제본)의 비네트 - 안개 때만 세게
+    float baseVignette = -1f;
+    DepthTextureMode baseDepthMode;  // 소프트 파티클은 깊이 텍스처 필요 → 안개 동안만 켬
     Transform player;
     bool dncFogWasOn = true;
 
@@ -113,7 +142,13 @@ public class WeatherManager : MonoBehaviour
         if (cam != null) { baseFar = cam.farClipPlane; baseBackground = cam.backgroundColor; }
         rain = BuildRain();
         splash = BuildSplash();
+        groundFogPs = BuildGroundFog();
         rainAudio = BuildRainAudio();
+        if (cam != null) baseDepthMode = cam.depthTextureMode;
+        // 비네트: 씬의 PostFX_Volume(Tools/FX/Setup Atmosphere). .profile은 런타임 복제본이라 에셋은 안 바뀜
+        var volume = FindFirstObjectByType<PostProcessVolume>();
+        if (volume != null && volume.profile != null && volume.profile.TryGetSettings(out vignette))
+            baseVignette = vignette.intensity.value;
         SetWeather(Weather.Clear); // 1일차 맑음
     }
 
@@ -195,14 +230,16 @@ public class WeatherManager : MonoBehaviour
             // 밤에는 안개도 어둡게 (해 밝기 비율). 밤 색은 DayNightCycle 밤 안개색(보라) 쪽으로
             float day01 = dnc != null && dnc.directionalLight != null
                 ? Mathf.InverseLerp(dnc.nightLightIntensity, dnc.dayLightIntensity * dnc.weatherLightMultiplier, dnc.directionalLight.intensity) : 1f;
-            Color col = Color.Lerp(dnc != null ? dnc.nightFogColor : Color.black, fogColor, day01);
+            // Color col = Color.Lerp(dnc != null ? dnc.nightFogColor : Color.black, fogColor, day01); // (이전) 밤 = DayNightCycle 밤 안개색
+            Color col = Color.Lerp(fogNightColor, fogColor, day01);
 
             // 실내: BuildingInterior 실내 안개가 우선 → RenderSettings는 안 건드림 (나오면 BuildingInterior가 저장해 둔 이 안개를 복원하고, 다음 프레임부터 다시 여기서 갱신)
             if (!indoors)
             {
-                // ExponentialSquared는 시작 거리가 없고 "카메라로부터의 거리"라서, 0.02를 그대로 쓰면 카메라에서 40m 떨어진 플레이어부터 절반쯤 안개에 묻힘.
-                // → 플레이어 너머 fogVisibility(60m) 지점의 안개 정도가 "플레이어 기준 0.02"와 같아지도록 밀도를 카메라 거리만큼 낮춤
-                float density = fogDensity * fogVisibility / (camDist + fogVisibility);
+                // ExponentialSquared는 시작 거리가 없고 "카메라로부터의 거리"라서 카메라가 멀어질수록 플레이어도 묻힘
+                // → 기본 줌(40m)에서 정확히 fogDensity, 줌아웃하면 (40+가시거리)/(카메라거리+가시거리) 비율로 낮춤
+                // float density = fogDensity * fogVisibility / (camDist + fogVisibility); // (이전) 기본 줌에서 0.012
+                float density = fogDensity * (DefaultCamDist + fogVisibility) / (camDist + fogVisibility);
                 RenderSettings.fog = true;
                 RenderSettings.fogMode = FogMode.ExponentialSquared;
                 RenderSettings.fogDensity = Mathf.Lerp(0f, density, fogAmount);
@@ -219,15 +256,111 @@ public class WeatherManager : MonoBehaviour
                 if (baseFlashlightRange < 0f) baseFlashlightRange = fl.range;
                 fl.range = baseFlashlightRange * Mathf.Lerp(1f, fogFlashlightRange, fogAmount); // 안개에 빛이 흩어지는 느낌
             }
+
+            // 비네트: 안개 정도만큼 0.38 → 0.5
+            if (vignette != null && baseVignette >= 0f)
+                vignette.intensity.value = Mathf.Lerp(baseVignette, fogVignetteIntensity, fogAmount);
+
+            // 바닥 안개: 플레이어 따라다님(입자는 월드에 남아 바람에 흘러감), 실내에선 끔. 진하기 = fogAmount, 색 = 낮 흰색 ↔ 밤 보라
+            if (groundFogPs != null)
+            {
+                bool on = groundFog && !indoors;
+                if (player != null) groundFogPs.transform.position = player.position + Vector3.up * (groundFogHeight.x + groundFogHeight.y) * 0.5f;
+                if (on && !groundFogPs.isPlaying)
+                {
+                    if (cam != null) cam.depthTextureMode |= DepthTextureMode.Depth; // 소프트 파티클용
+                    groundFogPs.Play();
+                }
+                else if (!on && groundFogPs.isPlaying) groundFogPs.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                SetGroundFogTint(Color.Lerp(fogNightColor, Color.white, day01), fogAmount);
+            }
         }
         else if (fogApplied)
         {
             // 안개 끝: 원래대로 (안개는 DayNightCycle에 돌려줌 → 다음 Update부터 원래 Linear 안개)
             fogApplied = false;
+            if (vignette != null && baseVignette >= 0f) vignette.intensity.value = baseVignette;
+            if (groundFogPs != null && groundFogPs.isPlaying) groundFogPs.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            if (cam != null) cam.depthTextureMode = baseDepthMode;
             if (dnc != null) dnc.controlFog = dncFogWasOn;
             if (cam != null) { cam.farClipPlane = baseFar; cam.backgroundColor = baseBackground; }
             if (dnc != null && dnc.flashlight != null && baseFlashlightRange >= 0f) dnc.flashlight.range = baseFlashlightRange;
         }
+    }
+
+    const float DefaultCamDist = 40f; // CameraZoom 기본 거리 - 안개 밀도 기준
+
+    /// <summary>
+    /// 바닥 안개: 크고 흐린 소프트 파티클이 1~3m 높이에서 천천히 흘러감.
+    /// 원반(반경 groundFogRadius) 위에 뿌리고 ±1m 랜덤 위치로 높이를 흩뜨림. 입자는 월드 공간 → 플레이어가 움직여도 제자리에서 흘러감
+    /// 재질: Resources/WorldDecor/GroundFog (Particles/Standard Unlit, Fade + Soft Particles). 없으면 SmokeAlpha(소프트 X)
+    /// </summary>
+    ParticleSystem BuildGroundFog()
+    {
+        var go = new GameObject("GroundFog");
+        go.transform.SetParent(transform, false);
+        var ps = go.AddComponent<ParticleSystem>();
+        ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+        float lifeMin = 14f, lifeMax = 20f;
+        var main = ps.main;
+        main.loop = true;
+        main.duration = lifeMax;
+        main.prewarm = true; // 안개가 시작되자마자 이미 깔려 있게
+        main.startLifetime = new ParticleSystem.MinMaxCurve(lifeMin, lifeMax);
+        main.startSpeed = 0f;
+        main.startSize = new ParticleSystem.MinMaxCurve(groundFogSize.x, groundFogSize.y);
+        main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
+        main.startColor = new ParticleSystem.MinMaxGradient(new Color(1f, 1f, 1f, groundFogAlpha.x), new Color(0.85f, 0.85f, 0.88f, groundFogAlpha.y));
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.maxParticles = groundFogCount + 10;
+
+        var em = ps.emission; em.rateOverTime = groundFogCount / ((lifeMin + lifeMax) * 0.5f); // 동시 개수 ≈ groundFogCount
+
+        var shape = ps.shape;
+        shape.shapeType = ParticleSystemShapeType.Circle;
+        shape.radius = groundFogRadius;
+        shape.radiusThickness = 1f;                 // 원 안 전체
+        shape.rotation = new Vector3(90f, 0f, 0f);  // 바닥과 나란히
+        shape.randomPositionAmount = (groundFogHeight.y - groundFogHeight.x) * 0.5f; // 높이 ±1m
+
+        var vel = ps.velocityOverLifetime;
+        vel.enabled = true;
+        vel.space = ParticleSystemSimulationSpace.World;
+        vel.x = new ParticleSystem.MinMaxCurve(groundFogWind.x * 0.6f, groundFogWind.x * 1.4f);
+        vel.y = new ParticleSystem.MinMaxCurve(-0.05f, 0.05f);
+        vel.z = new ParticleSystem.MinMaxCurve(groundFogWind.z * 0.6f, groundFogWind.z * 1.4f);
+
+        var rot = ps.rotationOverLifetime; rot.enabled = true; rot.z = new ParticleSystem.MinMaxCurve(-0.08f, 0.08f); // 천천히 일렁임
+
+        var col = ps.colorOverLifetime; col.enabled = true;
+        var g = new Gradient();
+        g.SetKeys(new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+                  new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.25f), new GradientAlphaKey(1f, 0.75f), new GradientAlphaKey(0f, 1f) });
+        col.color = g; // 생겨날 때/사라질 때 서서히
+
+        var src = Resources.Load<Material>("WorldDecor/GroundFog");
+        if (src == null) src = Resources.Load<Material>("WorldDecor/SmokeAlpha");
+        groundFogMat = src != null ? new Material(src) : new Material(Shader.Find("Sprites/Default"));
+        groundFogMat.name = "GroundFog(Runtime)";
+        groundFogMat.mainTexture = WorldDecorTextures.SoftDot("FX_GroundFog", true); // 가장자리 흐린 얼룩 (불/연기와 같은 텍스처 생성기)
+
+        var r = go.GetComponent<ParticleSystemRenderer>();
+        r.renderMode = ParticleSystemRenderMode.Billboard;
+        r.sharedMaterial = groundFogMat;
+        r.maxParticleSize = 3f; // 기본 0.5(화면 절반)면 가까이 있는 큰 입자가 잘려 작아짐
+        r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        r.receiveShadows = false;
+        return ps;
+    }
+
+    /// <summary>바닥 안개 색/진하기 (재질 색 × 입자 색). Legacy 파티클 셰이더는 _TintColor(×2)</summary>
+    void SetGroundFogTint(Color tint, float amount)
+    {
+        if (groundFogMat == null) return;
+        tint.a = amount;
+        if (groundFogMat.HasProperty("_Color")) groundFogMat.SetColor("_Color", tint);
+        else if (groundFogMat.HasProperty("_TintColor")) groundFogMat.SetColor("_TintColor", tint * 0.5f);
     }
 
     ParticleSystem BuildRain()

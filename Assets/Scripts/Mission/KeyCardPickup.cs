@@ -3,12 +3,12 @@ using UnityEngine;
 /// <summary>
 /// 메인 미션용 열쇠 카드 (인벤토리에 안 들어감 - MissionManager가 수만 셈).
 /// 빛나는 카드가 떠서 돌고, 플레이어가 pickupRadius 안에 오면 자동 획득.
-/// MissionManager가 건물 안에 Create()로 생성.
+/// MissionManager가 KeyCardSpawnPoints 후보 중 랜덤 위치에 Create()로 생성.
 /// </summary>
 public class KeyCardPickup : MonoBehaviour
 {
     public float pickupRadius = 1.6f;
-    public string buildingLabel; // 어느 건물에 있는지 (HUD "남은 곳" 표시용)
+    public string buildingLabel; // 어디에 있는지 (로그용 - 플레이어가 직접 찾아야 하므로 HUD엔 안 보여줌)
 
     Transform player;
     Transform visual;

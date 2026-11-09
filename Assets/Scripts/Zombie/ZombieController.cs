@@ -328,11 +328,17 @@ public class ZombieController : MonoBehaviour
         perception.Tick(dt);
         ZombieObservation obs = perception.Observe();
 
+        // 게임 규칙 (팀원 ZombieRules): 스폰 보호 중이면 판단·좀비다움을 건너뛰고 느리게 어슬렁 (학습장 좀비는 제외)
+        heldNow = targetOverride == null && ZombieRules.IsHeld(transform.position);
+
         // 2. Think
-        ZombieAction action = ThinkSafely(in obs, dt);
+        ZombieAction action = heldNow ? HeldAction(in obs, dt) : ThinkSafely(in obs, dt);
 
         // 2.5 좀비다움: 늦은 반응 / 가끔 멈춤 / 점점 가속 (판단은 그대로, 실행만 비튼다)
-        if (quirks != null && zombieQuirks) action = quirks.Filter(in action, in obs, State, dt);
+        if (!heldNow && quirks != null && zombieQuirks) action = quirks.Filter(in action, in obs, State, dt);
+
+        // 2.7 게임 규칙: 건물에서 막 나온 플레이어 공격 금지 / 플레이어가 실내면 입구에서 물러남
+        if (!heldNow && targetOverride == null) action = ApplyGameRules(in action, in obs);
 
         // 3. Act
         Execute(in action, in obs);
@@ -341,9 +347,72 @@ public class ZombieController : MonoBehaviour
         if (targetOverride == null)
         {
             var st = State;
-            ZombieVoiceManager.Tick(this, st == ZombieState.Chase || st == ZombieState.Attack
-                ? ZombieVoiceManager.State.Chase : ZombieVoiceManager.State.Idle);
+            bool chasing = !heldNow && !doorAvoiding && (st == ZombieState.Chase || st == ZombieState.Attack);
+            ZombieVoiceManager.Tick(this, chasing ? ZombieVoiceManager.State.Chase : ZombieVoiceManager.State.Idle);
         }
+    }
+
+    // ── 게임 규칙 (팀원 kimozero/dev의 ZombieRules —— AI와 분리된 규칙을 같은 호출로 적용) ──
+    private bool    heldNow, doorAvoiding;
+    private float   heldRepickAt, doorAvoidUntil;
+    private Vector3 heldPoint, doorAvoidPoint;
+
+    /// <summary>스폰 보호: 추격·공격 없이 주변을 느리게 어슬렁거리며 플레이어 쪽을 본다 ('경계')</summary>
+    private ZombieAction HeldAction(in ZombieObservation obs, float dt)
+    {
+        doorAvoiding = false;
+        float now = Time.time;
+        Vector3 flat = heldPoint - transform.position; flat.y = 0f;
+        if (now >= heldRepickAt || flat.sqrMagnitude < 1f)
+        {
+            Vector2 r = Random.insideUnitCircle * 6f;
+            Vector3 p = transform.position + new Vector3(r.x, 0f, r.y);
+            heldPoint = NavMesh.SamplePosition(p, out NavMeshHit hit, 3f, NavMesh.AllAreas) ? hit.position : transform.position;
+            heldRepickAt = now + Random.Range(3f, 5f);
+        }
+        var a = ZombieAction.Stand();
+        a.hasMoveTarget = true;
+        a.moveTarget    = heldPoint;
+        a.speedScale    = ZombieRules.HeldSpeedFactor;
+        a.faceTarget    = obs.hasTarget;
+        a.attack        = false;
+        return a;
+    }
+
+    private ZombieAction ApplyGameRules(in ZombieAction action, in ZombieObservation obs)
+    {
+        ZombieAction a = action;
+
+        // 건물에서 막 나온 플레이어: 입구 근처 좀비는 잠깐 공격 금지 (안전 창)
+        if (a.attack && !ZombieRules.CanAttack(transform.position)) a.attack = false;
+
+        // 플레이어가 실내: 입구 반경 안의 바깥 좀비는 입구 반대쪽으로 물러난다 (최종 공격 좀비 떼는 제외)
+        bool inReach = obs.hasTarget && obs.distance <= obs.attackRange;
+        if (inReach || !ZombieRules.DoorAvoidApplies(huntPlayer))
+        {
+            doorAvoiding = false;
+            doorAvoidUntil = 0f;
+            return a;
+        }
+        float now = Time.time;
+        if (!doorAvoiding || now >= doorAvoidUntil)
+        {
+            doorAvoiding = ZombieRules.TryPickDoorAvoidDestination(transform.position, out doorAvoidPoint);
+            doorAvoidUntil = now + 4f;
+        }
+        else
+        {
+            Vector3 left = doorAvoidPoint - transform.position; left.y = 0f;
+            if (left.sqrMagnitude < 1f) doorAvoiding = false;   // 도착 → 다시 원래대로
+        }
+        if (!doorAvoiding) return a;
+
+        a.hasMoveTarget = true;
+        a.moveTarget    = doorAvoidPoint;
+        a.speedScale    = 1f;
+        a.attack        = false;
+        a.faceTarget    = false;
+        return a;
     }
 
     private float huntTimer;
@@ -408,7 +477,9 @@ public class ZombieController : MonoBehaviour
                 // 밤엔 쫓을 때 더 빠르게 (팀원 밸런스: ×1.2)
                 var stNow = State;
                 float night = IsNightNow && (stNow == ZombieState.Chase || stNow == ZombieState.Attack) ? nightSpeedMultiplier : 1f;
-                agent.speed = moveSpeed * Mathf.Max(action.speedScale, 0.01f) * night;
+                // 7일 넘기면 하루마다 +10% (ZombieRules) —— 학습장 좀비는 그대로
+                float difficulty = targetOverride == null ? ZombieRules.SpeedMultiplier : 1f;
+                agent.speed = moveSpeed * Mathf.Max(action.speedScale, 0.01f) * night * difficulty;
                 SetDestinationThrottled(action.moveTarget);
                 moveSpeedNow = agent.velocity.magnitude;
             }
@@ -546,7 +617,7 @@ public class ZombieController : MonoBehaviour
         if (targetOverride == null) ZombieVoiceManager.Play(this, ZombieVoiceManager.State.Attack);   // 공격: 즉시 비명
 
         Health playerHealth = t.GetComponent<Health>();
-        if (playerHealth != null) playerHealth.TakeDamage(attackDamage);
+        if (playerHealth != null) playerHealth.TakeDamage(attackDamage * ZombieRules.DamageMultiplier);   // 7일 이후 난이도
     }
 
     bool HasParam(int hash)
@@ -558,6 +629,7 @@ public class ZombieController : MonoBehaviour
 
     void OnHurtAnim()
     {
+        if (targetOverride == null) SpawnProtection.Cancel(); // 던진 무기 등 어떤 공격이든 좀비가 맞으면 스폰 보호 해제
         if (!isDead && HasParam(HashHit)) anim.SetTrigger(HashHit);
     }
 

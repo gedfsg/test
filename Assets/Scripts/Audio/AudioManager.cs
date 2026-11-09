@@ -30,10 +30,15 @@ public class AudioManager : MonoBehaviour
         // public const float Gunshot = 1.0f;   // (이전) 플레이테스트: 너무 커서 낮춤
         public const float Gunshot = 0.8f;      // 긴장감, 원거리 식별
         public const float GunshotShotgun = 0.9f; // 샷건은 여전히 가장 크게
-        public const float ZombieScream = 0.9f; // 위협 표현 (추적/공격/사망)
+        // public const float ZombieScream = 0.9f; // (이전) 플레이테스트: 100마리 몰리면 시끄러움
+        public const float ZombieScream = 0.6f; // 위협 표현 (추적/공격)
+        public const float ZombieDeath = 0.7f;  // 사망 단말마
+        public const float ZombieBreath = 0.3f; // 거친 숨소리
+        public const float ZombieBus = 0.72f;   // 좀비 목소리 전체 추가 감쇠 (-2.9dB) → 신음/비명/숨/사망 모두 이전 대비 -5dB 이상
         public const float PlayerHurt = 0.9f;   // 위기감 (피격/사망)
         // public const float ZombieGroan = 0.6f; // (이전) 좀비가 많으면 시끄러워서 낮춤
-        public const float ZombieGroan = 0.4f;  // 배경 분위기
+        // public const float ZombieGroan = 0.4f; // (이전) 플레이테스트: 분위기용 수준으로 낮춤
+        public const float ZombieGroan = 0.25f; // 배경 분위기
         public const float Notification = 0.5f; // 서브 미션 활성화/완료, 점수, 실패/에러 알림
         public const float DayAmbient = 0.2f;   // 낮/평시 배경 루프
         public const float NightAmbient = 0.3f; // 밤 배경 루프
@@ -104,6 +109,9 @@ public class AudioManager : MonoBehaviour
         l.transform.SetParent(transform, false);
         l.AddComponent<AudioListener>();
         listener = l.transform;
+
+        // 씬이 뜨자마자 카메라 리스너를 끔 (첫 프레임에 리스너 2개 경고 방지)
+        UnityEngine.SceneManagement.SceneManager.sceneLoaded += (scene, mode) => DisableOtherListeners();
     }
 
     void Start()
@@ -132,8 +140,7 @@ public class AudioManager : MonoBehaviour
         if (Time.unscaledTime >= nextListenerCheck)
         {
             nextListenerCheck = Time.unscaledTime + 1f;
-            foreach (var other in FindObjectsByType<AudioListener>(FindObjectsSortMode.None))
-                if (other.transform != listener && other.enabled) other.enabled = false;
+            DisableOtherListeners();
         }
 
         var cam = Camera.main;
@@ -141,6 +148,12 @@ public class AudioManager : MonoBehaviour
         else if (cam != null) listener.position = cam.transform.position;
         // 화면 기준 좌우 = 소리 좌우 (Q/E로 카메라를 돌려도 맞게 카메라 Y회전만 따라감)
         if (cam != null) listener.rotation = Quaternion.Euler(0f, cam.transform.eulerAngles.y, 0f);
+    }
+
+    void DisableOtherListeners()
+    {
+        foreach (var other in FindObjectsByType<AudioListener>(FindObjectsSortMode.None))
+            if (other.transform != listener && other.enabled) other.enabled = false;
     }
 
     /// <summary>현재 소리를 듣는 위치 (플레이어 머리). 좀비 목소리 거리 판정용</summary>

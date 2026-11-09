@@ -100,13 +100,28 @@ public class BackpackManager : MonoBehaviour
         return true;
     }
 
-    /// <summary>바닥 가방 줍기: 가방이 없으면 바로 장착하고 true, 이미 있으면 무시(false, 바닥에 그대로)</summary>
+    /// <summary>
+    /// 바닥 가방 줍기: 가방이 없으면 바로 장착하고 true.
+    /// 이미 메고 있으면 인벤토리에 넣음(true → 호출한 쪽에서 월드 가방 제거). 인벤토리가 꽉 차면 false(바닥에 그대로)
+    /// </summary>
     public bool TryPickup(BackpackData bag)
     {
         if (bag == null) return false;
+        // (이전) 이미 가방이 있으면 무시 → 바닥에 그대로 남아서 F를 눌러도 계속 안 주워졌음
+        // if (Current != null)
+        // {
+        //     PickupFeedbackUI.Instance?.ShowWarning("이미 가방을 메고 있음");
+        //     return false;
+        // }
         if (Current != null)
         {
-            PickupFeedbackUI.Instance?.ShowWarning("이미 가방을 메고 있음");
+            // 인벤토리 가방 칸에서 나중에 "장착"으로 교체 가능 (InventoryUI)
+            if (inventory != null && inventory.AddItem(bag, 1))
+            {
+                PickupFeedbackUI.Instance?.Show($"{bag.itemName} 획득 (인벤토리)");
+                return true;
+            }
+            PickupFeedbackUI.Instance?.ShowWarning("인벤토리 가득 참");
             return false;
         }
         bool ok = Equip(bag, null);

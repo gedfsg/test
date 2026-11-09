@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b06aa620b28d3c244b39a134360ef685, type: 3}
+  m_Name: Main_RadioSignal
+  m_EditorClassIdentifier: Assembly-CSharp::MainMissionData
+  type: 13
+  title: "\uBB34\uC804 \uC2E0\uD638 \uC218\uC2E0"
+  target: 30
+  altTarget: 0
+  holdSeconds: 2
+  fixedLastDay: 0

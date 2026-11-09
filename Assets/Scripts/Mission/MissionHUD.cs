@@ -4,32 +4,51 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 미션 HUD (오른쪽 위 - 다른 HUD와 안 겹치는 빈 자리) + 목표 방향 화살표.
+/// 미션 HUD (오른쪽 위, 레퍼런스 ui.jpg 레이아웃) + 토스트(화면 중앙 하단) + 목표 방향 화살표.
 ///
-///   메인 미션
-///   ○ 7일 생존                3/7일
-///   ○ 열쇠 카드 수집           1/4
-///      남은 곳: 병원 · 마트 · 교회
-///   ○ 탈출 지점 도달        7일차 개방
-///   서브 미션                 점수 300     (활성화된 서브 미션만, 없으면 안내 한 줄)
-///   ● 좀비 15마리 처치  15/15  점수 300
-///
-/// 화살표: 다음 목표(가장 가까운 열쇠 카드 → 다 모으면 탈출 지점)가 화면 밖이면 화면 가장자리에 방향 + 거리 표시.
+///   ┌──────────────────────────────┐
+///   │ 진행률                    40% │  ← 주황, % 크게
+///   │ ████████░░░░░░░░░░░░░░░░░░░  │  ← 주황 그라데이션 바 (오늘 진행률, 실시간)
+///   │                    목표 100% │
+///   ├──────────────────────────────┤
+///   │ ◆ 메인 미션                   │
+///   │ 비상 무전기 가동            ○ │  ← ○ 미완료 / ✓ 완료 (% 없음)
+///   ├──────────────────────────────┤
+///   │ 🔍 탐색 서브 미션              │
+///   │ 📍 주유소 수색          [발견] │  ← 발견된 것만 표시. 발견 / ○ / ✓
+///   ├──────────────────────────────┤
+///   │    2일차 시작 시 새 미션 개방   │
+///   └──────────────────────────────┘
+/// 인벤토리를 열면 패널(가려짐)을 숨기고 한 줄 요약만 표시.
 /// MissionManager가 AddComponent로 붙임. 기준 해상도는 다른 HUD와 같은 1681x936.
+/// (이전: 메인 3줄(7일 생존/열쇠 카드/탈출) + 서브 % 표시 + 상단 중앙 총 진행률 바 → git 기록 참고)
 /// </summary>
 public class MissionHUD : MonoBehaviour
 {
-    const float Width = 340f, LineH = 24f;
+    public enum ToastKind { Discovered, MainComplete, SubComplete, NewDay, Info }
+
+    const float Width = 340f, Pad = 18f, RowH = 26f;
     const float ArrowRadius = 130f; // 플레이어 중심에서 화살표까지 (UI px)
 
-    static readonly Color DoneColor = new Color(0.45f, 1f, 0.55f);
-    static readonly Color KeyColor = new Color(0.2f, 0.85f, 1f);
+    // 색상 (요청 스펙)
+    static readonly Color Orange = new Color32(0xFF, 0xA5, 0x00, 0xFF);   // 제목 / % / 바
+    static readonly Color Gray = new Color32(0x9E, 0x9E, 0x9E, 0xFF);     // 미완료 ○ / 안내
+    static readonly Color Green = new Color32(0x5C, 0xE6, 0x73, 0xFF);    // 완료 ✓
+    static readonly Color PanelFill = new Color(0.06f, 0.07f, 0.09f, 0.84f);
+    static readonly Color Gold = new Color32(0xC9, 0xA2, 0x55, 0xE6);      // 테두리
+    static readonly Color Divider = new Color(1f, 1f, 1f, 0.12f);
+    static readonly Color Cyan = new Color32(0x4F, 0xC3, 0xF7, 0xFF);      // 발견 토스트
 
     MissionManager mm;
     RectTransform panel;
-    Image panelBg;
-    readonly List<(Image icon, TextMeshProUGUI label, TextMeshProUGUI value)> rows = new List<(Image, TextMeshProUGUI, TextMeshProUGUI)>();
-    TextMeshProUGUI remainText, scoreText;
+    Image panelFrame;
+    TextMeshProUGUI percentText, mainTitle, footerText, emptySubText;
+    Image barFill, mainStatus;
+    RectTransform div2, subHeader, div3;
+    class SubRow { public RectTransform root; public Image pin, status; public TextMeshProUGUI title; public GameObject badge; }
+    readonly List<SubRow> subRows = new List<SubRow>();
+    InventoryUI inventoryUI;
+    TextMeshProUGUI compactText;  // 인벤토리 열림: 한 줄 요약
     RectTransform arrow;
     Image arrowImg;
     TextMeshProUGUI arrowDist;
@@ -37,9 +56,11 @@ public class MissionHUD : MonoBehaviour
     void Start()
     {
         mm = GetComponent<MissionManager>();
+        inventoryUI = FindFirstObjectByType<InventoryUI>(FindObjectsInactive.Include);
         Build();
     }
 
+    // ── 생성 ──
     void Build()
     {
         var canvasGo = new GameObject("MissionHUD", typeof(RectTransform));
@@ -52,132 +73,205 @@ public class MissionHUD : MonoBehaviour
         scaler.referenceResolution = new Vector2(1681f, 936f);
         scaler.matchWidthOrHeight = 0.5f;
 
-        // 패널: 오른쪽 위 고정 (높이는 활성 서브 미션 수에 맞춰 Update에서 조절)
-        // int lines = 1 + 3 + 1 + 1 + mm.subMissions.Count; // (이전) 서브 미션 전부 표시
-        float height = PanelHeight(0);
-        panelBg = HudStyle.NewImage(canvasGo.transform, "Panel", HudStyle.RoundedRect, HudStyle.PanelBg, Vector2.zero, new Vector2(Width, height));
-        panel = panelBg.rectTransform;
+        // 패널: 오른쪽 위 고정 (높이는 발견된 서브 미션 수에 맞춰 Update에서 조절)
+        var bg = HudStyle.NewImage(canvasGo.transform, "Panel", PanelSprite, PanelFill, Vector2.zero, new Vector2(Width, 300f));
+        panel = bg.rectTransform;
         panel.anchorMin = panel.anchorMax = panel.pivot = new Vector2(1f, 1f);
         panel.anchoredPosition = new Vector2(-20f, -20f);
+        panelFrame = HudStyle.NewImage(panel, "Frame", FrameSprite, Gold, Vector2.zero, Vector2.zero);
+        bg.pixelsPerUnitMultiplier = panelFrame.pixelsPerUnitMultiplier = FrameScale; // 테두리를 레퍼런스처럼 얇게
+        Stretch(panelFrame.rectTransform);
 
-        float y = -12f - LineH / 2f;
-        Header("메인 미션", ref y);
-        for (int i = 0; i < 3; i++)
-        {
-            Row(ref y);
-            if (i == 1) { remainText = Text("Remain", "", HudStyle.Regular, 14f, HudStyle.TextDim, TextAlignmentOptions.MidlineLeft, new Vector2(34f, y), Width - 44f); y -= LineH; }
-        }
-        scoreText = Header("서브 미션", ref y);
-        float subY = y;
-        foreach (var _ in mm.subMissions) Row(ref y); // 최대(뽑힌 수)만큼 미리 만들고 활성화된 것만 보임
-        emptyText = Text("SubEmpty", "탐색하면 새 미션이 나타남", HudStyle.Regular, 14f, HudStyle.TextDim, TextAlignmentOptions.MidlineLeft,
-                         new Vector2(34f, subY), Width - 44f);
+        // 진행률 + 큰 %
+        Text(panel, "ProgressLabel", "진행률", HudStyle.Bold, 18f, Orange, TextAlignmentOptions.MidlineLeft, Pad, -30f, 150f);
+        percentText = Text(panel, "Percent", "0%", HudStyle.Bold, 32f, Orange, TextAlignmentOptions.MidlineRight, Width - Pad - 150f, -30f, 150f);
+        // 진행 바 (어두운 홈 + 주황 그라데이션 채움)
+        var track = HudStyle.NewImage(panel, "BarTrack", HudStyle.RoundedRect, new Color(1f, 1f, 1f, 0.1f), Vector2.zero, new Vector2(Width - Pad * 2f, 10f));
+        TopLeft(track.rectTransform, Pad, -60f);
+        track.pixelsPerUnitMultiplier = 3f;
+        barFill = HudStyle.NewImage(track.rectTransform, "Fill", HudStyle.BarOrange, Color.white, Vector2.zero, Vector2.zero);
+        if (barFill.sprite == null) barFill.color = Orange;
+        var f = barFill.rectTransform;
+        f.anchorMin = Vector2.zero; f.anchorMax = new Vector2(0f, 1f); f.pivot = new Vector2(0f, 0.5f);
+        f.anchoredPosition = Vector2.zero; f.sizeDelta = Vector2.zero;
+        Text(panel, "Goal", "목표 100%", HudStyle.Regular, 12f, Gray, TextAlignmentOptions.MidlineRight, Width - Pad - 150f, -78f, 150f);
+
+        Line(panel, "Div1", -94f);
+        // ◆ 메인 미션
+        HeaderRow(panel, "MainHeader", HudStyle.Diamond, "메인 미션", -114f);
+        mainTitle = Text(panel, "MainTitle", "", HudStyle.SemiBold, 16f, Color.white, TextAlignmentOptions.MidlineLeft, Pad, -142f, Width - Pad * 2f - 30f);
+        mainStatus = HudStyle.NewImage(panel, "MainStatus", HudStyle.Ring, Gray, Vector2.zero, new Vector2(16f, 16f));
+        TopLeft(mainStatus.rectTransform, Width - Pad - 16f, -142f, centerY: true);
+
+        div2 = Line(panel, "Div2", -164f);
+        // 🔍 탐색 서브 미션
+        subHeader = HeaderRow(panel, "SubHeader", HudStyle.Search, "탐색 서브 미션", -184f);
+        for (int i = 0; i < MissionManager.MaxDailySubMissions; i++) subRows.Add(SubRowAt(-212f - i * RowH));
+        emptySubText = Text(panel, "SubEmpty", "주변을 탐색해 서브 미션을 찾으세요", HudStyle.Regular, 13f, Gray, TextAlignmentOptions.MidlineLeft, Pad, -212f, Width - Pad * 2f);
+
+        div3 = Line(panel, "Div3", -236f);
+        footerText = Text(panel, "Footer", "", HudStyle.Regular, 13f, Gray, TextAlignmentOptions.Center, 0f, -256f, Width);
 
         BuildToast(canvasGo.transform);
 
+        // 인벤토리 열림: 패널 대신 한 줄 요약 (인벤토리 창 위 빈 자리)
+        compactText = HudStyle.NewText(canvasGo.transform, "MissionCompact", "", HudStyle.SemiBold, 15f, Orange, TextAlignmentOptions.MidlineRight, Vector2.zero, new Vector2(Width, 24f));
+        var cr = compactText.rectTransform;
+        cr.anchorMin = cr.anchorMax = cr.pivot = new Vector2(1f, 1f);
+        cr.anchoredPosition = new Vector2(-20f, -14f);
+        compactText.gameObject.SetActive(false);
+
         // 목표 방향 화살표
-        arrowImg = HudStyle.NewImage(canvasGo.transform, "ObjectiveArrow", HudStyle.NavArrow != null ? HudStyle.NavArrow : HudStyle.Triangle, KeyColor, Vector2.zero, new Vector2(34f, 34f));
+        arrowImg = HudStyle.NewImage(canvasGo.transform, "ObjectiveArrow", HudStyle.NavArrow != null ? HudStyle.NavArrow : HudStyle.Triangle, Orange, Vector2.zero, new Vector2(34f, 34f));
         arrow = arrowImg.rectTransform;
         arrowDist = HudStyle.NewText(canvasGo.transform, "ObjectiveDist", "", HudStyle.SemiBold, 15f, Color.white, TextAlignmentOptions.Center, Vector2.zero, new Vector2(120f, 22f));
     }
 
-    TextMeshProUGUI Header(string title, ref float y)
-    {
-        Text("H_" + title, title, HudStyle.Bold, 17f, HudStyle.Highlight, TextAlignmentOptions.MidlineLeft, new Vector2(14f, y), Width - 28f);
-        var right = Text("H_R_" + title, "", HudStyle.SemiBold, 15f, HudStyle.Highlight, TextAlignmentOptions.MidlineRight, new Vector2(14f, y), Width - 28f);
-        y -= LineH;
-        return right;
-    }
+    // 모서리 깎인 패널 스프라이트 (없으면 둥근 사각형 - Tools/HUD/Build Mission HUD Sprites)
+    const float FrameScale = 1.6f; // 9-slice 테두리 배율 (클수록 얇은 테두리 / 작은 모서리)
+    static Sprite PanelSprite => HudStyle.ChamferPanel != null ? HudStyle.ChamferPanel : HudStyle.RoundedRect;
+    static Sprite FrameSprite => HudStyle.ChamferFrame != null ? HudStyle.ChamferFrame : HudStyle.RoundedFrame;
 
-    void Row(ref float y)
-    {
-        var icon = HudStyle.NewImage(panel, "Icon", HudStyle.Ring, HudStyle.TextDim, Vector2.zero, new Vector2(12f, 12f));
-        icon.rectTransform.anchorMin = icon.rectTransform.anchorMax = new Vector2(0f, 1f);
-        icon.rectTransform.anchoredPosition = new Vector2(22f, y);
-        var label = Text("Label", "", HudStyle.Regular, 15f, HudStyle.Text, TextAlignmentOptions.MidlineLeft, new Vector2(34f, y), Width - 44f);
-        var value = Text("Value", "", HudStyle.SemiBold, 14f, HudStyle.TextDim, TextAlignmentOptions.MidlineRight, new Vector2(34f, y), Width - 48f);
-        rows.Add((icon, label, value));
-        y -= LineH;
-    }
+    static void Stretch(RectTransform r) { r.anchorMin = Vector2.zero; r.anchorMax = Vector2.one; r.offsetMin = r.offsetMax = Vector2.zero; }
 
-    // 패널 왼쪽 위 기준 텍스트 (x = 왼쪽 여백, 폭 w)
-    TextMeshProUGUI Text(string name, string s, TMP_FontAsset font, float size, Color c, TextAlignmentOptions align, Vector2 pos, float w)
+    // 패널 왼쪽 위 기준 배치 (x = 왼쪽 끝, y = 중심 높이)
+    static void TopLeft(RectTransform r, float x, float y, bool centerY = true)
     {
-        var t = HudStyle.NewText(panel, name, s, font, size, c, align, Vector2.zero, new Vector2(w, LineH));
-        var r = t.rectTransform;
         r.anchorMin = r.anchorMax = new Vector2(0f, 1f);
-        r.pivot = new Vector2(0f, 0.5f);
-        r.anchoredPosition = pos;
+        r.pivot = new Vector2(0f, centerY ? 0.5f : 1f);
+        r.anchoredPosition = new Vector2(x, y);
+    }
+
+    static TextMeshProUGUI Text(Transform parent, string name, string s, TMP_FontAsset font, float size, Color c, TextAlignmentOptions align, float x, float y, float w)
+    {
+        var t = HudStyle.NewText(parent, name, s, font, size, c, align, Vector2.zero, new Vector2(w, RowH));
+        TopLeft(t.rectTransform, x, y);
         return t;
     }
 
-    void SetRow(int i, string label, string value, bool done, Color? valueColor = null)
+    static RectTransform Line(Transform parent, string name, float y)
     {
-        var (icon, l, v) = rows[i];
-        icon.sprite = done ? HudStyle.Circle : HudStyle.Ring;
-        icon.color = done ? DoneColor : HudStyle.TextDim;
-        l.text = label;
-        l.color = done ? DoneColor : HudStyle.Text;
-        v.text = value;
-        v.color = done ? DoneColor : (valueColor ?? HudStyle.TextDim);
+        var img = HudStyle.NewImage(parent, name, null, Divider, Vector2.zero, new Vector2(Width - Pad * 2f + 8f, 1f));
+        TopLeft(img.rectTransform, Pad - 4f, y);
+        return img.rectTransform;
     }
 
+    // 아이콘 + 주황 소제목 (행 전체를 묶은 RectTransform 반환 → 위치 이동용)
+    static RectTransform HeaderRow(Transform parent, string name, Sprite icon, string title, float y)
+    {
+        var row = HudStyle.NewRect(parent, name, Vector2.zero, new Vector2(Width, RowH));
+        TopLeft(row, 0f, y);
+        var ic = HudStyle.NewImage(row, "Icon", icon, Orange, Vector2.zero, new Vector2(14f, 14f));
+        TopLeft(ic.rectTransform, Pad, -RowH / 2f);
+        ic.rectTransform.anchorMin = ic.rectTransform.anchorMax = new Vector2(0f, 1f);
+        Text(row, "Title", title, HudStyle.Bold, 16f, Orange, TextAlignmentOptions.MidlineLeft, Pad + 20f, -RowH / 2f, Width - Pad * 2f);
+        return row;
+    }
+
+    SubRow SubRowAt(float y)
+    {
+        var r = new SubRow { root = HudStyle.NewRect(panel, "SubRow", Vector2.zero, new Vector2(Width, RowH)) };
+        TopLeft(r.root, 0f, y);
+        r.pin = HudStyle.NewImage(r.root, "Pin", HudStyle.Pin, Orange, Vector2.zero, new Vector2(13f, 13f));
+        TopLeft(r.pin.rectTransform, Pad + 1f, -RowH / 2f);
+        r.title = Text(r.root, "Title", "", HudStyle.Regular, 15f, Color.white, TextAlignmentOptions.MidlineLeft, Pad + 20f, -RowH / 2f, Width - Pad * 2f - 80f);
+        r.status = HudStyle.NewImage(r.root, "Status", HudStyle.Ring, Gray, Vector2.zero, new Vector2(16f, 16f));
+        TopLeft(r.status.rectTransform, Width - Pad - 16f, -RowH / 2f);
+        // "발견" 라벨: 주황 배경 + 흰 글씨
+        var badge = HudStyle.NewImage(r.root, "Badge", PanelSprite, Orange, Vector2.zero, new Vector2(42f, 20f));
+        TopLeft(badge.rectTransform, Width - Pad - 42f, -RowH / 2f);
+        badge.pixelsPerUnitMultiplier = 3f;
+        HudStyle.NewText(badge.rectTransform, "Text", "발견", HudStyle.Bold, 12f, Color.white, TextAlignmentOptions.Center, Vector2.zero, new Vector2(42f, 20f));
+        r.badge = badge.gameObject;
+        return r;
+    }
+
+    // ── 갱신 ──
     void Update()
     {
         if (mm == null || panel == null) return;
 
-        int escapeDay = mm.EscapeDay;
-        SetRow(0, $"{escapeDay}일 생존", $"{Mathf.Min(mm.CurrentDay, escapeDay)}/{escapeDay}일", mm.SurvivedEnough);
-        SetRow(1, "열쇠 카드 수집", $"{mm.KeyCards}/{mm.keyCardsRequired}", mm.HasAllKeyCards, KeyColor);
-        var remain = new List<string>();
-        foreach (var k in mm.keyCardsInWorld) if (k != null) remain.Add(k.buildingLabel);
-        remainText.text = remain.Count > 0 ? "남은 곳: " + string.Join(" · ", remain) : "";
-        SetRow(2, "탈출 지점 도달", mm.Escaped ? "탈출!" : mm.CanEscape ? "열림!" : $"{escapeDay}일차 개방", mm.Escaped,
-               mm.CanEscape ? DoneColor : (Color?)null);
+        // 인벤토리 열림: 패널이 인벤토리를 가리지 않게 숨기고 한 줄만
+        bool inventoryOpen = inventoryUI != null && inventoryUI.isInventoryOpen;
+        panel.gameObject.SetActive(!inventoryOpen);
+        compactText.gameObject.SetActive(inventoryOpen);
+        float p = mm.DayProgress;
+        if (inventoryOpen) compactText.text = $"진행률 {Mathf.FloorToInt(p)}% · 메인 미션 {(mm.MainDone ? "완료" : "진행 중")}";
 
-        scoreText.text = $"점수 {mm.Score}";
-        // for (int i = 0; i < mm.subMissions.Count; i++) // (이전) 뽑힌 미션 전부
-        var shown = mm.activeSubMissions;
-        for (int i = 0; i < mm.subMissions.Count; i++)
+        percentText.text = $"{Mathf.FloorToInt(p)}%";
+        barFill.rectTransform.anchorMax = new Vector2(Mathf.Clamp01(p / 100f), 1f);
+
+        // 메인 미션: 미션명 (+ 진행 수) + ○/✓
+        var main = mm.CurrentMain;
+        string detail = string.IsNullOrEmpty(mm.MainDetail) || mm.MainDone ? "" : $"  <size=13><color=#9E9E9E>{mm.MainDetail}</color></size>";
+        mainTitle.text = main != null ? main.title + detail : "-";
+        SetStatus(mainStatus, mm.MainDone);
+
+        // 서브 미션: 발견된 것만
+        int shown = 0;
+        foreach (var s in mm.subMissions)
         {
-            bool visible = i < shown.Count;
-            var (icon, l, v) = rows[3 + i];
-            icon.gameObject.SetActive(visible); l.gameObject.SetActive(visible); v.gameObject.SetActive(visible);
-            if (!visible) continue;
-            var s = shown[i];
-            string prog = s.target > 1 ? $"{Mathf.Min(s.progress, s.target)}/{s.target}  " : "";
-            SetRow(3 + i, s.title, prog + s.RewardText, s.Done);
+            if (!s.Discovered || shown >= subRows.Count) continue;
+            var row = subRows[shown++];
+            row.root.gameObject.SetActive(true);
+            bool countable = s.target > 1 && !s.Done;
+            row.title.text = s.title + (countable && s.progress > 0 ? $"  <size=12><color=#9E9E9E>{s.progress}/{s.target}</color></size>" : "");
+            row.title.color = s.Done ? Green : Color.white;
+            row.pin.sprite = s.Done ? HudStyle.Check : HudStyle.Pin;
+            row.pin.color = s.Done ? Green : Orange;
+            bool fresh = !s.Done && s.progress == 0; // 막 발견됨 (아직 진행 없음) → "발견" 라벨
+            row.badge.SetActive(fresh);
+            row.status.gameObject.SetActive(!fresh);
+            SetStatus(row.status, s.Done);
         }
-        emptyText.gameObject.SetActive(shown.Count == 0);
-        panel.sizeDelta = new Vector2(Width, PanelHeight(shown.Count));
+        for (int i = shown; i < subRows.Count; i++) subRows[i].root.gameObject.SetActive(false);
+        emptySubText.gameObject.SetActive(shown == 0);
+
+        // 아래쪽 줄 위치 (서브 줄 수에 맞춰)
+        int lines = Mathf.Max(1, shown);
+        float subEnd = -212f - (lines - 1) * RowH;
+        TopLeft(div3, Pad - 4f, subEnd - 22f);
+        TopLeft(footerText.rectTransform, 0f, subEnd - 42f);
+        footerText.text = mm.FooterText;
+        panel.sizeDelta = new Vector2(Width, -(subEnd - 42f) + 22f);
 
         UpdateToast();
         UpdateArrow();
     }
 
-    // 제목 + 메인3 + 남은 곳 + 서브 제목 + 서브 (없으면 안내 한 줄)
-    static float PanelHeight(int subRows) => (1 + 3 + 1 + 1 + Mathf.Max(1, subRows)) * LineH + 24f;
+    static void SetStatus(Image img, bool done)
+    {
+        img.sprite = done ? HudStyle.Check : HudStyle.Ring;
+        img.color = done ? Green : Gray;
+    }
 
-    // ── 토스트: 서브 미션 활성화 알림 (화면 위 가운데, 2초 후 사라짐) ──
+    // ── 토스트: 화면 중앙 하단 (핫바 위), 2초 후 사라짐 ──
     const float ToastDuration = 2f, ToastFade = 0.3f;
-    TextMeshProUGUI emptyText, toastTitle, toastSub;
+    Image toastFrame, toastIcon;
+    TextMeshProUGUI toastTitle, toastSub;
     CanvasGroup toastGroup;
-    readonly Queue<(string title, string sub)> toastQueue = new Queue<(string, string)>();
+    readonly Queue<(ToastKind kind, string title, string sub)> toastQueue = new Queue<(ToastKind, string, string)>();
     float toastUntil = -1f;
 
     /// <summary>토스트 표시 (여러 개가 한꺼번에 오면 2초씩 차례로)</summary>
-    public void ShowToast(string title, string sub) => toastQueue.Enqueue((title, sub));
+    public void ShowToast(ToastKind kind, string title, string sub) => toastQueue.Enqueue((kind, title, sub));
+    public void ShowToast(string title, string sub) => ShowToast(ToastKind.Info, title, sub); // 기존 호출 호환
 
     void BuildToast(Transform canvas)
     {
-        var bg = HudStyle.NewImage(canvas, "MissionToast", HudStyle.RoundedRect, HudStyle.PanelBg, Vector2.zero, new Vector2(420f, 64f));
+        var bg = HudStyle.NewImage(canvas, "MissionToast", PanelSprite, PanelFill, Vector2.zero, new Vector2(300f, 62f));
         var rt = bg.rectTransform;
-        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
-        rt.pivot = new Vector2(0.5f, 1f);
-        rt.anchoredPosition = new Vector2(0f, -150f); // 상단 날짜/시간 HUD 아래
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0f);
+        rt.pivot = new Vector2(0.5f, 0f);
+        rt.anchoredPosition = new Vector2(0f, 150f); // 핫바 위
         toastGroup = bg.gameObject.AddComponent<CanvasGroup>();
-        toastTitle = HudStyle.NewText(rt, "Title", "", HudStyle.Bold, 19f, HudStyle.Highlight, TextAlignmentOptions.Center, new Vector2(0f, 11f), new Vector2(400f, 26f));
-        toastSub = HudStyle.NewText(rt, "Sub", "", HudStyle.Regular, 15f, HudStyle.Text, TextAlignmentOptions.Center, new Vector2(0f, -14f), new Vector2(400f, 22f));
+        toastFrame = HudStyle.NewImage(rt, "Frame", FrameSprite, Cyan, Vector2.zero, Vector2.zero);
+        bg.pixelsPerUnitMultiplier = toastFrame.pixelsPerUnitMultiplier = FrameScale;
+        Stretch(toastFrame.rectTransform);
+        toastIcon = HudStyle.NewImage(rt, "Icon", HudStyle.Pin, Cyan, new Vector2(-118f, 0f), new Vector2(24f, 24f));
+        HudStyle.NewImage(rt, "IconDivider", null, new Color(1f, 1f, 1f, 0.2f), new Vector2(-96f, 0f), new Vector2(1f, 34f));
+        toastTitle = HudStyle.NewText(rt, "Title", "", HudStyle.SemiBold, 13f, Cyan, TextAlignmentOptions.MidlineLeft, new Vector2(42f, 11f), new Vector2(256f, 20f));
+        toastSub = HudStyle.NewText(rt, "Sub", "", HudStyle.Bold, 17f, Color.white, TextAlignmentOptions.MidlineLeft, new Vector2(42f, -10f), new Vector2(256f, 24f));
         bg.gameObject.SetActive(false);
     }
 
@@ -186,9 +280,20 @@ public class MissionHUD : MonoBehaviour
         if (toastGroup == null) return;
         if (Time.time >= toastUntil && toastQueue.Count > 0)
         {
-            var (title, sub) = toastQueue.Dequeue();
+            var (kind, title, sub) = toastQueue.Dequeue();
+            Color c = kind switch { ToastKind.Discovered => Cyan, ToastKind.SubComplete => Green, ToastKind.Info => Color.white, _ => Orange };
+            toastIcon.sprite = kind switch { ToastKind.Discovered => HudStyle.Pin, ToastKind.NewDay => HudStyle.Diamond, ToastKind.Info => HudStyle.Diamond, _ => HudStyle.Check };
+            toastIcon.color = toastTitle.color = c;
+            toastFrame.color = new Color(c.r, c.g, c.b, 0.85f);
             toastTitle.text = title;
             toastSub.text = sub;
+            // 긴 문구는 폭을 늘림
+            float w = Mathf.Clamp(Mathf.Max(toastSub.GetPreferredValues(sub).x, toastTitle.GetPreferredValues(title).x) + 110f, 300f, 560f);
+            ((RectTransform)toastGroup.transform).sizeDelta = new Vector2(w, 62f);
+            toastIcon.rectTransform.anchoredPosition = new Vector2(-w / 2f + 32f, 0f);
+            toastGroup.transform.Find("IconDivider").GetComponent<RectTransform>().anchoredPosition = new Vector2(-w / 2f + 54f, 0f);
+            toastTitle.rectTransform.anchoredPosition = new Vector2(-w / 2f + 66f + 128f, 11f);
+            toastSub.rectTransform.anchoredPosition = new Vector2(-w / 2f + 66f + 128f, -10f);
             toastUntil = Time.time + ToastDuration;
         }
         float left = toastUntil - Time.time;
@@ -196,40 +301,23 @@ public class MissionHUD : MonoBehaviour
         toastGroup.alpha = Mathf.Clamp01(left / ToastFade); // 마지막 0.3초 동안 사라짐
     }
 
-    /// <summary>다음 목표가 화면 밖이면 화면 가장자리에 방향 화살표 + 거리</summary>
+    /// <summary>메인 미션 목표가 화면 밖이면 플레이어 둘레에 방향 화살표 + 거리 (열쇠 카드/아이템 수집은 직접 탐색이라 없음)</summary>
     void UpdateArrow()
     {
         var cam = Camera.main;
         var player = GameObject.FindWithTag("Player");
-        Transform target = null;
-        Color color = KeyColor;
-        if (!mm.HasAllKeyCards)
-        {
-            float best = float.MaxValue;
-            foreach (var k in mm.keyCardsInWorld)
-            {
-                if (k == null || player == null) continue;
-                float d = (k.transform.position - player.transform.position).sqrMagnitude;
-                if (d < best) { best = d; target = k.transform; }
-            }
-        }
-        else if (mm.EscapePointObj != null)
-        {
-            target = mm.EscapePointObj.transform;
-            color = mm.CanEscape ? DoneColor : new Color(1f, 0.35f, 0.3f);
-        }
+        bool show = mm.TryGetGuideTarget(out Vector3 target) && cam != null && player != null;
+        Color color = mm.CanEscape ? Green : Orange;
 
-        bool show = target != null && cam != null && player != null && !mm.Finished;
-        Vector3 vp = show ? cam.WorldToViewportPoint(target.position) : Vector3.zero;
+        Vector3 vp = show ? cam.WorldToViewportPoint(target) : Vector3.zero;
         if (show && vp.z > 0f && vp.x > 0.05f && vp.x < 0.95f && vp.y > 0.05f && vp.y < 0.95f) show = false; // 화면 안에 보이면 숨김
         arrow.gameObject.SetActive(show);
         arrowDist.gameObject.SetActive(show);
         if (!show) return;
 
-        // 플레이어 둘레(arrowRadius) 위에 목표 방향으로 표시 (화면 가장자리에 두면 상단 날짜 HUD/미니맵과 겹침)
         // 방향 = 플레이어 → 목표 수평 방향을 화면에 투영 (멀리 있는 목표도 안정적으로)
         Vector3 pp = player.transform.position;
-        Vector3 flat = target.position - pp; flat.y = 0f;
+        Vector3 flat = target - pp; flat.y = 0f;
         Vector3 s0 = cam.WorldToScreenPoint(pp), s1 = cam.WorldToScreenPoint(pp + flat.normalized * 3f);
         Vector2 dir = new Vector2(s1.x - s0.x, s1.y - s0.y);
         if (dir.sqrMagnitude < 1e-6f) dir = Vector2.up;
@@ -243,6 +331,6 @@ public class MissionHUD : MonoBehaviour
         arrow.localEulerAngles = new Vector3(0f, 0f, Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg - 90f); // 스프라이트 기본 방향 = 위
         arrowImg.color = color;
         arrowDist.rectTransform.anchoredPosition = pos - dir * 32f;
-        arrowDist.text = $"{Vector3.Distance(player.transform.position, target.position):F0}m";
+        arrowDist.text = $"{Vector3.Distance(pp, target):F0}m";
     }
 }

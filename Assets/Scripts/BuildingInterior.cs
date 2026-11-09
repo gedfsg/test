@@ -47,10 +47,170 @@ public class BuildingInterior : MonoBehaviour
     static int globalInsideCount = 0;
     public static bool IsAnyoneIndoors => globalInsideCount > 0;
 
+    // 플레이어가 지금 들어가 있는 건물 (겹친 트리거면 마지막에 들어간 곳). 좀비 입구 대기 금지용
+    static readonly System.Collections.Generic.List<BuildingInterior> occupied = new System.Collections.Generic.List<BuildingInterior>();
+    public static BuildingInterior Current => occupied.Count > 0 ? occupied[occupied.Count - 1] : null;
+
+    // 건물에서 나온 직후 안전 창: 입구 SafeExitRadius 안 좀비는 SafeExitSeconds 동안 공격 안 함
+    public const float SafeExitSeconds = 1.5f, SafeExitRadius = 7f;
+    static float safeExitUntil = -1f;
+    static Vector3 safeExitDoor;
+
+    /// <summary>pos가 지금 "건물에서 막 나온 입구" 안전 반경 안인지 (공격 금지 판정)</summary>
+    public static bool InSafeExit(Vector3 pos)
+    {
+        if (Time.time >= safeExitUntil) return false;
+        float dx = pos.x - safeExitDoor.x, dz = pos.z - safeExitDoor.z;
+        return dx * dx + dz * dz < SafeExitRadius * SafeExitRadius;
+    }
+
+    /// <summary>pos가 이 건물 실내 트리거 안인지</summary>
+    public bool ContainsPoint(Vector3 pos)
+    {
+        var t = FindTriggerCollider();
+        return t != null && t.bounds.Contains(pos);
+    }
+
+    // ── 트리거를 실제 벽 안쪽으로 맞추기 ──
+    // 씬의 트리거는 렌더러 바운딩 박스 기준이라 벽 밖으로 삐져나온 곳이 많음 (마트 현관 쪽 6m, 일부 건물 10m 이상) →
+    // 건물 앞을 걷기만 해도 "실내"가 됨. 벽 콜라이더는 런타임에 만들어지므로 씬 로드 직후 실측해서 줄임 (늘리지는 않음)
+    const float TriggerWallInset = 0.5f;  // 벽 안쪽으로 들이는 거리 (m)
+    const float TriggerMinSize = 3f;      // 이보다 작게는 안 줄임 (m)
+    const float WallProbeHeight = 1.2f;   // 지면에서 재는 높이 (m)
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    static void RegisterTriggerFit()
+    {
+        UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnSceneLoadedFit;
+        UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoadedFit;
+    }
+
+    static void OnSceneLoadedFit(UnityEngine.SceneManagement.Scene scene, UnityEngine.SceneManagement.LoadSceneMode mode)
+    {
+        if (GameObject.FindWithTag("Player") == null) return;
+        Physics.SyncTransforms();
+        int fitted = 0;
+        var all = FindObjectsByType<BuildingInterior>(FindObjectsSortMode.None);
+        foreach (var b in all) if (b.FitTriggerToWalls()) fitted++;
+        Physics.SyncTransforms();
+        Debug.Log($"[BuildingInterior] 실내 트리거 {fitted}/{all.Length}개를 벽 안쪽으로 맞춤");
+    }
+
+    bool FitTriggerToWalls()
+    {
+        var box = FindTriggerCollider() as BoxCollider;
+        if (box == null) return false;
+        bool changed = false;
+        changed |= FitSide(box, 0, 1f);
+        changed |= FitSide(box, 0, -1f);
+        changed |= FitSide(box, 2, 1f);
+        changed |= FitSide(box, 2, -1f);
+        return changed;
+    }
+
+    // axis(0=x, 2=z) sign 방향 면: 바깥에서 안쪽으로 레이 9개 → 이 건물 벽에 처음 닿는 거리.
+    // 25% 지점 값을 씀: 중앙값이면 ㄱ자 건물의 튀어나온 날개를 잘라내고, 최솟값이면 기둥 하나에 끌려감
+    bool FitSide(BoxCollider box, int axis, float sign)
+    {
+        const float startOut = 8f;
+        Transform tr = box.transform;
+        Vector3 scale = tr.lossyScale;
+        Vector3 dir = (axis == 0 ? tr.right : tr.forward) * sign;
+        Vector3 lat = axis == 0 ? tr.forward : tr.right;
+        float depth = Mathf.Abs(box.size[axis] * scale[axis]);
+        int latAxis = axis == 0 ? 2 : 0;
+        float width = Mathf.Abs(box.size[latAxis] * scale[latAxis]);
+
+        Terrain terrain = Terrain.activeTerrain;
+        Vector3 center = tr.TransformPoint(box.center);
+        float floorY = box.bounds.min.y;
+        if (terrain != null) floorY = Mathf.Max(floorY, terrain.SampleHeight(center) + terrain.transform.position.y);
+        center.y = floorY + WallProbeHeight;
+
+        var hits = new System.Collections.Generic.List<float>();
+        for (int i = 1; i <= 9; i++)
+        {
+            Vector3 origin = center + dir * (depth / 2f + startOut) + lat * ((i / 10f - 0.5f) * width);
+            float best = float.MaxValue;
+            foreach (var h in Physics.RaycastAll(origin, -dir, startOut + depth, ~0, QueryTriggerInteraction.Ignore))
+                if (h.distance < best && h.collider.transform.IsChildOf(transform)) best = h.distance;
+            if (best < float.MaxValue) hits.Add(best - startOut); // 양수 = 벽이 트리거 면보다 안쪽 (삐져나옴)
+        }
+        if (hits.Count < 5) return false; // 벽을 제대로 못 잼 (이 높이에 벽이 없는 건물) → 그대로
+
+        hits.Sort();
+        float inward = hits[hits.Count / 4] + TriggerWallInset;
+        if (inward <= 0.01f) return false;
+        inward = Mathf.Min(inward, depth - TriggerMinSize);
+        if (inward <= 0.01f) return false;
+
+        float local = inward / Mathf.Abs(scale[axis]);
+        Vector3 size = box.size, c = box.center;
+        size[axis] -= local;
+        // 로컬 축 방향과 스케일 부호에 맞춰 중심 이동 (반대쪽 면은 그대로)
+        c[axis] -= sign * Mathf.Sign(scale[axis]) * local / 2f;
+        box.size = size;
+        box.center = c;
+        return true;
+    }
+
+    // ── "실내" 표시 검증 ──
+    // 트리거는 상자라 ㄱ자/ㄷ자 건물의 파인 곳(바깥)도 덮을 수 있음 → 머리 위에 이 건물 지붕이 있거나 사방 3면 이상이 벽이어야 실내로 표시
+    const float EnclosedCheckInterval = 0.2f;
+    static float nextEnclosedCheck;
+    static bool enclosedCached;
+
+    /// <summary>실내 트리거 안 + 건물 벽에 실제로 둘러싸여 있음 (HUD "실내" 표시용)</summary>
+    public static bool IsPlayerEnclosed
+    {
+        get
+        {
+            BuildingInterior b = Current;
+            if (b == null || fogPlayer == null) return false;
+            if (Time.time < nextEnclosedCheck) return enclosedCached;
+            nextEnclosedCheck = Time.time + EnclosedCheckInterval;
+            Vector3 p = fogPlayer.position + Vector3.up * WallProbeHeight;
+            enclosedCached = b.HitsOwnCollider(p, Vector3.up) || b.CountWallsAround(p) >= 3;
+            return enclosedCached;
+        }
+    }
+
+    int CountWallsAround(Vector3 pos)
+    {
+        int walls = 0;
+        foreach (var d in new[] { transform.right, -transform.right, transform.forward, -transform.forward })
+            if (HitsOwnCollider(pos, d)) walls++;
+        return walls;
+    }
+
+    bool HitsOwnCollider(Vector3 pos, Vector3 dir)
+    {
+        foreach (var h in Physics.RaycastAll(pos, dir, 150f, ~0, QueryTriggerInteraction.Ignore))
+            if (h.collider.transform.IsChildOf(transform)) return true;
+        return false;
+    }
+
+    bool doorCached, hasDoor;
+    Vector3 doorPos, doorOut;
+
+    /// <summary>이 건물 문 중심 + 바깥 방향 (처음 쓸 때 한 번 계산)</summary>
+    public bool TryGetDoor(out Vector3 door, out Vector3 outDir)
+    {
+        if (!doorCached)
+        {
+            doorCached = true;
+            hasDoor = EntranceMarkers.TryGetDoor(this, out doorPos, out doorOut);
+        }
+        door = doorPos; outDir = doorOut;
+        return hasDoor;
+    }
+
     /// <summary>씬 다시 로드(재시작) 전에 호출 - static 카운터/저장값이 다음 판으로 넘어가 실내 안개가 남는 것 방지</summary>
     public static void ResetStatics()
     {
         globalInsideCount = 0;
+        occupied.Clear();
+        safeExitUntil = -1f;
         if (originalFogSaved)
         {
             RenderSettings.fog = originalFogEnabled; RenderSettings.fogMode = originalFogMode; RenderSettings.fogColor = originalFogColor;
@@ -133,6 +293,8 @@ public class BuildingInterior : MonoBehaviour
     {
         if (!other.CompareTag(playerTag)) return;
         SetCut(true);
+        occupied.Remove(this);
+        occupied.Add(this);
         PlayerEntered?.Invoke(this);
         if (darkenSurroundings) EnterIndoorFog(other.transform);
         BuildingTransition.Play();
@@ -144,6 +306,12 @@ public class BuildingInterior : MonoBehaviour
     {
         if (!other.CompareTag(playerTag)) return;
         SetCut(false);
+        occupied.Remove(this);
+        if (occupied.Count == 0 && TryGetDoor(out Vector3 door, out _))
+        {
+            safeExitDoor = door;
+            safeExitUntil = Time.time + SafeExitSeconds;
+        }
         if (darkenSurroundings) ExitIndoorFog();
         BuildingTransition.Play();
         PlayDoorSound(false);

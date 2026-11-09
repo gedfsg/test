@@ -79,7 +79,11 @@ public class PlayerController : MonoBehaviour
     public float meleeSwingDuration = 0.59f;
     [Tooltip("공격 등 상체 동작 중 골반이 돌아가면(휴머노이드 마스크의 Body에 골반 포함) 다리까지 돌아감 → 골반만 루트 정면으로 되돌리고 상체는 애니 그대로 유지")]
     public bool meleeStabilizeHips = true;
+    [Tooltip("도끼 공격 등 상체 동작 중 머리가 상체(가슴)와 같이 숙여지거나 돌아가지 않도록, 평소(상체 동작 없을 때) 머리 방향을 루트 기준으로 유지")]
+    public bool meleeStabilizeHead = true;
     private Vector3 hipsNeutralLocal;  // 상체 동작 없을 때 골반의 루트 기준 수평 위치
+    private Quaternion headNeutralLocal = Quaternion.identity; // 상체 동작 없을 때 머리의 루트 기준 회전
+    private bool headNeutralLearned;   // headNeutralLocal을 한 번이라도 기록했는지 (첫 프레임엔 보정 안 함)
     private float meleeTorsoTwist;
     private float meleeSwingUntil;   // 휘두르기 재생 중 (상체 추가 회전 적용 구간)
 
@@ -378,7 +382,7 @@ public class PlayerController : MonoBehaviour
         // 이번 프레임 애니 포즈의 어깨 정면 vs 루트 정면(= 마우스 방향, AimAtMouse가 맞춤)
         Vector3 bodyForward = Vector3.Cross(rs.position - ls.position, Vector3.up);
         bodyForward.y = 0f;
-        if (bodyForward.sqrMagnitude < 1e-4f) return;
+        if (bodyForward.sqrMagnitude < 1e-4f) { StabilizeHead(); return; }
         float error = Mathf.Clamp(Vector3.SignedAngle(bodyForward, transform.forward, Vector3.up), -meleeTorsoMaxTwist, meleeTorsoMaxTwist);
         bool swinging = Time.time < meleeSwingUntil;
         // 휘두르는 동안엔 상체 회전(올려치기 비틀기)이 공격 동작 자체라 오차를 따라가지 않고 고정 보정만
@@ -391,9 +395,36 @@ public class PlayerController : MonoBehaviour
         // 척추 → 가슴 → 윗가슴에 나눠서 돌림 (한 뼈만 돌리면 허리가 꺾여 보임)
         var spine = new[] { animator.GetBoneTransform(HumanBodyBones.Spine), animator.GetBoneTransform(HumanBodyBones.Chest), animator.GetBoneTransform(HumanBodyBones.UpperChest) };
         int count = 0; foreach (var b in spine) if (b != null) count++;
-        if (count == 0) return;
+        if (count == 0) { StabilizeHead(); return; }
         Quaternion step = Quaternion.AngleAxis(meleeTorsoTwist / count, Vector3.up);
         foreach (var b in spine) if (b != null) b.rotation = step * b.rotation;
+
+        StabilizeHead(); // 척추 비틀기까지 끝난 뒤 머리를 마지막에 고정
+    }
+
+    // 머리 고정: 상체 레이어(공격/피격/마시기)가 켜진 만큼 머리를 "평소 머리 방향(루트 기준)"으로 되돌림.
+    // 상체 마스크에서 Head를 빼도 머리는 가슴의 자식이라 내려찍을 때 가슴과 같이 숙여짐 → 월드 기준으로 되돌려야 전방 고정됨.
+    // 루트 정면 = 마우스 방향(AimAtMouse)이므로 공격 중에도 머리는 조준 방향을 봄.
+    void StabilizeHead()
+    {
+        Transform head = animator.GetBoneTransform(HumanBodyBones.Head);
+        if (head == null) return;
+
+        if (meleeStabilizeHead && upperWeight > 0.01f)
+        {
+            if (!headNeutralLearned) return;
+            Quaternion target = transform.rotation * headNeutralLocal;
+            // 범위 제한: 90° 넘게 틀어야 하면 기억값이 이상한 것 → 보정 안 함 (골반 236m 사고 재발 방지)
+            if (Quaternion.Angle(head.rotation, target) > 90f) return;
+            head.rotation = Quaternion.Slerp(head.rotation, target, upperWeight);
+        }
+        else
+        {
+            // 상체 동작 없을 때 머리 회전(루트 기준)을 기억 - 걷기/달리기 흔들림은 0.3초 평균으로
+            Quaternion local = Quaternion.Inverse(transform.rotation) * head.rotation;
+            headNeutralLocal = headNeutralLearned ? Quaternion.Slerp(headNeutralLocal, local, 1f - Mathf.Exp(-Time.deltaTime / 0.3f)) : local;
+            headNeutralLearned = true;
+        }
     }
 
     // === MAP DEV: 카메라 관련 - 병합 시 이 메서드 삭제/수정 전 카메라 회전 기능 영향 확인 ===

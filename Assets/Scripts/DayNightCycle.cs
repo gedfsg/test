@@ -4,7 +4,7 @@ using TMPro;
 
 /// <summary>
 /// 낮(8분) → 노을(1분) → 밤(5분) → 새벽(1분) → 반복
-/// 7일 생존이 목표
+/// 7일 생존이 기본 목표. 미션 시스템이 있으면 진행률 100%로 탈출할 때까지 Day가 계속 늘어남
 /// </summary>
 public class DayNightCycle : MonoBehaviour
 {
@@ -174,16 +174,10 @@ public class DayNightCycle : MonoBehaviour
                 break;
             case Phase.Dawn:
                 CurrentDay++;
-                if (CurrentDay > totalDays)
+                // 미션 시스템이 있으면 7일 넘어도 계속 (클리어는 탈출 지점 도달로만)
+                if (CurrentDay > totalDays && MissionManager.Instance == null)
                 {
                     gameCleared = true;
-                    // 미션 시스템이 있으면 7일이 끝나는 순간 = 탈출 못 함 → 미션 실패(게임오버). 클리어는 탈출 지점 도달로만
-                    if (MissionManager.Instance != null)
-                    {
-                        CurrentDay = totalDays; // HUD가 8일차로 안 보이게
-                        MissionManager.Instance.OnTimeUp();
-                        return;
-                    }
                     if (dayText  != null) dayText.text  = "7일 생존 성공!";
                     if (timeText != null) timeText.text = "";
                     Time.timeScale = 0f;

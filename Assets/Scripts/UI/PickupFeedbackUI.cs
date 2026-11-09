@@ -41,7 +41,7 @@ public class PickupFeedbackUI : MonoBehaviour
         text.fontStyle = FontStyles.Bold;
         text.color = new Color(defaultColor.r, defaultColor.g, defaultColor.b, 0f);
         text.raycastTarget = false;
-        text.enableWordWrapping = false;
+        text.textWrappingMode = TextWrappingModes.NoWrap;
     }
 
     public void Show(string message)

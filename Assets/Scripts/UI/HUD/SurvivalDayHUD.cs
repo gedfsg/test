@@ -34,23 +34,34 @@ public class SurvivalDayHUD : MonoBehaviour
 
     // 레퍼런스에서 이 블록의 중심은 화면 중앙보다 25px 왼쪽 (x≈815.5 / 1681)
     // 아래 좌표들은 전부 그 블록 중심(=이 오브젝트) 기준
-    const float CircleY = -35f, TitleY = 0f, BottomY = -81f;
-    const float CircleSize = 30f, CircleSpacing = 55f;
+    // const float CircleY = -35f, TitleY = 0f, BottomY = -81f;   // (이전) 테두리 없는 배치
+    // const float CircleSize = 30f, CircleSpacing = 55f;
+    // 2026-11 ui.jpg: 금색 테두리 패널 (위 가운데 "생존 N일차" 탭 / 날짜 원 / 해·달 + 시각)
+    const float CircleY = -40f, TitleY = 0f, BottomY = -84f;
+    const float CircleSize = 28f, CircleSpacing = 44f;
+    const float FrameW = 360f, FrameH = 112f, FrameY = -58f;
+    static readonly Color FrameFill = new Color(0.06f, 0.07f, 0.09f, 0.84f);
+    static readonly Color FrameGold = new Color32(0xC9, 0xA2, 0x55, 0xE6);
 
     TextMeshProUGUI titleText, clockText, phaseText, goalText;
     Image phaseIcon;
+    Image phaseDivider; // 해/달 아이콘과 시각 사이 세로선 (실내에서 아이콘과 같이 숨김)
     Image weatherIcon; // 낮/밤 글자 옆 날씨 아이콘 (WeatherManager)
     WeatherManager.Weather shownWeather = (WeatherManager.Weather)(-1);
     Image[] dayFills, dayBorders;
     TextMeshProUGUI[] dayNumbers;
     int shownDay = -1;
+    int totalDays = 7;
+    Image titleLineL, titleLineR;
+    ZombieSpawner spawner;
     DayNightCycle.Phase shownPhase;
     bool shownIndoor;
 
     void Start()
     {
         var dnc = DayNightCycle.Instance;
-        int totalDays = dnc != null ? dnc.totalDays : 7;
+        totalDays = dnc != null ? dnc.totalDays : 7;
+        spawner = FindFirstObjectByType<ZombieSpawner>();
         Build(totalDays);
         Refresh(force: true);
     }
@@ -64,15 +75,26 @@ public class SurvivalDayHUD : MonoBehaviour
     {
         Transform root = transform;
 
-        // 글자 뒤 은은한 어두운 그림자 (레퍼런스의 상단 어두운 그라데이션)
-        HudStyle.NewImage(root, "Shadow", HudStyle.SoftShadow, new Color(0f, 0f, 0f, 0.55f), new Vector2(0f, -42f), new Vector2(560f, 170f));
+        // (이전) 글자 뒤 은은한 어두운 그림자 (레퍼런스의 상단 어두운 그라데이션)
+        // HudStyle.NewImage(root, "Shadow", HudStyle.SoftShadow, new Color(0f, 0f, 0f, 0.55f), new Vector2(0f, -42f), new Vector2(560f, 170f));
 
-        // ── 제목 + 양옆 가는 선 ──
-        titleText = HudStyle.NewText(root, "Title", "생존 1일차", HudStyle.SemiBold, 19f, titleColor,
+        // ── 금색 테두리 패널 (모서리 깎임, 미션 패널과 같은 스타일) ──
+        Sprite panelSprite = HudStyle.ChamferPanel != null ? HudStyle.ChamferPanel : HudStyle.RoundedRect;
+        Sprite frameSprite = HudStyle.ChamferFrame != null ? HudStyle.ChamferFrame : HudStyle.RoundedFrame;
+        // 9-slice 배율 1.6 = 테두리를 레퍼런스처럼 얇게 (MissionHUD와 같은 값)
+        HudStyle.NewImage(root, "Frame", panelSprite, FrameFill, new Vector2(0f, FrameY), new Vector2(FrameW, FrameH)).pixelsPerUnitMultiplier = 1.6f;
+        HudStyle.NewImage(root, "FrameBorder", frameSprite, FrameGold, new Vector2(0f, FrameY), new Vector2(FrameW, FrameH)).pixelsPerUnitMultiplier = 1.6f;
+        // 위 가운데 제목 탭 (테두리 윗변 위에 걸침)
+        HudStyle.NewImage(root, "TitleTab", panelSprite, FrameFill, new Vector2(0f, TitleY), new Vector2(170f, 30f)).pixelsPerUnitMultiplier = 1.6f;
+        HudStyle.NewImage(root, "TitleTabBorder", frameSprite, FrameGold, new Vector2(0f, TitleY), new Vector2(170f, 30f)).pixelsPerUnitMultiplier = 1.6f;
+
+        // ── 제목 ──
+        titleText = HudStyle.NewText(root, "Title", "생존 1일차", HudStyle.SemiBold, 17f, titleColor,
             TextAlignmentOptions.Center, new Vector2(0f, TitleY), new Vector2(200f, 30f));
-        var lineColor = new Color32(200, 196, 192, 200);
-        HudStyle.NewImage(root, "TitleLineL", null, lineColor, new Vector2(-123f, TitleY + 0.5f), new Vector2(115f, 2f));
-        HudStyle.NewImage(root, "TitleLineR", null, lineColor, new Vector2(122f, TitleY + 0.5f), new Vector2(115f, 2f));
+        // (이전) 제목 양옆 가는 선 → 탭 테두리로 대체
+        // var lineColor = new Color32(200, 196, 192, 200);
+        // titleLineL = HudStyle.NewImage(root, "TitleLineL", null, lineColor, new Vector2(-123f, TitleY + 0.5f), new Vector2(115f, 2f));
+        // titleLineR = HudStyle.NewImage(root, "TitleLineR", null, lineColor, new Vector2(122f, TitleY + 0.5f), new Vector2(115f, 2f));
 
         // ── 날짜 원 1~N + 연결선 ──
         float firstX = -(totalDays - 1) * CircleSpacing / 2f;
@@ -90,23 +112,32 @@ public class SurvivalDayHUD : MonoBehaviour
             Vector2 c = new Vector2(firstX + CircleSpacing * i, CircleY);
             dayBorders[i] = HudStyle.NewImage(root, $"Day{i + 1}", HudStyle.Circle, dayBorder, c, new Vector2(CircleSize, CircleSize));
             dayFills[i] = HudStyle.NewImage(dayBorders[i].transform, "Fill", HudStyle.Circle, dayFill, Vector2.zero, new Vector2(CircleSize - 5f, CircleSize - 5f));
-            dayNumbers[i] = HudStyle.NewText(dayBorders[i].transform, "Num", (i + 1).ToString(), HudStyle.SemiBold, 19f, dayNumber,
+            dayNumbers[i] = HudStyle.NewText(dayBorders[i].transform, "Num", (i + 1).ToString(), HudStyle.SemiBold, 17f, dayNumber,
                 TextAlignmentOptions.Center, new Vector2(0f, 0.5f), new Vector2(CircleSize, CircleSize));
         }
 
-        // ── 아래 줄: ☀ 12:51 │ 낮 │ 생존 목표 · 7일 ──
-        phaseIcon = HudStyle.NewImage(root, "PhaseIcon", HudStyle.Sun, sunColor, new Vector2(-181.5f, BottomY), new Vector2(36f, 36f));
-        clockText = HudStyle.NewText(root, "Clock", "12:51", HudStyle.Bold, 36f, clockColor,
-            TextAlignmentOptions.Left, new Vector2(-138.5f + 50f, BottomY), new Vector2(100f, 40f));
-        HudStyle.NewImage(root, "Divider1", null, dividerColor, new Vector2(-26.5f, BottomY), new Vector2(1.5f, 30f));
-        phaseText = HudStyle.NewText(root, "Phase", "낮", HudStyle.SemiBold, 22f, dayPhaseColor,
-            TextAlignmentOptions.Center, new Vector2(4f, BottomY), new Vector2(50f, 34f));
+        // (이전) 아래 줄: ☀ 12:51 │ 낮 │ 생존 목표 · 7일
+        // phaseIcon = HudStyle.NewImage(root, "PhaseIcon", HudStyle.Sun, sunColor, new Vector2(-181.5f, BottomY), new Vector2(36f, 36f));
+        // clockText = HudStyle.NewText(root, "Clock", "12:51", HudStyle.Bold, 36f, clockColor,
+        //     TextAlignmentOptions.Left, new Vector2(-138.5f + 50f, BottomY), new Vector2(100f, 40f));
+        // HudStyle.NewImage(root, "Divider1", null, dividerColor, new Vector2(-26.5f, BottomY), new Vector2(1.5f, 30f));
+        // phaseText = HudStyle.NewText(root, "Phase", "낮", HudStyle.SemiBold, 22f, dayPhaseColor,
+        //     TextAlignmentOptions.Center, new Vector2(4f, BottomY), new Vector2(50f, 34f));
+        // weatherIcon = HudStyle.NewImage(root, "WeatherIcon", Resources.Load<Sprite>("HUD/Sprites/Weather_Clear"), Color.white,
+        //     new Vector2(36f, BottomY), new Vector2(24f, 24f));
+        // weatherIcon.preserveAspect = true;
+        // HudStyle.NewImage(root, "Divider2", null, dividerColor, new Vector2(50.5f, BottomY), new Vector2(1.5f, 30f));
+        // goalText = HudStyle.NewText(root, "Goal", $"생존 목표 · {totalDays}일", HudStyle.Regular, 17f, Color.white,
+        //     TextAlignmentOptions.Left, new Vector2(75.5f + 80f, BottomY), new Vector2(160f, 30f));
+
+        // ── 아래 줄 (ui.jpg): ☀ │ 06:16  + 날씨 아이콘 (낮/밤 글자·생존 목표는 뺌) ──
+        phaseIcon = HudStyle.NewImage(root, "PhaseIcon", HudStyle.Sun, sunColor, new Vector2(-62f, BottomY), new Vector2(30f, 30f));
+        phaseDivider = HudStyle.NewImage(root, "Divider1", null, dividerColor, new Vector2(-38f, BottomY), new Vector2(1.5f, 24f));
+        clockText = HudStyle.NewText(root, "Clock", "12:51", HudStyle.Bold, 32f, clockColor,
+            TextAlignmentOptions.Left, new Vector2(-28f + 50f, BottomY), new Vector2(100f, 40f));
         weatherIcon = HudStyle.NewImage(root, "WeatherIcon", Resources.Load<Sprite>("HUD/Sprites/Weather_Clear"), Color.white,
-            new Vector2(36f, BottomY), new Vector2(24f, 24f));
+            new Vector2(84f, BottomY), new Vector2(22f, 22f));
         weatherIcon.preserveAspect = true;
-        HudStyle.NewImage(root, "Divider2", null, dividerColor, new Vector2(50.5f, BottomY), new Vector2(1.5f, 30f));
-        goalText = HudStyle.NewText(root, "Goal", $"생존 목표 · {totalDays}일", HudStyle.Regular, 17f, Color.white,
-            TextAlignmentOptions.Left, new Vector2(75.5f + 80f, BottomY), new Vector2(160f, 30f));
     }
 
     void Refresh(bool force)
@@ -123,11 +154,15 @@ public class SurvivalDayHUD : MonoBehaviour
         var (hour, minute) = dnc.GetVirtualClock();
         clockText.text = $"{hour:00}:{minute:00}";
 
-        int day = Mathf.Clamp(dnc.CurrentDay, 1, dayFills.Length);
-        if (force || day != shownDay)
+        int realDay = dnc.CurrentDay;
+        int day = Mathf.Clamp(realDay, 1, dayFills.Length); // 7일 넘어가면 마지막 원 유지
+        if (force || realDay != shownDay)
         {
-            shownDay = day;
-            titleText.text = $"생존 {day}일차";
+            shownDay = realDay;
+            bool extended = realDay > totalDays;
+            titleText.text = extended ? $"생존 {realDay}일차 (연장)" : $"생존 {realDay}일차";
+            if (titleLineL != null) titleLineL.enabled = titleLineR.enabled = !extended; // 긴 제목에 양옆 선이 겹침
+            if (goalText != null) goalText.text = extended && spawner != null ? $"오늘 좀비 {spawner.TodayZombieCap}마리" : $"생존 목표 · {totalDays}일";
             for (int i = 0; i < dayFills.Length; i++)
             {
                 bool current = i + 1 == day;
@@ -139,18 +174,18 @@ public class SurvivalDayHUD : MonoBehaviour
         }
 
         // 실내: 하늘 관련 표시 숨김 (BuildingInterior 트리거 안에 있는 동안)
-        bool indoor = hideSkyIndoors && BuildingInterior.IsAnyoneIndoors;
+        bool indoor = hideSkyIndoors && BuildingInterior.IsPlayerEnclosed;
         if (force || indoor != shownIndoor)
         {
             shownIndoor = indoor;
             phaseIcon.enabled = !indoor;
+            if (phaseDivider != null) phaseDivider.enabled = !indoor;
             if (weatherIcon != null) weatherIcon.enabled = !indoor;
             force = true; // 실외로 나오면 아래에서 낮/밤 글자 다시 채움
         }
         if (indoor)
         {
-            phaseText.text = "실내";
-            phaseText.color = indoorPhaseColor;
+            if (phaseText != null) { phaseText.text = "실내"; phaseText.color = indoorPhaseColor; } // (ui.jpg 레이아웃엔 낮/밤 글자 없음 - 아이콘만 숨김)
             return;
         }
 
@@ -158,14 +193,17 @@ public class SurvivalDayHUD : MonoBehaviour
         {
             shownPhase = dnc.CurrentPhase;
             bool dark = shownPhase == DayNightCycle.Phase.Night;
-            phaseText.text = shownPhase switch
+            if (phaseText != null)
             {
-                DayNightCycle.Phase.Day => "낮",
-                DayNightCycle.Phase.Dusk => "노을",
-                DayNightCycle.Phase.Night => "밤",
-                _ => "새벽",
-            };
-            phaseText.color = dark ? nightPhaseColor : dayPhaseColor;
+                phaseText.text = shownPhase switch
+                {
+                    DayNightCycle.Phase.Day => "낮",
+                    DayNightCycle.Phase.Dusk => "노을",
+                    DayNightCycle.Phase.Night => "밤",
+                    _ => "새벽",
+                };
+                phaseText.color = dark ? nightPhaseColor : dayPhaseColor;
+            }
             phaseIcon.sprite = dark ? HudStyle.Moon : HudStyle.Sun;
             phaseIcon.color = dark ? nightPhaseColor : sunColor;
         }
