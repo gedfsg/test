@@ -81,7 +81,7 @@ BlendTree:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: Loco_Pistol
+  m_Name: Loco_Pistol_OldMixamo
   m_Childs:
   - serializedVersion: 2
     m_Motion: {fileID: -203655887218126122, guid: 7f348930d6fd6a644acedbb8aedea14b, type: 3}
@@ -759,7 +759,7 @@ AnimatorState:
   m_MirrorParameterActive: 0
   m_CycleOffsetParameterActive: 0
   m_TimeParameterActive: 0
-  m_Motion: {fileID: 1406220982915629825}
+  m_Motion: {fileID: 1858398530402560266}
   m_Tag: 
   m_SpeedParameter: 
   m_MirrorParameter: 
@@ -1143,7 +1143,7 @@ BlendTree:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: Loco_Rifle
+  m_Name: Loco_Rifle_OldMixamo
   m_Childs:
   - serializedVersion: 2
     m_Motion: {fileID: -203655887218126122, guid: 45408a550272ed7449819bda71f85ddd, type: 3}
@@ -1765,7 +1765,7 @@ AnimatorState:
   m_MirrorParameterActive: 0
   m_CycleOffsetParameterActive: 0
   m_TimeParameterActive: 0
-  m_Motion: {fileID: -8360698581461901932}
+  m_Motion: {fileID: 1858398530402560266}
   m_Tag: 
   m_SpeedParameter: 
   m_MirrorParameter: 
