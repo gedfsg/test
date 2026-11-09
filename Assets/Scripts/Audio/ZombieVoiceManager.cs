@@ -12,7 +12,7 @@ using UnityEngine;
 /// </summary>
 public class ZombieVoiceManager : MonoBehaviour
 {
-    public enum State { Idle, Chase, Attack, Death }
+    public enum State { Idle, Chase, Growl, Attack, Death }   // Growl: 돌진 예고 (ZombieQuirks '노림') —— 낮게 깐 거친 숨소리
 
     public const int MaxVoices = 4;
     public const float MaxDistance = 20f;
@@ -113,13 +113,16 @@ public class ZombieVoiceManager : MonoBehaviour
         // 상태별 클립/볼륨: 신음·숨소리 0.4 (배경), 비명/단말마 0.9 (위협)
         // 추적: 25% 거친 숨소리 / 나머지 반반 신음·비명
         float roll = Random.value;
+        bool growl  = state == State.Growl;
         bool breath = state == State.Chase && roll < 0.25f;
         bool scream = state == State.Attack || (state == State.Chase && roll >= 0.625f);
         AudioClip clip = state == State.Death ? SoundLibrary.Pick(lib.zombieDeath)
                        : scream ? SoundLibrary.Pick(lib.zombieScream)
-                       : breath ? SoundLibrary.Pick(lib.zombieBreath)
+                       : (breath || growl) ? SoundLibrary.Pick(lib.zombieBreath)
                        : SoundLibrary.Pick(lib.zombieGroan);
-        float volume = (state == State.Death || scream) ? AudioManager.Vol.ZombieScream : AudioManager.Vol.ZombieGroan;
+        if (growl && clip == null) clip = SoundLibrary.Pick(lib.zombieGroan);   // 숨소리가 없으면 신음으로
+        float volume = (state == State.Death || scream) ? AudioManager.Vol.ZombieScream
+                     : growl ? GrowlVolume : AudioManager.Vol.ZombieGroan;
         if (clip == null) return false;
 
         Voice slot = m.FindSlot(zombie, state, dist);
@@ -132,17 +135,28 @@ public class ZombieVoiceManager : MonoBehaviour
         slot.src.transform.position = pos;
         slot.src.clip = clip;
         slot.src.volume = volume;
-        slot.src.pitch = Random.Range(0.92f, 1.08f); // 같은 클립도 좀비마다 조금씩 다르게
+        slot.src.pitch = growl ? Random.Range(0.78f, 0.88f)   // 그르렁: 낮게 깔아서 '노린다'는 느낌
+                               : Random.Range(0.92f, 1.08f); // 같은 클립도 좀비마다 조금씩 다르게
         slot.src.Play();
+        // 그르렁 직후 평소 신음이 덮어쓰지 않게 쿨타임을 민다
+        if (growl)
+        {
+            float now = Time.time;
+            m.nextVoiceTime.TryGetValue(zombie, out float next);
+            m.nextVoiceTime[zombie] = Mathf.Max(next, now + 3f);
+        }
         return true;
     }
+
+    /// <summary>돌진 예고 그르렁 볼륨 —— 배경 신음(0.4)보다 크고 비명(0.9)보다 작게, 가까이서 확실히 들리게</summary>
+    public const float GrowlVolume = 0.7f;
 
     Voice FindSlot(ZombieController zombie, State state, float dist)
     {
         // 이 좀비가 이미 말하는 중: 공격/사망이면 자기 소리를 끊고 바꿈, 신음은 겹치지 않게 skip
         foreach (var v in voices)
             if (v.owner == zombie && v.src.isPlaying)
-                return state >= State.Attack ? v : null;
+                return state >= State.Growl ? v : null;   // 그르렁·공격·사망은 자기 신음을 끊고 낸다
 
         // 빈 자리
         foreach (var v in voices) if (!v.src.isPlaying) return v;

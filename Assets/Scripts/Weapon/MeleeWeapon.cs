@@ -116,6 +116,9 @@ public class MeleeWeapon : MonoBehaviour
         return c.bounds.ClosestPoint(p);
     }
 
+    [Tooltip("근접 공격에 맞은 좀비가 젖혀지는 세기 (총알 대비 배율)")]
+    public float meleeFlinchScale = 1.5f;
+
     private void FanAttack()
     {
         Transform owner = attackPoint != null ? attackPoint.root : transform.root;
@@ -125,6 +128,7 @@ public class MeleeWeapon : MonoBehaviour
         float currentDamage = (weaponData != null) ? weaponData.damage : 50f;
 
         var done = new System.Collections.Generic.HashSet<Object>();
+        var flinched = new System.Collections.Generic.HashSet<ZombieController>();
         foreach (Collider hit in Physics.OverlapSphere(origin + Vector3.up, range + 1f))
         {
             if (hit.CompareTag(shooterTag) || hit.transform.IsChildOf(owner)) continue;
@@ -151,6 +155,9 @@ public class MeleeWeapon : MonoBehaviour
             {
                 if (zombie != null && done.Add(zombie)) zombie.TakeDamage(currentDamage);
             }
+            // 휘두른 방향(나 → 좀비)으로 상체가 크게 젖혀진다
+            if (zombie != null && flinched.Add(zombie))
+                ZombieBodyMotion.Flinch(zombie.gameObject, toCenter, zombie.transform.position + Vector3.up * 1.3f, meleeFlinchScale);
 
             if (obstacle != null && done.Add(obstacle)) obstacle.TakeDamage(currentDamage);
         }

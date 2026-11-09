@@ -108,6 +108,7 @@ public class ZombieDebugHUD : MonoBehaviour
             case "멈칫":   return "40FFFF";
             case "가속":   return "FF9020";
             case "왁!":    return "FF2020";
+            case "노림":   return "FF8C8C";
             case "돌진":   return "FF40FF";
             case "머뭇":   return "66CCFF";
             case "급발진": return "FF4D99";

@@ -96,20 +96,32 @@ public class ZombieQuirks : MonoBehaviour
     public Vector2 lungeDistance = new Vector2(5f, 9f);
     [Tooltip("달려들기 직전 멈칫하는 시간(초) 범위 —— '왁!' 하는 순간")]
     public Vector2 lungeWindup = new Vector2(0.25f, 0.45f);
-    [Tooltip("달려들 때 속도 배율 (최고 속도 대비) 범위")]
-    public Vector2 lungeSpeed = new Vector2(2.5f, 3.2f);
-    [Tooltip("달려들 때 최소 속도(m/s) 범위. 일반 좀비는 2 m/s라 배율만으로는 플레이어 걷기(5)보다 느리다 → 이 속도는 무조건 낸다.")]
-    public Vector2 lungeMinSpeed = new Vector2(6.5f, 8f);
+    [Tooltip("달려들 때 속도 배율 (최고 속도 대비) 범위.\n" +
+             "예전 2.5~3.2는 너무 빠르다는 의견 (빠른 좀비 4 m/s × 3 = 12 m/s) → 1.8~2.2 (빠른 좀비 7~9 m/s)")]
+    public Vector2 lungeSpeed = new Vector2(1.8f, 2.2f);
+    [Tooltip("달려들 때 최소 속도(m/s) 범위. 일반 좀비(2.8 m/s)는 배율만으로는 플레이어 걷기(5)를 못 따라잡는다 → 이 속도는 무조건 낸다.\n" +
+             "예전 6.5~8 → 5.5~6.5 (걷는 플레이어보다 조금 빠른 정도)")]
+    public Vector2 lungeMinSpeed = new Vector2(5.5f, 6.5f);
     [Tooltip("최고 속도가 이보다 느린 좀비(탱커 1 m/s)는 돌진하지 않는다 —— 탱커가 튀어나오면 어색하다")]
     public float lungeMinBaseSpeed = 1.5f;
-    [Tooltip("달려드는 시간(초) 범위. 그 안에 사거리에 닿으면 바로 공격으로 넘어간다.")]
-    public Vector2 lungeDuration = new Vector2(1.0f, 1.8f);
+    [Tooltip("달려드는 시간(초) 범위. 그 안에 사거리에 닿으면 바로 공격으로 넘어간다.\n" +
+             "속도를 줄인 만큼 늘려서(예전 1.0~1.8) 닿는 거리는 예전과 비슷하게 (약 10m) —— 노리는 좀비가 배운 출발 거리가 그대로 맞게")]
+    public Vector2 lungeDuration = new Vector2(1.25f, 2.2f);
     [Tooltip("한 번 달려든 뒤 다시 달려들 수 있을 때까지(초) 범위")]
     public Vector2 lungeCooldown = new Vector2(4f, 8f);
     [Tooltip("달려들 때 가속도 (NavMeshAgent.acceleration). 크면 '갑자기' 튀어나온다. 원래 12.")]
     public float lungeAcceleration = 60f;
     [Tooltip("달려들 때 걸음 애니메이션 재생 속도 상한 (달리기 애니메이션이 없는 좀비가 미끄러지지 않게)")]
     public float lungeAnimMax = 2f;
+
+    [Header("돌진 예고 (게임에서만)")]
+    [Tooltip("돌진할 수 있는 상태가 되면 '노림': 낮게 그르렁거리고, 몸을 웅크린 채 플레이어를 노려본다 (ZombieBodyMotion).\n" +
+             "언제 덮칠지는 그대로 —— 덮치기 전에 플레이어가 알아챌 틈만 준다. 학습장에서는 안 한다.")]
+    public bool telegraph = true;
+    [Tooltip("규칙 돌진형: 돌진 거리보다 이만큼(m) 먼저 노리기 시작한다 (어슬렁 속도로 약 1초)")]
+    public float eyeLead = 2.5f;
+    [Tooltip("노리는 동안 그르렁거리는 간격(초) 범위")]
+    public Vector2 growlInterval = new Vector2(2.5f, 4f);
 
     [Header("점점 가속 (예전 방식, 기본 꺼짐)")]
     [Tooltip("켜면 쫓기 시작할 때 느리게 출발해서 rampTime 동안 최고 속도까지 올라간다")]
@@ -231,6 +243,10 @@ public class ZombieQuirks : MonoBehaviour
     public bool  Darting => hesPhase == 2;
     /// <summary>지금 돌진을 시작할 수 있는가 (보임 · 쿨다운 끝 · 사거리 밖 · agentLungeMaxRange 안). 강화학습 행동 마스크용.</summary>
     public bool  LungeAvailableNow { get; private set; }
+    /// <summary>돌진 예고 중인가 —— 돌진할 수 있는데 아직 안 덮친 상태 (몸짓이 웅크리고 노려본다)</summary>
+    public bool  Eyeing { get; private set; }
+    private bool  wasEyeing;
+    private float nextGrowlAt, lastGrowlAt = -10f;
     /// <summary>마지막으로 돌진을 시작한 시각 (-1 = 아직 없음)</summary>
     public float LastLungeStart { get; private set; } = -1f;
     /// <summary>돌진할 때 낼 속도(m/s) 추정 —— 배율과 최소 속도 중 큰 쪽</summary>
@@ -368,6 +384,8 @@ public class ZombieQuirks : MonoBehaviour
         float now    = Time.time;
         bool  hunter = IsHunter;
         LungeAvailableNow = false;
+        wasEyeing = Eyeing;
+        Eyeing    = false;
         bool  dull   = IsDull && !hunter;
 
         // 회전 속도 (사냥꾼 편입은 스폰 뒤에 일어나서 매 프레임 맞춘다)
@@ -501,12 +519,30 @@ public class ZombieQuirks : MonoBehaviour
                 }
                 else trigger = obs.distance <= MyLungeDistance;
 
+                // 돌진 예고 '노림': 덮칠 수 있게 됐는데 아직 안 덮친 동안 (사냥꾼 제외)
+                if (!hunter && sees && now >= nextLungeAt && obs.distance > obs.attackRange + 0.5f)
+                {
+                    bool byAgent = lungeAgent != null && lungeAgent.isActiveAndEnabled;
+                    Eyeing = byAgent ? LungeAvailableNow : obs.distance <= MyLungeDistance + eyeLead;
+                }
+                if (Eyeing && telegraph && !trainingMode && body.targetOverride == null)
+                {
+                    if (!wasEyeing && now - lastGrowlAt > 1.5f) nextGrowlAt = now;   // 막 노리기 시작 → 바로 그르렁
+                    if (now >= nextGrowlAt)
+                    {
+                        ZombieVoiceManager.Play(body, ZombieVoiceManager.State.Growl);
+                        lastGrowlAt = now;
+                        nextGrowlAt = now + Range(growlInterval);
+                    }
+                }
+
                 if (sees && trigger && now >= nextLungeAt && obs.distance > obs.attackRange + 0.5f)
                 {
                     lungePhase = 1;
                     lungeUntil = now + Range(lungeWindup);
                     LastLungeStart = now;
                     LungeAvailableNow = false;
+                    Eyeing = false;
                     LungeStarted?.Invoke(this);
                     // '왁!' —— 팀원 사운드 시스템의 비명 (게임에서만)
                     if (!trainingMode && body.targetOverride == null)
@@ -615,6 +651,8 @@ public class ZombieQuirks : MonoBehaviour
             movingTime = 0f;
             if (lungePhase == 0 && hesPhase != 2) Label = "";
         }
+
+        if (Eyeing && Label == "") Label = "노림";
 
         // 5. 둔한 회전 (달려들 땐 똑바로): 몸 방향과 가려는 방향이 크게 벌어지면 속도를 줄이며 돈다 (사냥꾼 제외)
         bool canMoveNow = agent != null && agent.enabled && agent.isOnNavMesh;
@@ -834,6 +872,7 @@ public class ZombieQuirks : MonoBehaviour
             case "멈칫":   c = Color.cyan; break;
             case "가속":   c = new Color(1f, 0.5f, 0f); break;
             case "왁!":    c = Color.red; break;
+            case "노림":   c = new Color(1f, 0.55f, 0.55f); break;
             case "돌진":   c = new Color(1f, 0f, 1f); break;
             case "머뭇":   c = new Color(0.4f, 0.8f, 1f); break;
             case "급발진": c = new Color(1f, 0.3f, 0.6f); break;

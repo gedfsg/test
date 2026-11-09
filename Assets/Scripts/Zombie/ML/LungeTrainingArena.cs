@@ -21,6 +21,13 @@ using UnityEngine.AI;
 ///   StartWhileUntargeted vs BaseUntargeted: 돌진 시작 때 표적이 아니던 비율 vs 평소 (보이는데) 표적이 아닌 비율
 ///   → 앞이 뒤보다 확실히 크면 '틈을 노린다'를 배운 것.
 ///   SuccessRate: 돌진이 공격으로 이어진 비율 / StartDistance: 돌진 시작 거리
+///
+/// 협공 측정 (텐서보드 Coop/*) —— 협공 돌진을 학습시킬 가치가 있는지 먼저 본다:
+///   동시 돌진 = 다른 좀비의 돌진 시작과 coopWindow초 안에 시작한 돌진.
+///   Success_Paired vs Success_SoloAllyNear 가 핵심 —— 동료가 근처에 있는 건 같고 '타이밍만' 다르다.
+///   동시 돌진이 확실히 더 잘 닿으면 타이밍을 맞추는 게 이득 → 협공 학습할 거리가 있다.
+///   PairedShare vs PairedShareChance: 지금도 일부러 맞추는지(우연보다 많은지).
+///   Coop/N_* · Hit_*는 합계(Sum)라서 여러 판을 모아 정확한 비율을 낼 수 있다.
 /// </summary>
 public class LungeTrainingArena : MonoBehaviour
 {
@@ -109,6 +116,27 @@ public class LungeTrainingArena : MonoBehaviour
     private int   lungeFails, waitCount;
     private float waitSum;
 
+    [Header("협공 측정 (Coop/*)")]
+    [Tooltip("다른 좀비와 이 시간(초) 안에 돌진을 시작하면 '동시 돌진'으로 친다")]
+    public float coopWindow = 1f;
+    [Tooltip("혼자 돌진할 때 다른 좀비가 더미에서 이 거리(m) 안에 있으면 '동료가 근처에 있음'")]
+    public float allyNearDistance = 10f;
+    [Tooltip("동시 돌진한 둘이 더미를 기준으로 이 각도 이상 벌어져 있으면 '양쪽에서'")]
+    public float wideAngle = 60f;
+
+    private struct LungeEvent
+    {
+        public float   t;
+        public int     z;
+        public Vector3 dir;       // 더미 → 좀비 (수평, 정규화)
+        public bool    allyNear;
+        public bool    hit;
+    }
+    private readonly List<LungeEvent> events = new List<LungeEvent>();
+    private int[]     curEvent;   // 좀비별 진행 중인 돌진 기록 (-1 = 없음)
+    private Transform lastAim;
+    private int       retargets;
+
     void Start()
     {
         Wire();
@@ -125,6 +153,8 @@ public class LungeTrainingArena : MonoBehaviour
         lungeStartTime = new float[zombies.Count];
         lungeCat       = new int[zombies.Count];
         availableSince = new float[zombies.Count];
+        curEvent       = new int[zombies.Count];
+        for (int k = 0; k < curEvent.Length; k++) curEvent[k] = -1;
         quirksList.Clear();
         var list = new List<Transform>();
         for (int i = 0; i < zombies.Count; i++)
@@ -247,6 +277,7 @@ public class LungeTrainingArena : MonoBehaviour
         hp[i] = zombieHp;
         lungeStartTime[i] = -1f;
         availableSince[i] = -1f;
+        curEvent[i] = -1;
     }
 
     void FixedUpdate()
@@ -293,6 +324,14 @@ public class LungeTrainingArena : MonoBehaviour
                 if (z == null || !z.SeesTarget) continue;
                 baseSeenSteps++;
                 if (dummy.AimTarget != z.transform) baseUntargeted++;
+            }
+
+            // 더미가 표적을 바꾼 횟수 (바꿀 때마다 반응 시간이 새로 걸린다 —— 협공이 노릴 수 있는 약점)
+            var aim = dummy.AimTarget;
+            if (aim != null && aim != lastAim)
+            {
+                if (lastAim != null) retargets++;
+                lastAim = aim;
             }
         }
 
@@ -351,6 +390,13 @@ public class LungeTrainingArena : MonoBehaviour
         {
             lungeHits++;
             catHits[lungeCat[i]]++;
+            int e = curEvent[i];
+            if (e >= 0 && e < events.Count)
+            {
+                var ev = events[e];
+                ev.hit = true;
+                events[e] = ev;
+            }
         }
         var a = agents[i];
         if (a != null)
@@ -373,6 +419,94 @@ public class LungeTrainingArena : MonoBehaviour
         catLunges[lungeCat[i]]++;
         Vector3 d = dummy.transform.position - zombies[i].transform.position; d.y = 0f;
         lungeDistSum += d.magnitude;
+
+        // 협공 측정용 기록
+        Vector3 c = dummy.transform.position;
+        bool ally = false;
+        float near2 = allyNearDistance * allyNearDistance;
+        for (int j = 0; j < zombies.Count; j++)
+        {
+            var o = zombies[j];
+            if (j == i || o == null || o.IsDead || !o.gameObject.activeInHierarchy) continue;
+            Vector3 od = o.transform.position - c; od.y = 0f;
+            if (od.sqrMagnitude <= near2) { ally = true; break; }
+        }
+        Vector3 dir = -d;
+        events.Add(new LungeEvent
+        {
+            t = Time.time, z = i,
+            dir = dir.sqrMagnitude > 1e-4f ? dir.normalized : Vector3.forward,
+            allyNear = ally,
+        });
+        curEvent[i] = events.Count - 1;
+    }
+
+    /// <summary>판의 돌진 기록으로 협공 통계를 낸다</summary>
+    private void RecordCoopStats(StatsRecorder sr)
+    {
+        int n = events.Count;
+        float minutes = Mathf.Max(0.01f, timer / 60f);
+        sr.Add("Coop/DummyRetargetsPerMinute", retargets / minutes);
+        if (n == 0) return;
+
+        var perZombie = new int[zombies.Count];
+        foreach (var e in events) perZombie[e.z]++;
+
+        // [0] 혼자·동료 근처 [1] 혼자·동료 없음 [2] 동시·먼저 [3] 동시·나중 [4] 동시·양쪽에서 [5] 동시·같은 쪽
+        var cnt = new int[6];
+        var hit = new int[6];
+        int paired = 0;
+        float chance = 0f, angleSum = 0f;
+        for (int a = 0; a < n; a++)
+        {
+            var e = events[a];
+            bool isPaired = false, follower = false;
+            float bestDt = float.MaxValue, angle = 0f;
+            for (int b = 0; b < n; b++)
+            {
+                if (b == a) continue;
+                var f = events[b];
+                if (f.z == e.z) continue;
+                float dt = Mathf.Abs(f.t - e.t);
+                if (dt > coopWindow) continue;
+                isPaired = true;
+                if (f.t < e.t || (f.t == e.t && f.z < e.z)) follower = true;
+                if (dt < bestDt) { bestDt = dt; angle = Vector3.Angle(e.dir, f.dir); }
+            }
+            // 우연히 겹칠 확률: 다른 좀비들의 돌진이 판 안에 고르게 흩어져 있다고 볼 때
+            float rate = (n - perZombie[e.z]) / Mathf.Max(1f, timer);
+            chance += 1f - Mathf.Exp(-rate * 2f * coopWindow);
+
+            int h = e.hit ? 1 : 0;
+            if (!isPaired)
+            {
+                int k = e.allyNear ? 0 : 1;
+                cnt[k]++; hit[k] += h;
+            }
+            else
+            {
+                paired++;
+                angleSum += angle;
+                int k = follower ? 3 : 2;
+                cnt[k]++; hit[k] += h;
+                k = angle >= wideAngle ? 4 : 5;
+                cnt[k]++; hit[k] += h;
+            }
+        }
+
+        sr.Add("Coop/PairedShare",       paired / (float)n);
+        sr.Add("Coop/PairedShareChance", chance / n);
+        if (paired > 0) sr.Add("Coop/PairAngle", angleSum / paired);
+        string[] cats = { "SoloAllyNear", "SoloAlone", "PairLeader", "PairFollower", "PairWide", "PairNarrow" };
+        for (int k = 0; k < 6; k++)
+        {
+            if (cnt[k] > 0) sr.Add("Coop/Success_" + cats[k], hit[k] / (float)cnt[k]);
+            sr.Add("Coop/N_"   + cats[k], cnt[k], StatAggregationMethod.Sum);
+            sr.Add("Coop/Hit_" + cats[k], hit[k], StatAggregationMethod.Sum);
+        }
+        int soloN = cnt[0] + cnt[1], soloH = hit[0] + hit[1];
+        if (soloN > 0)  sr.Add("Coop/Success_Solo",   soloH / (float)soloN);
+        if (paired > 0) sr.Add("Coop/Success_Paired", (hit[2] + hit[3]) / (float)paired);
     }
 
     private void RecordStats()
@@ -401,6 +535,7 @@ public class LungeTrainingArena : MonoBehaviour
         // 조건별 돌진 비율 (위 StartWhile*와 같은 정보를 한 번에)
         if (lunges > 0) sr.Add("LungeBy/Share_Targeted", catLunges[2] / (float)lunges);
         if (waitCount > 0) sr.Add("Lunge/WaitSeconds", waitSum / waitCount);
+        RecordCoopStats(sr);
         ClearStats();
     }
 
@@ -412,6 +547,9 @@ public class LungeTrainingArena : MonoBehaviour
         lungeFails = waitCount = 0;
         waitSum = 0f;
         for (int c = 0; c < 3; c++) catLunges[c] = catHits[c] = 0;
+        events.Clear();
+        retargets = 0;
+        if (curEvent != null) for (int k = 0; k < curEvent.Length; k++) curEvent[k] = -1;
     }
 
     void OnDestroy()
