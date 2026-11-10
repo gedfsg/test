@@ -117,7 +117,8 @@ public class DayNightCycle : MonoBehaviour
     {
         if (gameCleared) return;
 
-        if (UnityEngine.InputSystem.Keyboard.current != null &&
+        if (!MenuUI.BlockingOpen && // 일시정지·생존 종료 화면 중엔 손전등(T) 무시
+            UnityEngine.InputSystem.Keyboard.current != null &&
             UnityEngine.InputSystem.Keyboard.current.tKey.wasPressedThisFrame)
         {
             Debug.Log($"[Flashlight] T키 입력 받음 (flashlight={(flashlight != null ? "있음" : "NULL!")})");

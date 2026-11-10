@@ -161,6 +161,17 @@ public class PlayerController : MonoBehaviour
         inputActions.Player.Interact.performed += OnInteractPerformed;
     }
 
+    /// <summary>
+    /// 일시정지·사망 화면 동안 입력만 끄고 켬 (MenuUI). 컴포넌트를 껐다 켜면 OnEnable의 람다 구독이 중복되므로 이걸 씀
+    /// (액션을 끄면 누르고 있던 사격은 canceled로 풀림)
+    /// </summary>
+    public void SetInputEnabled(bool on)
+    {
+        if (inputActions == null) return;
+        if (on) { if (isActiveAndEnabled) inputActions.Enable(); }
+        else inputActions.Disable();
+    }
+
     void OnDisable()
     {
         inputActions.Disable();

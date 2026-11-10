@@ -9,6 +9,8 @@ using UnityEngine.InputSystem;
 public class CameraRotate : MonoBehaviour
 {
     [SerializeField] private float rotateDuration = 0.3f;
+    /// <summary>설정 - 카메라 회전 속도 배수 (1.5면 0.2초에 회전, SettingsManager가 설정)</summary>
+    public static float SpeedMultiplier = 1f;
 
     private CameraFollow cameraFollow;
     private PlayerInputActions inputActions;
@@ -56,7 +58,7 @@ public class CameraRotate : MonoBehaviour
     {
         if (!rotating) return;
 
-        float t = (Time.time - rotateStartTime) / rotateDuration;
+        float t = (Time.time - rotateStartTime) / (rotateDuration / Mathf.Max(0.1f, SpeedMultiplier));
         if (t >= 1f)
         {
             t = 1f;
