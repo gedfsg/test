@@ -126,6 +126,9 @@ public class Bullet : MonoBehaviour
         if (destroyed) return false;
         if (other.CompareTag(shooterTag)) return false;
         if (other.GetComponent<Bullet>() != null) return false;
+        // 죽은 좀비(래그돌 시체)는 총알이 그냥 지나간다 —— 예전처럼 시체가 뒤의 좀비를 막아 주지 않게
+        var deadZombie = other.GetComponentInParent<ZombieController>();
+        if (deadZombie != null && deadZombie.IsDead) return false;
         if (other.GetComponent<PickupItem>() != null) return false;
 
         bool hitSomething = false;

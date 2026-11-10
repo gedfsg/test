@@ -1,0 +1,115 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &4338872476532049412
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 9033531889656993833}
+  - component: {fileID: 6646175701342814643}
+  m_Layer: 0
+  m_Name: HunterPackSpawner
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &9033531889656993833
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4338872476532049412}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &6646175701342814643
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4338872476532049412}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0c5fb2a84a801fb43a312c5ef8cd6419, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HunterPackSpawner
+  tactic: 2
+  slotSettings:
+    ringRadius: 7
+    maxOrbitStep: 50
+    maxLeadTime: 1.2
+    wallProbe: 4
+    closeGapDeg: 120
+    controlHalfAngle: 25
+    commitDistance: 3
+    maxEncircleTime: 8
+    forcedCloseTime: 3
+    rlDecidesClose: 0
+    rlCloseTimeout: 15
+    useRoles: 1
+    runnerSpeedRatio: 1.1
+    tankSpeedRatio: 0.85
+    roleWeight: 3
+    tankPushes: 1
+    tankIntercept: 0
+    interceptAhead: 10
+    interceptTrigger: 6
+    packMemory: 4
+    updateInterval: 0.2
+    debugDraw: 1
+    showStatus: 1
+  hunterPrefab: {fileID: 1557348107032981787, guid: cf033cf64c5cf1843807274d81a910ca, type: 3}
+  hunterVariants:
+  - {fileID: 7697744085633894064, guid: 9204aefcd37e9f745803d8e494a5a5fb, type: 3}
+  - {fileID: 1557348107032981787, guid: cf033cf64c5cf1843807274d81a910ca, type: 3}
+  - {fileID: 463961587940580256, guid: 9dd81ef698d062a4dbb633cbf00cf26f, type: 3}
+  packSize: 5
+  moveSpeed: 3.5
+  composition: []
+  spawnOnCrateOpen: 1
+  woodCrateChance: 0.05
+  metalCrateChance: 0.25
+  militaryCrateChance: 0.6
+  crateSpawnDelay: 3
+  crateCooldown: 120
+  crateMinDay: 1
+  crateWarningMessage: "\uC0C1\uC790 \uC18C\uB9AC\uC5D0 \uC0AC\uB0E5\uAFBC \uBB34\uB9AC\uAC00
+    \uBAB0\uB824\uC628\uB2E4"
+  spawnAtNight: 0
+  packsPerNightByDay: 00000000010000000100000002000000020000000300000003000000
+  firstPackDelay: 5
+  packInterval: 60
+  maxActivePacks: 1
+  brokenPackRatio: 0.4
+  minDistance: 22
+  maxDistance: 30
+  spreadAngle: 90
+  minSeparation: 4
+  tankAmbushSpawn: 0
+  alertOnSpawn: 1
+  retreatDistanceAtDawn: 20
+  hunterScale: 1.2
+  healthMultiplier: 2.5
+  damageMultiplier: 1.5
+  staggerScale: 0.5
+  lungeOnClose: 1
+  tint: 1
+  hunterColor: {r: 1, g: 0.22, b: 0.2, a: 1}
+  colorStrength: 0.9
+  warningText: {fileID: 0}
+  warningMessage: "\uC0AC\uB0E5\uAFBC \uBB34\uB9AC\uAC00 \uB0C4\uC0C8\uB97C \uB9E1\uC558\uB2E4"
+  warningDuration: 3
+  spawnSound: {fileID: 0}
+  enableHotkey: 1
+  debugLog: 1

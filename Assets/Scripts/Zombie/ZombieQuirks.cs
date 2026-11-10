@@ -188,6 +188,8 @@ public class ZombieQuirks : MonoBehaviour
     [Tooltip("켜면 사냥꾼이 무리 덮치기(조율기 Closing / 코앞) 때 '왁' 하고 달려든다. 포획이 쉬워진다.")]
     public bool  hunterLungeOnClose = false;
     public float hunterRampTime = 0.8f;
+    [Tooltip("사냥꾼이 포위하는 동안 '포위' 자세(웅크리고 노려봄)를 한다 (ZombieBodyMotion)")]
+    public bool  hunterStalkPose = true;
     [Tooltip("사냥꾼의 회전 속도(°/초). 포위 자리로 빨리 꺾어야 해서 일반 좀비보다 빠르게. 감속 회전·휘청임은 걸지 않는다.")]
     public float hunterTurnSpeed = 360f;
 
@@ -346,6 +348,13 @@ public class ZombieQuirks : MonoBehaviour
         Herds           = Random.value < herdChance;
         IsLunger        = lungeAgent != null
                           || (Random.value < lungeChance && (body == null || body.moveSpeed >= lungeMinBaseSpeed));
+        // 노리는 좀비: 게임의 돌진형에게 학습한 '언제 덮칠지' 모델을 붙인다 (Resources/ZombieLungeBrain 설정이 있을 때)
+        // 이미 RL 뇌가 있는 좀비(사냥꾼 _RL 프리팹)와 학습장 좀비는 건너뛴다
+        if (IsLunger && lungeAgent == null && !disabledForTraining && !trainingMode)
+        {
+            lungeAgent = ZombieLungeAgent.AttachForGame(gameObject);
+            if (lungeAgent != null) IsHesitant = false;
+        }
         MyLungeMinSpeed = Range(lungeMinSpeed);
         MyStalkSpeed    = Range(stalkSpeed);
         MyLungeDistance = Range(lungeDistance);
@@ -653,6 +662,11 @@ public class ZombieQuirks : MonoBehaviour
         }
 
         if (Eyeing && Label == "") Label = "노림";
+        else if (hunter && hunterStalkPose && Label == "" && lungePhase == 0 && obs.hasTarget)
+        {
+            var pk = HunterPackTactics.PackOf(body);
+            if (pk != null && pk.CurrentPhase == HunterPackTactics.Phase.Encircling) Label = "포위";
+        }
 
         // 5. 둔한 회전 (달려들 땐 똑바로): 몸 방향과 가려는 방향이 크게 벌어지면 속도를 줄이며 돈다 (사냥꾼 제외)
         bool canMoveNow = agent != null && agent.enabled && agent.isOnNavMesh;
@@ -873,6 +887,7 @@ public class ZombieQuirks : MonoBehaviour
             case "가속":   c = new Color(1f, 0.5f, 0f); break;
             case "왁!":    c = Color.red; break;
             case "노림":   c = new Color(1f, 0.55f, 0.55f); break;
+            case "포위":   c = new Color(0.9f, 0.3f, 0.3f); break;
             case "돌진":   c = new Color(1f, 0f, 1f); break;
             case "머뭇":   c = new Color(0.4f, 0.8f, 1f); break;
             case "급발진": c = new Color(1f, 0.3f, 0.6f); break;

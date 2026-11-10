@@ -1,5 +1,6 @@
 using Unity.MLAgents;
 using Unity.MLAgents.Actuators;
+using Unity.MLAgents.Policies;
 using Unity.MLAgents.Sensors;
 using UnityEngine;
 
@@ -137,6 +138,46 @@ public class ZombieLungeAgent : Agent
         WantsLunge = actions.DiscreteActions.Length > 0 && actions.DiscreteActions[0] == 1;
         if (arena != null) arena.OnAgentStep(this);
     }
+
+    /// <summary>
+    /// 게임 좀비에 '노리는 좀비' 뇌를 붙인다 (ZombieQuirks가 돌진형으로 정해졌을 때 부른다).
+    /// Resources/ZombieLungeBrain 설정(모델)이 없거나, 이미 RL 뇌가 있는 좀비면 null —— 그러면 예전 규칙(5~9m)으로 돌진한다.
+    /// 부품 구성은 돌진 학습 씬과 똑같다: BehaviorParameters(16 관측 / 이산 [2]) → 에이전트 → DecisionRequester(5).
+    /// </summary>
+    public static ZombieLungeAgent AttachForGame(GameObject go)
+    {
+        if (go == null || go.GetComponent<BehaviorParameters>() != null || go.GetComponent<Agent>() != null) return null;
+        var s = ZombieLungeBrainSettings.Load();
+        if (s == null || s.model == null || Random.value >= s.useChance) return null;
+
+        var prop = typeof(BehaviorParameters).GetProperty("Model");
+        if (prop == null || !prop.PropertyType.IsInstanceOfType(s.model))
+        {
+            if (!warnedModelType)
+            {
+                warnedModelType = true;
+                Debug.LogWarning($"[노리는 좀비] ZombieLungeBrain의 모델 형식이 맞지 않습니다 ({s.model.GetType().Name}). .onnx 모델을 넣으세요. 규칙 돌진으로 대신합니다.");
+            }
+            return null;
+        }
+
+        // ⚠ 순서: BehaviorParameters를 다 채운 뒤 에이전트를 붙인다 (에이전트가 붙는 순간 이 설정으로 뇌를 만든다)
+        var bp = go.AddComponent<BehaviorParameters>();
+        bp.BehaviorName = BehaviorNameDefault;
+        bp.BrainParameters.VectorObservationSize        = ObservationSize;
+        bp.BrainParameters.NumStackedVectorObservations = 1;
+        bp.BrainParameters.ActionSpec                   = ActionSpec.MakeDiscrete(2);
+        prop.SetValue(bp, s.model);
+        bp.BehaviorType = BehaviorType.InferenceOnly;
+
+        var agent = go.AddComponent<ZombieLungeAgent>();
+        agent.MaxStep = 0;
+        var req = go.AddComponent<DecisionRequester>();
+        req.DecisionPeriod = Mathf.Max(1, s.decisionPeriod);
+        req.TakeActionsBetweenDecisions = true;
+        return agent;
+    }
+    private static bool warnedModelType;
 
     /// <summary>모델이 없을 때: 예전 규칙 (좀비마다 5~9m 안이면 돌진)</summary>
     public override void Heuristic(in ActionBuffers actionsOut)
