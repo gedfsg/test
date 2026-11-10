@@ -109,3 +109,14 @@ Report/package-lock.json
 
 
 # 50MB+ 대용량 파일 (GitHub 제한)
+/results/
+/Builds/
+/BuildsOpen/
+/BuildsOpenKill/
+/BuildObstacle/
+/BuildsShoot/
+/BuildsSlot/
+/BuildsLunge/
+/Recordings/
+/Assets/ML-Agents/
+/Assets/ML-Agents.meta

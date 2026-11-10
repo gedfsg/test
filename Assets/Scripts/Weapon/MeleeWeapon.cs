@@ -60,7 +60,8 @@ public class MeleeWeapon : MonoBehaviour
     private void Attack()
     {
         SpawnProtection.Cancel(); // 플레이어가 먼저 공격 → 스폰 보호 해제
-        NoiseSystem.Emit(transform.position, NoiseSystem.MeleeRadius); // 휘두르는 소리 (작은 반경)
+        // 휘두르는 소리 (작은 반경). 무기 에셋에 noiseRadius가 있으면 그 값, 없으면 근접 기본값(NoiseSystem.MeleeRadius)
+        NoiseSystem.Emit(transform.position, weaponData != null ? weaponData.GetNoiseRadius() : NoiseSystem.MeleeRadius);
         if (useSlashTrail && slashPivot != null)
         {
             StartCoroutine(SwingEffect());
@@ -69,7 +70,7 @@ public class MeleeWeapon : MonoBehaviour
         if (useFanHit) { FanAttack(); return; }
 
         Collider[] hitColliders = Physics.OverlapSphere(attackPoint.position, attackRange);
-        
+
         // 무기 데이터의 타격 데미지를 참조함.
         float currentDamage = (weaponData != null) ? weaponData.damage : 50f;
 
@@ -107,6 +108,9 @@ public class MeleeWeapon : MonoBehaviour
     /// 거리는 대상 몸(콜라이더 표면)까지. 한 대상은 한 번만 맞음
     /// (예전: attackPoint가 플레이어 머리 위 2m라 실제 사거리 약 1.7m → 좀비 공격 범위 1.8m 안에서 싸워야 했음)
     /// </summary>
+    [Tooltip("근접 공격에 맞은 좀비가 젖혀지는 세기 (총알 대비 배율)")]
+    public float meleeFlinchScale = 1.5f;
+
     private void FanAttack()
     {
         Transform owner = attackPoint != null ? attackPoint.root : transform.root;
@@ -116,6 +120,7 @@ public class MeleeWeapon : MonoBehaviour
         float currentDamage = (weaponData != null) ? weaponData.damage : 50f;
 
         var done = new System.Collections.Generic.HashSet<Object>();
+        var flinched = new System.Collections.Generic.HashSet<ZombieController>();
         foreach (Collider hit in Physics.OverlapSphere(origin + Vector3.up, range + 1f))
         {
             if (hit.CompareTag(shooterTag) || hit.transform.IsChildOf(owner)) continue;
@@ -123,6 +128,9 @@ public class MeleeWeapon : MonoBehaviour
             Health targetHealth = hit.GetComponentInParent<Health>();
             if (targetHealth == null) targetHealth = hit.GetComponentInChildren<Health>();
             ZombieController zombie = hit.GetComponentInParent<ZombieController>();
+            DestructibleObstacle obstacle = hit.GetComponentInParent<DestructibleObstacle>();
+            // 맞을 수 있는 게 아니면(바닥·건물·벽 등) 바로 건너뛴다
+            if (targetHealth == null && zombie == null && obstacle == null) continue;
 
             // 거리: 도끼가 몸에 닿는 거리 = 플레이어 중심 → 대상 콜라이더 표면(가장 가까운 점)까지 수평 거리
             //  (좀비 콜라이더 반경 0.8m(뚱뚱이 1.0m)라 2.9m면 좀비 중심 기준 약 3.7m. 좀비는 중심~중심 1.8m에서 때림)
@@ -139,8 +147,10 @@ public class MeleeWeapon : MonoBehaviour
             {
                 if (zombie != null && done.Add(zombie)) zombie.TakeDamage(currentDamage);
             }
+            // 휘두른 방향(나 → 좀비)으로 상체가 크게 젖혀진다
+            if (zombie != null && flinched.Add(zombie))
+                ZombieBodyMotion.Flinch(zombie.gameObject, toCenter, zombie.transform.position + Vector3.up * 1.3f, meleeFlinchScale);
 
-            DestructibleObstacle obstacle = hit.GetComponentInParent<DestructibleObstacle>();
             if (obstacle != null && done.Add(obstacle)) obstacle.TakeDamage(currentDamage);
         }
 
@@ -156,13 +166,13 @@ public class MeleeWeapon : MonoBehaviour
         TrailRenderer trail = slashPivot.GetComponentInChildren<TrailRenderer>();
         if (trail != null)
         {
-            trail.Clear(); 
-            trail.emitting = true; 
+            trail.Clear();
+            trail.emitting = true;
         }
 
         float duration = 0.15f;
         float elapsed = 0f;
-        
+
         Quaternion startRotation = Quaternion.Euler(0, -90f, 0);
         Quaternion endRotation = Quaternion.Euler(0, 90f, 0);
 
@@ -180,7 +190,7 @@ public class MeleeWeapon : MonoBehaviour
 
         if (trail != null)
         {
-            trail.emitting = false; 
+            trail.emitting = false;
         }
     }
 

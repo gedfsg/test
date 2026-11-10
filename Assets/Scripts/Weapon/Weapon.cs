@@ -75,10 +75,11 @@ public class Weapon : MonoBehaviour
         SpawnProtection.Cancel(); // 플레이어가 먼저 공격 → 스폰 보호 해제
         currentAmmo--;
 
-        // 소음: 플레이어 총소리는 주변 좀비를 부름 (반경은 총 종류별, 비 오면 절반)
+        // 소음: 플레이어 총소리는 주변 좀비를 부름.
+        // 반경 = 무기 에셋의 noiseRadius(있으면) 아니면 총 종류별 기본값(NoiseSystem.RadiusFor), 비 오면 절반(NoiseSystem 안에서)
         if (shooterTag == "Player")
             NoiseSystem.Emit(firePoint != null ? firePoint.position : transform.position,
-                             NoiseSystem.RadiusFor(weaponData != null ? weaponData.type : WeaponType.Ranged));
+                             weaponData != null ? weaponData.GetNoiseRadius() : NoiseSystem.RadiusFor(WeaponType.Ranged));
 
         PlayWeaponSound(true);
 

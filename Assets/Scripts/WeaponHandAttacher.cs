@@ -271,7 +271,8 @@ public class WeaponHandAttacher : MonoBehaviour
         CacheLeftHandPoint(newVisual.transform);
     }
 
-    void CacheLeftHandPoint(Transform searchRoot)
+    // warn: 무기를 새로 쥐었을 때만 경고. LateUpdate의 매 프레임 재검색(맨손이면 늘 못 찾음)은 경고 안 함 - 초당 수십 개 경고로 콘솔이 덮였음
+    void CacheLeftHandPoint(Transform searchRoot, bool warn = true)
     {
         currentLeftHandPoint = FindDeep(searchRoot, leftHandPointName);
         currentMuzzlePoint = FindDeep(searchRoot, muzzlePointName);
@@ -288,12 +289,12 @@ public class WeaponHandAttacher : MonoBehaviour
             muzzleLocalOffset = Quaternion.Inverse(currentWeaponVisualRoot.rotation) * currentMuzzlePoint.rotation;
         }
 
-        if (currentLeftHandPoint == null)
+        if (currentLeftHandPoint == null && warn)
         {
             Debug.LogWarning($"[WeaponHandAttacher] '{searchRoot.name}'에서 '{leftHandPointName}'을 찾지 못했어요. 왼손 IK가 적용되지 않습니다.");
         }
 
-        if (currentMuzzlePoint == null)
+        if (currentMuzzlePoint == null && warn)
         {
             Debug.LogWarning($"[WeaponHandAttacher] '{searchRoot.name}'에서 '{muzzlePointName}'을 찾지 못했어요. 총구 정밀 조준이 적용되지 않습니다.");
         }
@@ -304,7 +305,8 @@ public class WeaponHandAttacher : MonoBehaviour
         if (currentLeftHandPoint == null || currentMuzzlePoint == null)
         {
             Transform handBone = FindDeep(transform, RIGHT_HAND_BONE);
-            if (handBone != null) CacheLeftHandPoint(handBone);
+            // if (handBone != null) CacheLeftHandPoint(handBone);  // (이전) 맨손일 때 매 프레임 경고 2개
+            if (handBone != null) CacheLeftHandPoint(handBone, false);
         }
 
         UpdatePistolGrip(); // 오른손 목표 먼저 (총 위치가 정해진 뒤 왼손이 손잡이를 따라감)

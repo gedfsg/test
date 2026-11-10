@@ -25,8 +25,23 @@ public class WeaponData : ItemData
     [Header("Sniper Only")]
     public bool penetrating = false;
 
+    [Header("소음")]
+    [Tooltip("발사 시 좀비가 듣는 반경(m). 0으로 두면 무기 종류별 기본값을 쓴다.")]
+    public float noiseRadius = 0f;
+
     [Header("Fire Mode")]
     public bool autoFire = false;
+
+    /// <summary>
+    /// 좀비가 듣는 소음 반경 (날씨 반영 전).
+    /// noiseRadius가 0이면 총 종류별 기본값(NoiseSystem.RadiusFor —— 팀원이 플레이테스트로 맞춘 값)을 쓴다.
+    /// 개별 조정이 필요한 무기만 인스펙터에 값을 넣으면 그게 우선한다 (예: 소음기 SMG = 8).
+    /// </summary>
+    public float GetNoiseRadius()
+    {
+        if (noiseRadius > 0f) return noiseRadius;
+        return NoiseSystem.RadiusFor(type);
+    }
 
     [Header("Sound (비우면 SoundLibrary의 총 종류별 기본 소리)")]
     public AudioClip fireSound;
@@ -59,5 +74,8 @@ public enum WeaponType
     AR,
     Shotgun,
     Sniper,
-    Ranged  // 하위 호환용
+    Ranged, // 하위 호환용
+    SMG     // ⚠ 새 값은 반드시 맨 뒤에 추가할 것.
+            //   중간에 끼워넣으면 enum 정수값이 밀려서
+            //   기존 .asset 8개의 type이 전부 엉뚱한 무기로 바뀐다.
 }
