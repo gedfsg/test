@@ -13,6 +13,9 @@ public class BuildingInterior : MonoBehaviour
     /// <summary>플레이어가 건물에 들어갈 때마다 (미션: 건물 방문 판정용)</summary>
     public static event System.Action<BuildingInterior> PlayerEntered;
 
+    [Tooltip("입구 제외 반경 (m): 바깥 좀비는 이 안을 목적지로 삼지 않고, 이 안에서 서성이면 5m 밖으로 물러남 (ZombieRules)")]
+    public float exclusionRadius = 3f;
+
     [Header("1층 높이 (건물 바닥에서 이 높이 위는 전부 잘라내서 1층만 보이게 함)")]
     public float groundFloorHeight = 5f;
 
