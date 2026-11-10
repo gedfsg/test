@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Animations.Rigging;
 
 /// <summary>
 /// 게임 시작 시 RangedWeapon을 캐릭터 오른손 뼈(hand.R)에 자동 부착
@@ -20,6 +21,13 @@ using UnityEngine;
 /// - 목표 회전으로 순간 스냅하지 않고 초당 최대 각도(aimRotationSpeed)로만
 ///   회전시켜, 마우스 좌표의 프레임 단위 노이즈가 그대로 총에 반영되어
 ///   떠는 것을 막는다.
+///
+/// [권총 양손 그립 - 가슴 중앙] (2026-11)
+/// - Mixamo "pistol idle" 클립은 상체를 90° 가까이 틀고 총을 어깨/눈높이 바깥쪽(캐릭터 중심에서 약 0.44m)으로 들어서 어색함.
+/// - 권총을 들면(pistolHeld, PlayerController가 설정) 시작 때 런타임으로 만든 오른팔 Two Bone IK가
+///   오른손을 가슴 앞 중앙(pistolGripOffset / pistolGripHeight)으로 끌어오고, 왼손은 기존 왼손 IK가
+///   총의 LeftHandPoint(손잡이)를 감싸 쥠 → 양손 그립. 소총은 원래 자세가 자연스러워 그대로 둠.
+/// - IK 목표는 Rig 1 아래(캐릭터 계층 안)에 둬서, 이동 중에도 몸과 같이 움직임 (한 프레임 늦게 따라오는 문제 없음).
 /// </summary>
 public class WeaponHandAttacher : MonoBehaviour
 {
@@ -53,6 +61,23 @@ public class WeaponHandAttacher : MonoBehaviour
 
     [Tooltip("false면 총구 조준 회전과 왼손 IK 위치 동기화를 멈춤 (도끼처럼 애니메이션 손을 그대로 따라가야 할 때)")]
     public bool aimAtTarget = true;
+
+    [Header("권총 양손 그립 (가슴 중앙)")]
+    [Tooltip("권총을 들면 오른손을 IK로 가슴 앞 중앙에 고정하고 왼손으로 손잡이를 감싸 쥠. 끄면 예전처럼 애니메이션 클립 자세 그대로")]
+    public bool pistolCenterGrip = true;
+    [Tooltip("오른손 목표 수평 위치: 가슴 뼈 기준 (x = 오른쪽, y = 앞) (m)")]
+    public Vector2 pistolGripOffset = new Vector2(0.03f, 0.42f);
+    [Tooltip("오른손 목표 높이: 가슴 뼈 높이 + 이 값 (m)")]
+    public float pistolGripHeight = 0.17f; // 실측: 0.05는 배 높이, 0.17이 가슴 높이
+    [Tooltip("손가락 방향을 앞에서 아래로 숙이는 정도 (0 = 수평)")]
+    public float pistolWristDown = 0.35f;
+
+    /// <summary>지금 권총을 들고 있는지 (PlayerController.RefreshIKAndAim이 매 프레임 설정)</summary>
+    [System.NonSerialized] public bool pistolHeld;
+
+    TwoBoneIKConstraint rightHandIK;     // 런타임 생성 (씬 파일은 안 건드림)
+    Transform rightHandIKTarget, rightHandIKHint;
+    Animator bodyAnimator;
 
     [Header("발사 위치 동기화")]
     [Tooltip("Weapon(Weapon.cs)의 Fire Point로 연결된 바로 그 오브젝트. 씬에 고정된 오브젝트를 연결할 것 (총의 자식 X)")]
@@ -90,6 +115,75 @@ public class WeaponHandAttacher : MonoBehaviour
     void Start()
     {
         AttachToHand();
+        SetupPistolGripIK();
+    }
+
+    /// <summary>
+    /// 오른팔 Two Bone IK를 기존 왼손 IK와 같은 Rig에 런타임으로 추가 (upper_arm.R → forearm.R → hand.R).
+    /// 평소엔 weight 0이라 아무 영향 없음. Rig/RigBuilder를 못 찾으면 조용히 끔 (예전 자세 유지).
+    /// </summary>
+    void SetupPistolGripIK()
+    {
+        if (!pistolCenterGrip || leftHandIKTarget == null) return;
+        bodyAnimator = GetComponentInChildren<Animator>();
+        var rig = leftHandIKTarget.GetComponentInParent<Rig>();
+        var builder = GetComponentInChildren<RigBuilder>();
+        if (bodyAnimator == null || !bodyAnimator.isHuman || rig == null || builder == null) return;
+        Transform upper = bodyAnimator.GetBoneTransform(HumanBodyBones.RightUpperArm);
+        Transform lower = bodyAnimator.GetBoneTransform(HumanBodyBones.RightLowerArm);
+        Transform hand = bodyAnimator.GetBoneTransform(HumanBodyBones.RightHand);
+        if (upper == null || lower == null || hand == null) return;
+
+        var go = new GameObject("RightHandIK_Pistol");
+        go.transform.SetParent(rig.transform, false);
+        go.transform.SetAsFirstSibling(); // 오른손(총)을 먼저 옮기고 → 왼손 IK가 그 총 손잡이를 잡음
+        rightHandIKTarget = new GameObject("RightHandIKTarget").transform;
+        rightHandIKTarget.SetParent(go.transform, false);
+        rightHandIKTarget.SetPositionAndRotation(hand.position, hand.rotation);
+        rightHandIKHint = new GameObject("RightHandIKHint").transform;
+        rightHandIKHint.SetParent(go.transform, false);
+        rightHandIKHint.position = lower.position;
+
+        rightHandIK = go.AddComponent<TwoBoneIKConstraint>();
+        rightHandIK.data.root = upper;
+        rightHandIK.data.mid = lower;
+        rightHandIK.data.tip = hand;
+        rightHandIK.data.target = rightHandIKTarget;
+        rightHandIK.data.hint = rightHandIKHint;
+        rightHandIK.data.targetPositionWeight = 1f;
+        rightHandIK.data.targetRotationWeight = 1f;
+        rightHandIK.data.hintWeight = 1f;
+        rightHandIK.weight = 0f;
+        builder.Build(); // 새 제약을 애니메이션 그래프에 반영
+    }
+
+    /// <summary>
+    /// 권총 그립 목표 갱신 (LateUpdate). 오른손 = 가슴 앞 중앙, 손바닥은 안쪽(왼쪽), 손가락은 앞·약간 아래.
+    /// 측정한 hand.R 축: 손가락 -Z, 엄지 +Y, 손바닥 +X.
+    /// </summary>
+    void UpdatePistolGrip()
+    {
+        if (rightHandIK == null) return;
+        rightHandIK.weight = Mathf.MoveTowards(rightHandIK.weight, pistolHeld && pistolCenterGrip ? 1f : 0f, Time.deltaTime * 8f);
+        if (rightHandIK.weight <= 0f) return;
+
+        Transform chest = bodyAnimator.GetBoneTransform(HumanBodyBones.Chest);
+        if (chest == null) chest = bodyAnimator.GetBoneTransform(HumanBodyBones.Spine);
+        Vector3 f = transform.forward; f.y = 0f; // 플레이어 루트 = 마우스 방향 (PlayerController.AimAtMouse)
+        if (f.sqrMagnitude < 1e-6f) return;
+        f.Normalize();
+        Vector3 r = Vector3.Cross(Vector3.up, f);
+        Vector3 c = chest.position;
+        rightHandIKTarget.position = c + r * pistolGripOffset.x + f * pistolGripOffset.y + Vector3.up * pistolGripHeight;
+
+        Vector3 palm = -r;                                              // +X
+        Vector3 fingers = (f - Vector3.up * pistolWristDown).normalized; // -Z
+        Vector3 z = -fingers;
+        Vector3 y = Vector3.Cross(z, palm);                              // +Y (엄지: 위·앞)
+        rightHandIKTarget.rotation = Quaternion.LookRotation(z, y);
+
+        // 팔꿈치는 오른쪽 아래로 (안쪽으로 접혀 몸을 파고들지 않게)
+        rightHandIKHint.position = c + r * 0.45f - Vector3.up * 0.35f - f * 0.05f;
     }
 
     void AttachToHand()
@@ -213,6 +307,7 @@ public class WeaponHandAttacher : MonoBehaviour
             if (handBone != null) CacheLeftHandPoint(handBone);
         }
 
+        UpdatePistolGrip(); // 오른손 목표 먼저 (총 위치가 정해진 뒤 왼손이 손잡이를 따라감)
         if (aimAtTarget)
         {
             AimMuzzleAtTarget();

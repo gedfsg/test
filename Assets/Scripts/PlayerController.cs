@@ -741,6 +741,9 @@ public class PlayerController : MonoBehaviour
         }
         if (weaponHandAttacher == null) weaponHandAttacher = FindAnyObjectByType<WeaponHandAttacher>();
         if (weaponHandAttacher != null) weaponHandAttacher.aimAtTarget = !(meleeHeld || isDead || reloading || isRolling);
+        // 권총 양손 그립 (가슴 중앙): 권총을 들고 있을 때만. IK가 꺼지는 상황(재장전/전환/사망/구르기)은 Rig weight 0으로 같이 꺼짐
+        if (weaponHandAttacher != null)
+            weaponHandAttacher.pistolHeld = !meleeHeld && currentMode == WeaponMode.Ranged && rangedWeapon != null && rangedWeapon.weaponData != null && rangedWeapon.weaponData.type == WeaponType.Pistol;
     }
 
     void OnReloadStarted(float reloadTime)
