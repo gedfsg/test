@@ -286,7 +286,11 @@ public static class BuildingColliderChecker
         foreach (var ov in Physics.OverlapSphere(s + Vector3.up * WalkHeight, ProbeRadius, ~0, QueryTriggerInteraction.Ignore))
             if (ov.transform.IsChildOf(root) || ov.name != "Ground" && ov.bounds.max.y > s.y + 0.15f) return -1;
         if (!Physics.SphereCast(s + Vector3.up * WalkHeight, ProbeRadius, dir, out RaycastHit hit, v.magnitude, ~0, QueryTriggerInteraction.Ignore))
+        {
+            // 발밑 구는 빠져도 1.2m 높이가 이 건물에 막히면 실제 플레이어는 못 지나감 (학교 아래가 빈 구조물에서 실측)
+            if (Physics.Raycast(s + Vector3.up * 1.2f, dir, out RaycastHit head, v.magnitude, ~0, QueryTriggerInteraction.Ignore) && head.collider.transform.IsChildOf(root)) return 0;
             return Enclosed(root, e + Vector3.up * 1f, encloseReach) ? 1 : 0;
+        }
         return hit.collider.transform.IsChildOf(root) ? 0 : -1;
     }
 
