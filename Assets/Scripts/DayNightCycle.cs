@@ -117,7 +117,7 @@ public class DayNightCycle : MonoBehaviour
     {
         if (gameCleared) return;
 
-        if (!MenuUI.BlockingOpen && // 일시정지·생존 종료 화면 중엔 손전등(T) 무시
+        if (!MenuUI.GameplayBlocked && // 일시정지·생존 종료·인벤토리 열림 중엔 손전등(T) 무시
             UnityEngine.InputSystem.Keyboard.current != null &&
             UnityEngine.InputSystem.Keyboard.current.tKey.wasPressedThisFrame)
         {

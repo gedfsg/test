@@ -63,7 +63,7 @@ public class PauseMenuController : MonoBehaviour
         MenuUI.PauseOpen = true;
         prevTimeScale = Time.timeScale > 0f ? Time.timeScale : 1f;
         Time.timeScale = 0f;
-        MenuUI.SetGameplayInput(false);
+        MenuUI.RefreshGameplayInput(); // DeathShown·PauseOpen을 먼저 켠 뒤 → 조작 막힘
         UIAudio.Play(UIAudio.Sound.PauseOn);
         StartCoroutine(OpenAfterCapture());
     }
@@ -85,7 +85,7 @@ public class PauseMenuController : MonoBehaviour
         HideAll();
         UIAudio.Play(UIAudio.Sound.PauseOff);
         Time.timeScale = prevTimeScale;
-        MenuUI.SetGameplayInput(true);
+        MenuUI.RefreshGameplayInput(); // 인벤토리가 열려 있으면 계속 막힘
     }
 
     void ShowPanel()

@@ -63,7 +63,7 @@ public class DeathScreenController : MonoBehaviour
         // 일시정지 중에 죽는 일은 없지만(시간 정지), 혹시 열려 있으면 닫음
         var pause = FindFirstObjectByType<PauseMenuController>();
         if (pause != null && pause.IsOpen) pause.Close();
-        MenuUI.SetGameplayInput(false);
+        MenuUI.RefreshGameplayInput(); // DeathShown·PauseOpen을 먼저 켠 뒤 → 조작 막힘
         StartCoroutine(Sequence());
     }
 

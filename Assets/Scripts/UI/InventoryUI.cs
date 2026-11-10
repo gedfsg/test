@@ -54,6 +54,9 @@ public class InventoryUI : MonoBehaviour
     {
         isInventoryOpen = !isInventoryOpen;
         inventoryWindow.SetActive(isInventoryOpen);
+        // 열려 있는 동안 마우스·키보드는 UI에만: 사격·우클릭 줌·재장전·이동 등 플레이어 조작을 막음 (닫으면 복원)
+        MenuUI.InventoryOpen = isInventoryOpen;
+        MenuUI.RefreshGameplayInput();
         if (AudioManager.Library != null)
             AudioManager.PlayUI(SoundLibrary.Pick(isInventoryOpen ? AudioManager.Library.inventoryOpen : AudioManager.Library.inventoryClose), AudioManager.Vol.UI);
 

@@ -167,10 +167,12 @@ public class PlayerController : MonoBehaviour
     /// </summary>
     public void SetInputEnabled(bool on)
     {
+        inputBlocked = !on; // 마우스 조준 회전도 멈춤 (인벤토리 위에서 커서를 움직여도 캐릭터가 돌지 않게)
         if (inputActions == null) return;
         if (on) { if (isActiveAndEnabled) inputActions.Enable(); }
         else inputActions.Disable();
     }
+    bool inputBlocked;
 
     void OnDisable()
     {
@@ -893,6 +895,7 @@ public class PlayerController : MonoBehaviour
     void AimAtMouse()
     {
         if (Mouse.current == null || mainCamera == null) return;
+        if (inputBlocked) return; // 일시정지·사망·인벤토리 열림 (MenuUI)
 
         // 기준 높이는 캐릭터 루트 + 고정 오프셋(총구 높이 정도). firePoint.position.y처럼
         // 애니메이션 때문에 흔들리는 값을 쓰면 마우스가 가만히 있어도 조준 지점이 미세하게

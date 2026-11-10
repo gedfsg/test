@@ -96,7 +96,13 @@ public class BuildingWallCollider : MonoBehaviour
         m.SetTriangles(tris, 0);
         m.RecalculateBounds();
 
+        // AddComponent<MeshCollider>는 같은 오브젝트의 MeshFilter 메시(원본 렌더 메시)를 자동으로 넣고 바로 굽는데,
+        // 원본은 큰 삼각형이 쪼개지기 전이라 PhysX "triangles > 500 units" 경고가 났음 (교회 Node-Mesh 576).
+        // → 붙이는 순간만 MeshFilter를 비워서 원본이 구워지지 않게 하고, 쪼갠 메시를 넣음
+        Mesh render = mf.sharedMesh;
+        mf.sharedMesh = null;
         wallCollider = gameObject.AddComponent<MeshCollider>();
+        mf.sharedMesh = render;
         wallCollider.sharedMesh = m;
         return wallCollider;
     }
@@ -130,7 +136,7 @@ public class BuildingWallCollider : MonoBehaviour
     }
 
     // PhysX는 꼭짓점 사이가 500 유닛 넘는 삼각형에 경고를 냄 (로컬 단위가 큰 glTF 건물). 가장 긴 변을 반으로 나눠서 이하로 만듦
-    static void SplitLargeTriangles(List<Vector3> verts, List<int> tris)
+    public static void SplitLargeTriangles(List<Vector3> verts, List<int> tris) // BuildingColliderChecker(에디터)도 사용
     {
         const float maxEdge = 400f;
         for (int i = 0; i < tris.Count; )

@@ -21,6 +21,10 @@ public static class MenuUI
     public static bool DeathShown;
     /// <summary>게임 조작을 막는 메뉴가 떠 있음 (커서를 화살표로 - CrosshairUI)</summary>
     public static bool BlockingOpen => PauseOpen || DeathShown;
+    /// <summary>인벤토리 창이 열려 있음 (InventoryUI가 알려줌)</summary>
+    public static bool InventoryOpen;
+    /// <summary>플레이어 조작(이동·사격·핫바·손전등·카메라)을 막아야 하는지: 메뉴 또는 인벤토리가 열림</summary>
+    public static bool GameplayBlocked => BlockingOpen || InventoryOpen;
 
     // ── 씬 이동 ─────────────────────────────────────
     public static void StartGame() => Load(GameScene);
@@ -30,7 +34,7 @@ public static class MenuUI
     static void Load(string scene)
     {
         Time.timeScale = 1f;
-        PauseOpen = DeathShown = false;
+        PauseOpen = DeathShown = InventoryOpen = false;
         SceneManager.LoadScene(scene);
     }
 
@@ -53,7 +57,7 @@ public static class MenuUI
 
     static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        PauseOpen = DeathShown = false;
+        PauseOpen = DeathShown = InventoryOpen = false;
         if (!WorldDecor.IsGameScene) return; // 학습장(더미 Player 태그)·메인 메뉴 제외
         var player = GameObject.FindWithTag("Player");
         if (player == null || player.GetComponent<Health>() == null) return;
@@ -84,20 +88,28 @@ public static class MenuUI
     }
 
     // ── 게임 조작 막기 (일시정지·사망 중 클릭이 사격으로 새지 않게) ──
-    public static void SetGameplayInput(bool on)
+    // 상태 플래그(PauseOpen/DeathShown/InventoryOpen)로 매번 다시 계산 → 인벤토리를 연 채 일시정지했다 닫아도 조작이 잘못 켜지지 않음
+
+    /// <summary>
+    /// 지금 상태에 맞게 조작을 켜고 끔.
+    ///  - 플레이어(이동·사격·재장전·달리기·구르기·상호작용·조준 회전)·카메라(휠/우클릭 줌·Q/E): 메뉴나 인벤토리가 열리면 끔
+    ///  - 인벤토리 Tab: 메뉴(일시정지·사망)가 열렸을 때만 끔 (인벤토리를 열어둔 채로는 Tab으로 닫을 수 있어야 함)
+    /// </summary>
+    public static void RefreshGameplayInput()
     {
+        bool play = !GameplayBlocked;
         var player = GameObject.FindWithTag("Player");
         var pc = player != null ? player.GetComponent<PlayerController>() : null;
-        if (pc != null) pc.SetInputEnabled(on);
+        if (pc != null) pc.SetInputEnabled(play);
         var cam = Camera.main;
         if (cam != null)
         {
             var zoom = cam.GetComponent<CameraZoom>();
-            if (zoom != null) zoom.enabled = on;
+            if (zoom != null) zoom.enabled = play;
             var rot = cam.GetComponent<CameraRotate>();
-            if (rot != null) rot.enabled = on;
+            if (rot != null) rot.enabled = play;
         }
-        foreach (var inv in Object.FindObjectsByType<InventoryUI>(FindObjectsSortMode.None)) inv.enabled = on; // Tab
+        foreach (var inv in Object.FindObjectsByType<InventoryUI>(FindObjectsSortMode.None)) inv.enabled = !BlockingOpen; // Tab
     }
 
     // ── 배경 흐림 ───────────────────────────────────
