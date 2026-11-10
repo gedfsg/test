@@ -3,7 +3,7 @@ using UnityEngine;
 /// 오늘 할당된 서브 미션 1개 (런타임 상태). 정의는 SubMissionData (MissionManager가 매일 1~2개 랜덤 할당).
 ///  - 발견 전(Discovered = false): HUD에서 완전히 숨김, 진행도 안 셈
 ///  - 조건 충족 → Discover() → OnDiscovered 이벤트 (MissionManager가 알림음 + 토스트 + HUD "발견" 라벨)
-/// 실패 조건 없음 - 달성하면 진행률 +20% + 아이템 보상. 미완료는 다음날 사라짐 (패널티 없음).
+/// 실패 조건 없음 - 달성하면 진행률 +(하루 서브 몫 ≈4.3% ÷ 그날 서브 수) + 아이템 보상. 미완료는 다음날 사라짐 (패널티 없음).
 /// </summary>
 public class SubMission
 {

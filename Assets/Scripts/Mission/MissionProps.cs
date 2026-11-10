@@ -275,7 +275,7 @@ public static class MissionProps
         if (ring != null) ring.GetComponent<Renderer>().sharedMaterial.color = new Color(0.3f, 1f, 0.45f, 0.25f);
     }
 
-    /// <summary>좀비 떼 지역: 바닥 빨간 원 + 옅은 빨간 빛기둥</summary>
+    /// <summary>좀비 떼 지역: 바닥 빨간 원 (빛기둥은 꺼둠 - 위치는 미니맵 핀으로만)</summary>
     public static Transform HordeArea(Vector3 groundPos, float radius)
     {
         var root = Root("ZombieHordeArea", groundPos);
@@ -283,6 +283,7 @@ public static class MissionProps
         var beam = Prim(PrimitiveType.Cylinder, root, "Beam", Vector3.up * 12f, new Vector3(1f, 12f, 1f),
             new Material(Shader.Find("Sprites/Default")) { color = new Color(1f, 0.15f, 0.1f, 0.12f) }, false);
         beam.GetComponent<Renderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        beam.SetActive(false); // 멀리서 보이는 가이드 제거 (미니맵 핀으로 대체)
         Label(root, "좀비 떼 지역", 3.6f);
         return root;
     }

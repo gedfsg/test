@@ -15,7 +15,12 @@ using UnityEngine.SceneManagement;
 ///  매일 풀에서 1~2개 랜덤 할당 (그날 날씨에 맞는 것만). 발견 조건 충족 전엔 HUD에서 숨김,
 ///  충족하면 notification-bell + 토스트 "새 서브 미션 발견" + HUD "발견" 라벨. 완료 시 아이템 보상.
 ///
-/// ━ 진행률 (하루치, 실시간) ━ 메인 완료 +60% / 서브 1개 완료 +20% (하루 최대 100%). 못 채워도 패널티 없음.
+/// ━ 진행률 (7일 전체, 누적) ━ 100% = Day 1~7의 모든 미션 완료.
+///  메인 1개 완료 = 70% ÷ 7 = +10%, 서브 = 하루 몫 30% ÷ 7 ≈ 4.3%를 그날 할당된 서브 수로 나눠 1개당 지급.
+///  (이전: 하루치 진행률 - 메인 +60% / 서브 +20%, 매일 0%부터 → Day 1 메인만 끝내도 60%가 떠서 변경)
+///
+/// ━ 미니맵 핀 ━ GetMapPins(): 메인 목표(주황 ◆) / 발견된 장소형 서브(파랑 🔍)의 위치를 ±30m 흐려서 제공
+///  (MinimapMissionPins가 그림). 월드의 방향 화살표/빛기둥 가이드는 끔.
 ///
 /// 씬에 따로 둘 필요 없음 - Player가 있는 씬이면 자동 생성 (DeathUI와 같은 방식).
 /// (이전 방식: 열쇠 카드 4개 + 서브 미션 완료 수 + 생존 일수로 총 진행률 100% → 탈출. git 기록 참고)
@@ -50,7 +55,8 @@ public class MissionManager : MonoBehaviour
     public bool debugLog = true;
 
     // 진행률 가중치 (%)
-    public const float MainWeight = 60f, SubWeight = 20f;
+    // public const float MainWeight = 60f, SubWeight = 20f; // (이전) 하루치 진행률
+    public const float MainWeightTotal = 70f, SubWeightTotal = 30f; // 7일 전체 중 메인 몫 / 서브 몫
     public const int MaxDailySubMissions = 2;
 
     // ── 상태 ──
@@ -73,8 +79,13 @@ public class MissionManager : MonoBehaviour
     public int CurrentDay => DayNightCycle.Instance != null ? DayNightCycle.Instance.CurrentDay : 1;
     public bool CanEscape => !Finished && CurrentMain != null && CurrentMain.type == MainMissionType.Escape;
     public int DoneSubCount { get { int n = 0; foreach (var s in subMissions) if (s.Rewarded) n++; return n; } }
-    /// <summary>오늘 진행률 0~100 (메인 60 + 서브 20씩)</summary>
-    public float DayProgress => Mathf.Clamp((MainDone ? MainWeight : 0f) + DoneSubCount * SubWeight, 0f, 100f);
+    // /// <summary>오늘 진행률 0~100 (메인 60 + 서브 20씩)</summary>
+    // public float DayProgress => Mathf.Clamp((MainDone ? MainWeight : 0f) + DoneSubCount * SubWeight, 0f, 100f); // (이전) 하루치
+    float totalProgress; // 지금까지 완료한 미션으로 쌓인 진행률 (%)
+    /// <summary>7일 전체 진행률 0~100 (메인 1개 = 70/7 = 10%, 서브 = 하루 30/7 ≈ 4.3%를 그날 서브 수로 나눔)</summary>
+    public float TotalProgress => Mathf.Clamp(totalProgress, 0f, 100f);
+    float MainStep => MainWeightTotal / Mathf.Max(1, SurvivalGoalDays);
+    float SubStep => SubWeightTotal / Mathf.Max(1, SurvivalGoalDays) / Mathf.Max(1, subMissions.Count);
     public string FooterText => CurrentDay < SurvivalGoalDays ? $"{CurrentDay + 1}일차 시작 시 새 미션 개방" : "탈출 지점에 도달하면 생존 성공";
 
     List<BuildingInterior> buildingList;
@@ -136,6 +147,7 @@ public class MissionManager : MonoBehaviour
         PlaceEscapePoint(buildingList);
         BuildSchedule();
         gameObject.AddComponent<MissionHUD>();
+        gameObject.AddComponent<MinimapMissionPins>(); // 미니맵 미션 핀 (월드 가이드 대신)
         StartDay(CurrentDay);
         if (DayNightCycle.Instance != null) DayNightCycle.Instance.onNewDay.AddListener(OnNewDay);
     }
@@ -482,11 +494,12 @@ public class MissionManager : MonoBehaviour
         MainDone = true;
         MainProgress = CurrentMain.target;
         CompletedMainMissions++;
+        totalProgress += MainStep;
         guideTarget = null;
         if (CurrentMain.type == MainMissionType.Escape) return; // 탈출은 Escape()에서 엔딩
         PlaySound(l => l.missionComplete);
         Hud?.ShowToast(MissionHUD.ToastKind.MainComplete, "메인 미션 완료", CurrentMain.title);
-        if (debugLog) Debug.Log($"[MissionManager] 메인 미션 완료: {CurrentMain.title} (오늘 진행률 {DayProgress}%)");
+        if (debugLog) Debug.Log($"[MissionManager] 메인 미션 완료: {CurrentMain.title} (전체 진행률 {TotalProgress:F1}%)");
     }
 
     public void CollectKeyCard(KeyCardPickup card)
@@ -626,6 +639,65 @@ public class MissionManager : MonoBehaviour
         return guideTarget.HasValue && !MainDone && !Finished;
     }
 
+    // ── 미니맵 핀 (MinimapMissionPins가 매 프레임 읽음) ──
+
+    /// <summary>미니맵 핀 1개. pos = 실제 위치 (흐리기는 MapPinFuzz로)</summary>
+    public struct MapPin { public Vector3 pos; public bool main; }
+
+    [Header("미니맵 핀")]
+    [Tooltip("미니맵 핀을 실제 위치에서 이 거리 안으로 랜덤하게 흐림 (m)")]
+    public float mapPinFuzzRadius = 30f;
+    [Tooltip("플레이어가 핀에서 이 거리 안이면 정확한 위치로 표시 (m)")]
+    public float mapPinExactRadius = 50f;
+    readonly int pinSeed = System.Environment.TickCount; // 판마다 다른 흐림
+
+    /// <summary>
+    /// 지금 미니맵에 표시할 목표 (실제 위치).
+    ///  메인(주황 ◆): 오늘 메인 미션의 목표 지점 - 상호작용 오브젝트 / 좀비 떼 지역 / 라디오 타워 / 탈출 지점 / 열쇠 카드 / 안 간 정찰 깃발.
+    ///               아이템 모으기(의료품/물/식량)는 장소가 없어서 핀 없음. 완료하면 사라짐.
+    ///  서브(파랑 🔍): 발견된 서브 중 장소형(주유소/카페/서점/공원)만, 완료 전까지.
+    /// </summary>
+    public void GetMapPins(List<MapPin> result)
+    {
+        result.Clear();
+        if (Finished) return;
+        if (CurrentMain != null && !MainDone)
+        {
+            switch (CurrentMain.type)
+            {
+                case MainMissionType.Recon: // 정찰: 안 간 깃발 전부 (화살표는 가장 가까운 것만 가리켰음)
+                    for (int i = 0; i < reconFlags.Count; i++)
+                        if (reconFlags[i] != null && !reconVisited[i]) result.Add(new MapPin { pos = reconFlags[i].position, main = true });
+                    break;
+                case MainMissionType.KeyCardA:
+                case MainMissionType.KeyCardB:
+                case MainMissionType.KeyCardC: // 열쇠 카드: 화살표는 없었지만 미니맵에는 대략적 위치만 (±30m)
+                    foreach (var k in keyCardsInWorld) if (k != null) result.Add(new MapPin { pos = k.transform.position, main = true });
+                    break;
+                default:
+                    if (guideTarget.HasValue) result.Add(new MapPin { pos = guideTarget.Value, main = true });
+                    break;
+            }
+        }
+        foreach (var s in subMissions)
+        {
+            if (!s.Discovered || s.Rewarded || s.data.trigger != SubMissionTrigger.NearPlace) continue;
+            if (MissionPlaces.TryGet(PlaceOf(s.Type), out var p)) result.Add(new MapPin { pos = p.position, main = false });
+        }
+    }
+
+    /// <summary>실제 위치 → 미니맵에 찍을 흐린 위치 (반경 mapPinFuzzRadius 원 안 랜덤).
+    /// 같은 위치는 항상 같은 오프셋 (위치 좌표 + 판 시드로 결정) → 핀이 매 프레임 튀지 않음</summary>
+    public Vector3 MapPinFuzz(Vector3 real)
+    {
+        int h = pinSeed;
+        unchecked { h = h * 31 + Mathf.RoundToInt(real.x); h = h * 31 + Mathf.RoundToInt(real.z); }
+        var rng = new System.Random(h);
+        float ang = (float)rng.NextDouble() * Mathf.PI * 2f;
+        float r = Mathf.Sqrt((float)rng.NextDouble()) * mapPinFuzzRadius; // 원 안에 고르게
+        return real + new Vector3(Mathf.Cos(ang), 0f, Mathf.Sin(ang)) * r;
+    }
+
     // ── 서브 미션 ─────────────────────────────────
 
     void AssignSubMissions(int day)
@@ -742,6 +814,7 @@ public class MissionManager : MonoBehaviour
         if (!s.Done) return;
         s.Rewarded = true;
         CompletedSubMissions++;
+        totalProgress += SubStep;
         GiveReward(s);
         Hud?.ShowToast(MissionHUD.ToastKind.SubComplete, "서브 미션 완료", $"{s.title} · 보상 {s.RewardText}");
     }
@@ -832,7 +905,7 @@ public class MissionManager : MonoBehaviour
                 WorldItemDrop.Spawn(player.transform.position + player.transform.forward, item, s.data.rewardAmount); // 가방이 꽉 차면 발밑에
         }
         else Debug.LogWarning("[MissionManager] 보상 아이템을 못 찾음: " + s.data.rewardItemName);
-        if (debugLog) Debug.Log($"[MissionManager] 서브 미션 완료: {s.title} → {s.RewardText} (오늘 진행률 {DayProgress}%)");
+        if (debugLog) Debug.Log($"[MissionManager] 서브 미션 완료: {s.title} → {s.RewardText} (전체 진행률 {TotalProgress:F1}%)");
     }
 
     // 미션 알림/결과음 (2D). 라이브러리가 없으면 무시

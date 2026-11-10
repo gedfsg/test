@@ -4,11 +4,12 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 미션 HUD (오른쪽 위, 레퍼런스 ui.jpg 레이아웃) + 토스트(화면 중앙 하단) + 목표 방향 화살표.
+/// 미션 HUD (오른쪽 위, 레퍼런스 ui.jpg 레이아웃) + 토스트(화면 중앙 하단).
+/// 목표 방향 화살표는 꺼둠 (showObjectiveArrow) - 위치는 미니맵 핀(MinimapMissionPins)으로만 대략 표시.
 ///
 ///   ┌──────────────────────────────┐
 ///   │ 진행률                    40% │  ← 주황, % 크게
-///   │ ████████░░░░░░░░░░░░░░░░░░░  │  ← 주황 그라데이션 바 (오늘 진행률, 실시간)
+///   │ ████████░░░░░░░░░░░░░░░░░░░  │  ← 주황 그라데이션 바 (7일 전체 진행률, 100% = Day 1~7 모든 미션)
 ///   │                    목표 100% │
 ///   ├──────────────────────────────┤
 ///   │ ◆ 메인 미션                   │
@@ -29,6 +30,8 @@ public class MissionHUD : MonoBehaviour
 
     const float Width = 340f, Pad = 18f, RowH = 26f;
     const float ArrowRadius = 130f; // 플레이어 중심에서 화살표까지 (UI px)
+    [Tooltip("화면 위 목표 방향 화살표. 기본 끔 (미션 위치는 미니맵에만 대략 표시)")]
+    public bool showObjectiveArrow = false;
 
     // 색상 (요청 스펙)
     static readonly Color Orange = new Color32(0xFF, 0xA5, 0x00, 0xFF);   // 제목 / % / 바
@@ -195,7 +198,7 @@ public class MissionHUD : MonoBehaviour
         bool inventoryOpen = inventoryUI != null && inventoryUI.isInventoryOpen;
         panel.gameObject.SetActive(!inventoryOpen);
         compactText.gameObject.SetActive(inventoryOpen);
-        float p = mm.DayProgress;
+        float p = mm.TotalProgress; // (이전) mm.DayProgress - 하루치
         if (inventoryOpen) compactText.text = $"진행률 {Mathf.FloorToInt(p)}% · 메인 미션 {(mm.MainDone ? "완료" : "진행 중")}";
 
         percentText.text = $"{Mathf.FloorToInt(p)}%";
@@ -306,7 +309,7 @@ public class MissionHUD : MonoBehaviour
     {
         var cam = Camera.main;
         var player = GameObject.FindWithTag("Player");
-        bool show = mm.TryGetGuideTarget(out Vector3 target) && cam != null && player != null;
+        bool show = mm.TryGetGuideTarget(out Vector3 target) && showObjectiveArrow && cam != null && player != null;
         Color color = mm.CanEscape ? Green : Orange;
 
         Vector3 vp = show ? cam.WorldToViewportPoint(target) : Vector3.zero;

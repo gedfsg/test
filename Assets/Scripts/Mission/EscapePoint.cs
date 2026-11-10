@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// 탈출 지점: 바닥 원 + 하늘로 솟는 빛기둥 + 점 조명.
+/// 탈출 지점: 바닥 원 + 점 조명. (빛기둥은 꺼둠 - 위치는 미니맵 핀으로만 대략 표시. showBeam으로 다시 켤 수 있음)
 ///  - 잠김(빨강): 7일차 메인 미션 "탈출 지점 도달"이 공개되기 전 → 들어가면 열리는 날 안내
 ///  - 열림(초록): 들어가면 MissionManager.Escape() → 게임 클리어
 /// MissionManager가 Create()로 생성.
@@ -9,6 +9,7 @@ using UnityEngine;
 public class EscapePoint : MonoBehaviour
 {
     public float radius = 3f;
+    public static bool showBeam = false; // 하늘로 솟는 빛기둥 (멀리서 보이는 가이드). 기본 끔
 
     static readonly Color LockedColor = new Color(1f, 0.25f, 0.2f);
     static readonly Color OpenColor = new Color(0.25f, 1f, 0.4f);
@@ -46,6 +47,7 @@ public class EscapePoint : MonoBehaviour
         var br = beam.GetComponent<Renderer>();
         br.sharedMaterial = ep.beamMat;
         br.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        beam.SetActive(showBeam);
 
         var lightGo = new GameObject("Glow");
         lightGo.transform.SetParent(root.transform, false);
@@ -70,7 +72,7 @@ public class EscapePoint : MonoBehaviour
         if (MissionManager.Instance != null) MissionManager.Instance.EscapeUnlocked -= OnUnlocked;
     }
 
-    void OnUnlocked() => PickupFeedbackUI.Instance?.Show("탈출 지점이 열렸다! 초록 빛기둥으로 이동");
+    void OnUnlocked() => PickupFeedbackUI.Instance?.Show("탈출 지점이 열렸다! 미니맵 ◆ 근처를 찾아가자"); // (이전) "초록 빛기둥으로 이동"
 
     void Update()
     {
