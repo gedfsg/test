@@ -21,6 +21,10 @@ public class HelicopterCutscene : MonoBehaviour
 
     public static HelicopterCutscene Instance { get; private set; }
     public Phase CurrentPhase { get; private set; } = Phase.Idle;
+
+    /// <summary>컷신 중이면 헬리패드 위치 (WeatherManager가 비·바닥 안개를 여기 붙임), 아니면 null. 2026-11-12</summary>
+    public static Vector3? WeatherAnchor =>
+        Instance != null && Instance.CurrentPhase != Phase.Idle && Instance.CurrentPhase != Phase.Done ? Instance.pad : (Vector3?)null;
     /// <summary>컷신 진행 중 (헬리패드 빛기둥 숨김 등)</summary>
     public static bool Playing => Instance != null && Instance.CurrentPhase != Phase.Idle;
 
@@ -106,6 +110,7 @@ public class HelicopterCutscene : MonoBehaviour
         Vector3 from = pos + Vector3.up * spawnHeight + back * spawnDistance;
         Vector3 ctrl = pos + back * 35f + side * 30f + Vector3.up * 45f; // 옆으로 휘어 들어오는 곡선
         heli = BuildHelicopter(from).transform;
+        BuildRotorWash(); // 로터 바람에 비·안개가 흩날리는 파티클 (2026-11-12)
         var targets = new CinematicCamera.Targets { heli = heli, player = player, pad = pos, approachFrom = back };
         CinematicCamera.Begin(targets);
         CinematicCamera.SetShot(CinematicCamera.Shot.Approach);
@@ -319,6 +324,91 @@ public class HelicopterCutscene : MonoBehaviour
     }
 
     // ── 헬기 조립 (기본 도형) ──────────────────────────
+    // ── 로터 바람 (2026-11-12) ──
+    // 헬기가 낮게 떠 있을 때 바닥에서 바깥으로 퍼지는 물보라·안개 고리. 비/안개 정도(WeatherManager)에 따라 양과 색이 바뀜.
+    // 맑은 날도 먼지가 조금 날림. 바닥 높이는 헬기 아래로 레이를 쏴서 맞춤 (헬기는 무시)
+    [Header("로터 바람 파티클")]
+    [Tooltip("헬기가 바닥에서 이 높이 안이면 바람 파티클이 나옴 (가까울수록 많이)")]
+    public float rotorWashHeight = 30f;
+    public float rotorWashDust = 25f, rotorWashRain = 160f, rotorWashFog = 90f; // 초당 입자 수 (맑음 기본 / 비 추가 / 안개 추가)
+    ParticleSystem rotorWash;
+
+    void BuildRotorWash()
+    {
+        var go = new GameObject("RotorWash");
+        go.transform.SetParent(transform, false);
+        rotorWash = go.AddComponent<ParticleSystem>();
+        rotorWash.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        var main = rotorWash.main;
+        main.loop = true;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(1.2f, 2.2f);
+        main.startSpeed = 0f;
+        main.startSize = new ParticleSystem.MinMaxCurve(1.5f, 3.5f);
+        main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.maxParticles = 1500;
+        var em = rotorWash.emission; em.rateOverTime = 0f;
+        var shape = rotorWash.shape; // 바닥 고리 (로터 반경쯤)
+        shape.shapeType = ParticleSystemShapeType.Circle;
+        shape.radius = 4f; shape.radiusThickness = 0.6f;
+        shape.rotation = new Vector3(-90f, 0f, 0f); // 원을 수평으로
+        var vel = rotorWash.velocityOverLifetime; // 바깥으로 퍼지며 살짝 떠오름
+        vel.enabled = true;
+        vel.space = ParticleSystemSimulationSpace.Local;
+        // x/y/z는 같은 모드여야 함 (섞이면 입자가 안 나옴) → 전부 두 상수 사이 랜덤
+        vel.x = new ParticleSystem.MinMaxCurve(0f, 0f);
+        vel.y = new ParticleSystem.MinMaxCurve(0.3f, 1.2f);
+        vel.z = new ParticleSystem.MinMaxCurve(0f, 0f);
+        vel.radial = new ParticleSystem.MinMaxCurve(7f, 12f);
+        var col = rotorWash.colorOverLifetime;
+        col.enabled = true;
+        var g = new Gradient();
+        g.SetKeys(new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+                  new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.15f), new GradientAlphaKey(0f, 1f) });
+        col.color = g;
+        var size = rotorWash.sizeOverLifetime; size.enabled = true; size.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.Linear(0f, 0.6f, 1f, 1.6f));
+        var r = go.GetComponent<ParticleSystemRenderer>();
+        r.renderMode = ParticleSystemRenderMode.Billboard;
+        // 바닥 안개(WeatherManager)와 같은 소프트 파티클 재질 + 가장자리 흐린 얼룩 텍스처 (에셋 재질엔 텍스처가 없어 네모로 보였음)
+        var src = Resources.Load<Material>("WorldDecor/GroundFog");
+        if (src == null) src = Resources.Load<Material>("WorldDecor/SmokeAlpha");
+        var mat = src != null ? new Material(src) : new Material(Shader.Find("Sprites/Default"));
+        mat.name = "RotorWash(Runtime)";
+        mat.mainTexture = WorldDecorTextures.SoftDot("FX_GroundFog", true);
+        r.sharedMaterial = mat;
+        r.maxParticleSize = 3f; // 가까운 큰 입자가 화면 절반 제한에 잘리지 않게
+        r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+    }
+
+    void LateUpdate()
+    {
+        if (rotorWash == null) return;
+        if (heli == null || CurrentPhase == Phase.Idle || CurrentPhase == Phase.Done)
+        {
+            if (rotorWash.isPlaying) rotorWash.Stop(true, ParticleSystemStopBehavior.StopEmitting);
+            return;
+        }
+        // 헬기 아래 바닥 (헬기 자신의 콜라이더는 없음 - 그래도 헬기보다 1m 아래부터 쏨)
+        Vector3 from = heli.position + Vector3.down * 1f;
+        float ground = Physics.Raycast(from, Vector3.down, out RaycastHit hit, 200f, ~0, QueryTriggerInteraction.Ignore) ? hit.point.y : pad.y;
+        float h = heli.position.y - ground;
+        float near01 = Mathf.Clamp01(1f - h / Mathf.Max(1f, rotorWashHeight));
+        rotorWash.transform.position = new Vector3(heli.position.x, ground + 0.4f, heli.position.z);
+
+        float rain = WeatherManager.RainAmount, fog = WeatherManager.FogAmount;
+        var em = rotorWash.emission;
+        em.rateOverTime = near01 * (rotorWashDust + rotorWashRain * rain + rotorWashFog * fog);
+        // 색: 맑음 = 연한 흙먼지, 비 = 푸르스름한 물보라, 안개 = 회색 안개 (밤엔 어둡게 - 해 밝기 비율)
+        var dnc = DayNightCycle.Instance;
+        float day01 = dnc != null && dnc.directionalLight != null ? Mathf.InverseLerp(dnc.nightLightIntensity, dnc.dayLightIntensity, dnc.directionalLight.intensity) : 1f;
+        Color dust = new Color(0.62f, 0.56f, 0.46f, 0.35f), spray = new Color(0.78f, 0.84f, 0.92f, 0.5f), mist = new Color(0.8f, 0.8f, 0.83f, 0.55f);
+        Color c = dust;
+        if (rain + fog > 0.01f) c = Color.Lerp(dust, rain >= fog ? spray : mist, Mathf.Clamp01(rain + fog));
+        c.r *= Mathf.Lerp(0.35f, 1f, day01); c.g *= Mathf.Lerp(0.35f, 1f, day01); c.b *= Mathf.Lerp(0.45f, 1f, day01);
+        var main = rotorWash.main; main.startColor = c;
+        if (near01 > 0.01f && !rotorWash.isPlaying) rotorWash.Play();
+    }
+
     GameObject BuildHelicopter(Vector3 at)
     {
         var root = new GameObject("RescueHelicopter");

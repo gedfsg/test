@@ -108,6 +108,9 @@ public class WeatherManager : MonoBehaviour
 
     // 전환 정도 (0~1): 목표 날씨 쪽으로 transitionTime에 걸쳐 이동
     float rainAmount, fogAmount;
+    /// <summary>비 정도 0~1 / 안개 정도 0~1 (헬기 로터 바람 파티클이 읽음)</summary>
+    public static float RainAmount => Instance != null ? Instance.rainAmount : 0f;
+    public static float FogAmount => Instance != null ? Instance.fogAmount : 0f;
     bool fogApplied;                 // 안개를 이 컴포넌트가 잡고 있는 중 (카메라 far/배경색/손전등 원래 값 복원용)
     float baseFar = 1000f;
     Color baseBackground;
@@ -196,11 +199,19 @@ public class WeatherManager : MonoBehaviour
         var cam = Camera.main;
         float camDist = cam != null && player != null ? Vector3.Distance(cam.transform.position, player.position) : 40f;
 
+        // 비·물 튀김·바닥 안개를 붙일 기준 위치 (2026-11-12)
+        // 평소 = 플레이어. 탈출 헬기 컷신 중엔 플레이어가 헬기에 타고 하늘로 올라가서(비가 화면에서 사라졌음) → 헬리패드 기준
+        Vector3? anchor = HelicopterCutscene.WeatherAnchor;
+        if (anchor == null && player != null) anchor = player.position;
+        if (HelicopterCutscene.WeatherAnchor != null && cam != null)
+            camDist = Vector3.Distance(cam.transform.position, HelicopterCutscene.WeatherAnchor.Value); // 안개 밀도도 패드 기준
+
         // ── 비: 플레이어 위를 따라다님, 실내에선 끔. 양은 rainAmount로 서서히 ──
         if (rain != null)
         {
             bool raining = rainAmount > 0.001f && !indoors;
-            if (player != null) rain.transform.position = player.position + Vector3.up * rainHeight;
+            // if (player != null) rain.transform.position = player.position + Vector3.up * rainHeight; // (이전)
+            if (anchor != null) rain.transform.position = anchor.Value + Vector3.up * rainHeight;
             var em = rain.emission; em.rateOverTime = rainPerSecond * rainAmount;
             if (raining && !rain.isPlaying) rain.Play();
             else if (!raining && rain.isPlaying) rain.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
@@ -208,7 +219,7 @@ public class WeatherManager : MonoBehaviour
         if (splash != null)
         {
             bool on = rainSplashes && rainAmount > 0.001f && !indoors;
-            if (player != null) splash.transform.position = player.position + Vector3.up * 0.08f;
+            if (anchor != null) splash.transform.position = anchor.Value + Vector3.up * 0.08f; // (이전) player.position 기준
             var em = splash.emission; em.rateOverTime = splashPerSecond * rainAmount;
             if (on && !splash.isPlaying) splash.Play();
             else if (!on && splash.isPlaying) splash.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
@@ -265,7 +276,7 @@ public class WeatherManager : MonoBehaviour
             if (groundFogPs != null)
             {
                 bool on = groundFog && !indoors;
-                if (player != null) groundFogPs.transform.position = player.position + Vector3.up * (groundFogHeight.x + groundFogHeight.y) * 0.5f;
+                if (anchor != null) groundFogPs.transform.position = anchor.Value + Vector3.up * (groundFogHeight.x + groundFogHeight.y) * 0.5f; // (이전) player.position 기준
                 if (on && !groundFogPs.isPlaying)
                 {
                     if (cam != null) cam.depthTextureMode |= DepthTextureMode.Depth; // 소프트 파티클용

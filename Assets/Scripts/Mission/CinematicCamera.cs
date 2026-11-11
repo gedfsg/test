@@ -69,6 +69,7 @@ public class CinematicCamera : MonoBehaviour
                 cc.Cam.backgroundColor = RenderSettings.fogColor; // 낮엔 밝은 안개색, 밤엔 어두운 안개색 → 먼 건물과 자연스럽게 이어짐
             }
             cc.Cam.farClipPlane = Mathf.Max(main.farClipPlane, 400f); // 80m 위 헬기 + 멀리 날아가는 모습까지
+            CopyPostProcess(main, go); // 날씨 후처리(안개 비네트·색보정 등)가 컷신에서도 보이게 (2026-11-12)
             go.transform.SetPositionAndRotation(main.transform.position, main.transform.rotation);
             cc.mainCam = main;
             cc.mainListener = main.GetComponent<AudioListener>();
@@ -84,6 +85,26 @@ public class CinematicCamera : MonoBehaviour
         if (!otherListener) go.AddComponent<AudioListener>();
         cc.CollectOccluders();
         return cc;
+    }
+
+    /// <summary>
+    /// 게임 카메라의 PostProcessLayer(PPv2)를 컷신 카메라에 복사. Camera.CopyFrom은 컴포넌트를 안 옮겨서
+    /// 컷신 동안 비네트·색보정·안개 비네트(WeatherManager)가 빠졌었음. 리소스(셰이더 묶음)는 private 필드라 리플렉션으로 읽음
+    /// </summary>
+    static void CopyPostProcess(Camera main, GameObject target)
+    {
+        var src = main.GetComponent<UnityEngine.Rendering.PostProcessing.PostProcessLayer>();
+        if (src == null) return;
+        var field = typeof(UnityEngine.Rendering.PostProcessing.PostProcessLayer).GetField("m_Resources",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var res = field != null ? field.GetValue(src) as UnityEngine.Rendering.PostProcessing.PostProcessResources : null;
+        if (res == null) return;
+        var dst = target.AddComponent<UnityEngine.Rendering.PostProcessing.PostProcessLayer>();
+        dst.Init(res);
+        dst.volumeLayer = src.volumeLayer;
+        dst.volumeTrigger = target.transform;
+        dst.antialiasingMode = src.antialiasingMode;
+        dst.stopNaNPropagation = src.stopNaNPropagation;
     }
 
     public static void SetShot(Shot type)
