@@ -28,6 +28,13 @@ using UnityEngine.Animations.Rigging;
 ///   오른손을 가슴 앞 중앙(pistolGripOffset / pistolGripHeight)으로 끌어오고, 왼손은 기존 왼손 IK가
 ///   총의 LeftHandPoint(손잡이)를 감싸 쥠 → 양손 그립. 소총은 원래 자세가 자연스러워 그대로 둠.
 /// - IK 목표는 Rig 1 아래(캐릭터 계층 안)에 둬서, 이동 중에도 몸과 같이 움직임 (한 프레임 늦게 따라오는 문제 없음).
+///
+/// [AR·소총·샷건 어깨 견착 + 달리기 Low Ready] (2026-11-12)
+/// - 피드백: 권총·AR·샷건 모두 잡는 자세가 부자연스러움 → 같은 오른팔 IK를 모든 총에 사용.
+///   권총 = 가슴 중앙 양손 / AR·소총 = 오른쪽 어깨 견착(손이 어깨 앞) / 샷건 = 어깨 견착 (조금 더 몸 쪽)
+///   왼손은 기존 왼손 IK가 무기의 LeftHandPoint(소총은 앞 손잡이)를 잡음 → 양손 그립.
+/// - 무기별 위치는 WeaponData.handGripOffset (0이면 아래 종류별 기본값).
+/// - 달릴 때(gripLowReady, PlayerController가 설정)는 Low Ready: 손을 내리고 총구를 아래로 숙임.
 /// </summary>
 public class WeaponHandAttacher : MonoBehaviour
 {
@@ -74,6 +81,24 @@ public class WeaponHandAttacher : MonoBehaviour
 
     /// <summary>지금 권총을 들고 있는지 (PlayerController.RefreshIKAndAim이 매 프레임 설정)</summary>
     [System.NonSerialized] public bool pistolHeld;
+
+    [Header("AR·소총·샷건 어깨 견착 (2026-11-12)")]
+    [Tooltip("총 종류별 기본 오른손 위치 (가슴 뼈 기준 x 오른쪽, y 위, z 앞). WeaponData.handGripOffset이 0이 아니면 그 값 사용")]
+    public Vector3 rifleGripOffset = new Vector3(0.11f, 0.12f, 0.30f);
+    public Vector3 shotgunGripOffset = new Vector3(0.11f, 0.11f, 0.27f);
+    [Tooltip("소총·샷건 손목 숙임 (권총은 pistolWristDown)")]
+    public float rifleWristDown = 0.05f;
+    [Header("달리기 Low Ready")]
+    [Tooltip("달릴 때 손을 내리는 높이(m) / 몸 쪽으로 당기는 거리(m)")]
+    public float lowReadyDrop = 0.28f, lowReadyPullBack = 0.08f;
+    [Tooltip("달릴 때 총구를 아래로 숙이는 각도(도)")]
+    public float lowReadyPitch = 38f;
+
+    /// <summary>지금 든 총 (근접 무기/맨손이면 null) - PlayerController.RefreshIKAndAim이 매 프레임 설정</summary>
+    [System.NonSerialized] public WeaponData gripWeapon;
+    /// <summary>달리는 중 → Low Ready (PlayerController가 설정)</summary>
+    [System.NonSerialized] public bool gripLowReady;
+    float lowReady01; // Low Ready 섞는 정도 0~1 (부드럽게)
 
     TwoBoneIKConstraint rightHandIK;     // 런타임 생성 (씬 파일은 안 건드림)
     Transform rightHandIKTarget, rightHandIKHint;
@@ -164,7 +189,10 @@ public class WeaponHandAttacher : MonoBehaviour
     void UpdatePistolGrip()
     {
         if (rightHandIK == null) return;
-        rightHandIK.weight = Mathf.MoveTowards(rightHandIK.weight, pistolHeld && pistolCenterGrip ? 1f : 0f, Time.deltaTime * 8f);
+        // (이전) 권총만: rightHandIK.weight → pistolHeld ? 1 : 0
+        bool gunHeld = pistolHeld || (gripWeapon != null && gripWeapon.type != WeaponType.Melee);
+        rightHandIK.weight = Mathf.MoveTowards(rightHandIK.weight, gunHeld && pistolCenterGrip ? 1f : 0f, Time.deltaTime * 8f);
+        lowReady01 = Mathf.MoveTowards(lowReady01, gunHeld && gripLowReady ? 1f : 0f, Time.deltaTime * 5f);
         if (rightHandIK.weight <= 0f) return;
 
         Transform chest = bodyAnimator.GetBoneTransform(HumanBodyBones.Chest);
@@ -174,16 +202,32 @@ public class WeaponHandAttacher : MonoBehaviour
         f.Normalize();
         Vector3 r = Vector3.Cross(Vector3.up, f);
         Vector3 c = chest.position;
-        rightHandIKTarget.position = c + r * pistolGripOffset.x + f * pistolGripOffset.y + Vector3.up * pistolGripHeight;
+        // rightHandIKTarget.position = c + r * pistolGripOffset.x + f * pistolGripOffset.y + Vector3.up * pistolGripHeight; // (이전) 권총만
+        Vector3 g = GripOffset(out float wristDown); // (오른쪽, 위, 앞)
+        g.y -= lowReadyDrop * lowReady01;
+        g.z -= lowReadyPullBack * lowReady01;
+        wristDown = Mathf.Lerp(wristDown, Mathf.Tan(lowReadyPitch * Mathf.Deg2Rad), lowReady01);
+        rightHandIKTarget.position = c + r * g.x + f * g.z + Vector3.up * g.y;
 
         Vector3 palm = -r;                                              // +X
-        Vector3 fingers = (f - Vector3.up * pistolWristDown).normalized; // -Z
+        Vector3 fingers = (f - Vector3.up * wristDown).normalized;      // -Z
         Vector3 z = -fingers;
         Vector3 y = Vector3.Cross(z, palm);                              // +Y (엄지: 위·앞)
         rightHandIKTarget.rotation = Quaternion.LookRotation(z, y);
 
         // 팔꿈치는 오른쪽 아래로 (안쪽으로 접혀 몸을 파고들지 않게)
         rightHandIKHint.position = c + r * 0.45f - Vector3.up * 0.35f - f * 0.05f;
+    }
+
+    /// <summary>오른손 목표 (가슴 기준 오른쪽, 위, 앞)와 손목 숙임. 무기에 handGripOffset이 있으면 그 값, 없으면 종류별 기본값</summary>
+    Vector3 GripOffset(out float wristDown)
+    {
+        var type = gripWeapon != null ? gripWeapon.type : WeaponType.Pistol;
+        bool pistol = pistolHeld || type == WeaponType.Pistol;
+        wristDown = pistol ? pistolWristDown : rifleWristDown;
+        if (gripWeapon != null && gripWeapon.handGripOffset != Vector3.zero) return gripWeapon.handGripOffset;
+        if (pistol) return new Vector3(pistolGripOffset.x, pistolGripHeight, pistolGripOffset.y);
+        return type == WeaponType.Shotgun ? shotgunGripOffset : rifleGripOffset;
     }
 
     void AttachToHand()
@@ -355,6 +399,8 @@ public class WeaponHandAttacher : MonoBehaviour
 
         // 이번 프레임에 총구가 향해야 할 월드 회전
         Quaternion desiredMuzzleWorldRotation = Quaternion.LookRotation(toTarget.normalized, Vector3.up);
+        // 달리기 Low Ready: 총구를 아래로 숙임 (2026-11-12). 평소엔 수평 유지
+        if (lowReady01 > 0f) desiredMuzzleWorldRotation = Quaternion.AngleAxis(lowReadyPitch * lowReady01, Vector3.Cross(Vector3.up, toTarget.normalized)) * desiredMuzzleWorldRotation;
 
         // 총구 기준 목표를, 무기 루트가 가져야 할 월드 회전으로 환산 (고정 오프셋 사용)
         Quaternion desiredRootWorldRotation = desiredMuzzleWorldRotation * Quaternion.Inverse(muzzleLocalOffset);

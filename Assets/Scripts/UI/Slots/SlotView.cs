@@ -67,6 +67,7 @@ public class SlotView : MonoBehaviour, IPointerClickHandler,
         if (icon != null) { icon.enabled = false; icon.sprite = null; }
         if (nameLabel != null) nameLabel.text = "";
         if (countLabel != null) countLabel.text = "";
+        SetRarityBorder(null);
     }
 
     /// <summary>
@@ -98,6 +99,48 @@ public class SlotView : MonoBehaviour, IPointerClickHandler,
 
         if (countLabel != null)
             countLabel.text = amount > 1 ? $"x{amount}" : "";
+
+        // 총기 등급 테두리 (인벤토리 칸만 - 핫바는 WeaponHotbarUI가 안쪽 등급 테두리를 따로 그림, 색은 같은 RarityColors)
+        SetRarityBorder(Owner == SlotOwner.Inventory && item is WeaponData ? RarityColors.Get(item.rarity) : (Color?)null);
+    }
+
+    // ── 등급 테두리 (2026-11-12) ── 2px 선 4개 (위/아래/왼쪽/오른쪽). 일반 회색 / 희귀 파랑 / 영웅 보라 / 전설 주황
+    const float RarityBorderPx = 2f;
+    private GameObject rarityBorder;
+    private Image[] rarityBorderLines;
+
+    private void SetRarityBorder(Color? color)
+    {
+        if (color == null) { if (rarityBorder != null) rarityBorder.SetActive(false); return; }
+        if (rarityBorder == null)
+        {
+            rarityBorder = new GameObject("RarityBorder", typeof(RectTransform));
+            var root = (RectTransform)rarityBorder.transform;
+            root.SetParent(transform, false);
+            root.anchorMin = Vector2.zero; root.anchorMax = Vector2.one; root.offsetMin = root.offsetMax = Vector2.zero;
+            rarityBorderLines = new Image[4];
+            // (anchorMin, anchorMax, sizeDelta) - 위, 아래, 왼쪽, 오른쪽
+            var defs = new (Vector2 min, Vector2 max, Vector2 size, Vector2 pivot)[]
+            {
+                (new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, RarityBorderPx), new Vector2(0.5f, 1f)),
+                (new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0f, RarityBorderPx), new Vector2(0.5f, 0f)),
+                (new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(RarityBorderPx, 0f), new Vector2(0f, 0.5f)),
+                (new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(RarityBorderPx, 0f), new Vector2(1f, 0.5f)),
+            };
+            for (int i = 0; i < 4; i++)
+            {
+                var go = new GameObject("Line", typeof(RectTransform), typeof(Image));
+                var r = (RectTransform)go.transform;
+                r.SetParent(root, false);
+                r.anchorMin = defs[i].min; r.anchorMax = defs[i].max; r.pivot = defs[i].pivot;
+                r.sizeDelta = defs[i].size; r.anchoredPosition = Vector2.zero;
+                rarityBorderLines[i] = go.GetComponent<Image>();
+                rarityBorderLines[i].raycastTarget = false;
+            }
+        }
+        rarityBorder.SetActive(true);
+        rarityBorder.transform.SetAsLastSibling();
+        foreach (var l in rarityBorderLines) l.color = color.Value;
     }
 
     /// <summary>핫바 슬롯 번호(1~5) 표시. 인벤토리 슬롯은 numberLabel을 비워두면 자동 무시된다.</summary>

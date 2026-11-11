@@ -26,6 +26,7 @@ public class AmmoHUD : MonoBehaviour
 
     void Start()
     {
+        HideLegacyAmmoHud();
         Transform root = transform;
         var bg = HudStyle.NewImage(root, "Bg", HudStyle.RoundedRect, panelBg, Vector2.zero, new Vector2(222f, 97f));
         bg.pixelsPerUnitMultiplier = 2f;
@@ -86,4 +87,34 @@ public class AmmoHUD : MonoBehaviour
         WeaponType.Sniper => HudStyle.BulletSR,
         _ => HudStyle.BulletAR,
     };
+
+    /// <summary>
+    /// 우하단 탄약 UI 중복 제거 (2026-11-12): 옛 AmmoHud(파란 배경 + 노란 탄약 글자)를 런타임에 항상 투명하게.
+    /// 원래 Tools/HUD/Apply Layout이 씬의 CanvasGroup alpha를 0으로 저장했는데, 씬이 병합되며 1로 돌아가서
+    /// 새 탄약 패널 뒤로 옛 패널 가장자리가 비쳐 보였음. 오브젝트는 끄지 않음 (AmmoUI 싱글톤을 크로스헤어·핫바가 씀)
+    /// </summary>
+    void HideLegacyAmmoHud()
+    {
+        var old = AmmoUI.Instance != null ? AmmoUI.Instance.transform : null;
+        // AmmoUI는 AmmoHud/AmmoText에 붙어 있음 → 패널 루트(이름 AmmoHud)까지 올라감
+        while (old != null && old.name != "AmmoHud" && old.parent != null && old.parent.GetComponent<Canvas>() == null) old = old.parent;
+        if (old == null) { var c = transform.parent; old = c != null ? c.Find("AmmoHud") : null; }
+        if (old == null || old == transform) return;
+        var cg = old.GetComponent<CanvasGroup>();
+        if (cg == null) cg = old.gameObject.AddComponent<CanvasGroup>();
+        cg.alpha = 0f;
+        cg.interactable = false;
+        cg.blocksRaycasts = false;
+        legacyGroup = cg;
+    }
+
+    CanvasGroup legacyGroup;
+
+    // 시작 직후 다른 초기화(씬 로드 순서)가 옛 패널을 다시 보이게 하는 경우가 있어서 (Play 실측: Start에서 0으로 해도 1로 돌아옴)
+    // 매 프레임 확인해서 계속 숨김 (값 비교 1번이라 비용 없음)
+    void LateUpdate()
+    {
+        if (legacyGroup == null) { if (Time.frameCount % 30 == 0) HideLegacyAmmoHud(); return; }
+        if (legacyGroup.alpha != 0f) legacyGroup.alpha = 0f;
+    }
 }

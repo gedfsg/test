@@ -18,6 +18,11 @@ public class WeaponData : ItemData
     public float recoil;
     public float effectiveRange;
 
+    [Header("손 그립 (2026-11-12) - WeaponHandAttacher 오른손 IK 목표")]
+    [Tooltip("오른손(방아쇠 손) 위치: 가슴 뼈 기준 (x = 오른쪽, y = 위, z = 앞) m. (0,0,0)이면 종류별 기본값. " +
+             "권총 = 가슴 중앙 양손 / AR·소총·샷건 = 오른쪽 어깨 견착 + 왼손은 무기의 LeftHandPoint(앞 손잡이)")]
+    public Vector3 handGripOffset = Vector3.zero;
+
     [Header("Shotgun Only")]
     public int pelletCount = 8;
     public float spreadAngle = 15f;
