@@ -3,7 +3,8 @@ using UnityEngine;
 /// 오늘 할당된 서브 미션 1개 (런타임 상태). 정의는 SubMissionData (MissionManager가 매일 1~2개 랜덤 할당).
 ///  - 발견 전(Discovered = false): HUD에서 완전히 숨김, 진행도 안 셈
 ///  - 조건 충족 → Discover() → OnDiscovered 이벤트 (MissionManager가 알림음 + 토스트 + HUD "발견" 라벨)
-/// 실패 조건 없음 - 달성하면 진행률 +(하루 서브 몫 ≈4.3% ÷ 그날 서브 수) + 아이템 보상. 미완료는 다음날 사라짐 (패널티 없음).
+/// 실패 조건 없음 - 달성하면 진행률 +(하루 서브 몫 ≈4.3% ÷ 그날 서브 수) + 아이템 보상.
+/// (이전) 미완료는 다음날 사라짐 → 2026-11-12: 발견한 서브는 완료할 때까지 다음 날에도 유지.
 /// </summary>
 public class SubMission
 {
@@ -17,6 +18,7 @@ public class SubMission
     public bool Discovered { get; private set; }
     public float DiscoveredTime { get; private set; } = -999f; // HUD "발견" 라벨 표시 시간 계산용
     public bool Rewarded;                // 완료 처리(진행률/보상) 했는지
+    public float progressStep;           // 완료 시 올라갈 전체 진행률(%) - 할당할 때 정함 (2026-11-12: 다음 날로 넘어가도 몫이 안 바뀌게)
 
     /// <summary>조건 충족으로 처음 나타났을 때 (MissionManager가 구독: 알림음 + 토스트)</summary>
     public event System.Action<SubMission> OnDiscovered;

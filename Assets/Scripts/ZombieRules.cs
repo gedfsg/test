@@ -27,6 +27,8 @@ public static class ZombieRules
 
     public static float SpeedMultiplier => ZombieSpawner.DifficultyMultiplier;
     public static float DamageMultiplier => ZombieSpawner.DifficultyMultiplier;
+    /// <summary>7일 이후 좀비 체력 배수 (Day 8 +10%, 하루마다 +10%) - 2026-11-12 추가 (스폰 시 ZombieController.SetupHealth)</summary>
+    public static float HealthMultiplier => ZombieSpawner.DifficultyMultiplier;
 
     public static bool IsHeld(Vector3 zombiePos) => SpawnProtection.Holds(zombiePos);
 

@@ -264,10 +264,14 @@ public class ZombieController : MonoBehaviour
             Debug.LogError($"[Zombie] {name}: ❌ Avatar 유효하지 않음 - 본 매핑 확인 필요");
     }
 
+    bool healthScaledForDay; // 7일 이후 체력 배수를 이미 곱했는지 (SetupHealth가 다시 불려도 중복 적용 안 되게)
+
     void SetupHealth()
     {
         health = GetComponent<Health>();
         if (health == null) health = gameObject.AddComponent<Health>();
+        // 7일 이후 난이도: 하루마다 체력 +10% (2026-11-12). 스폰 시 한 번만 적용 (학습장은 DayNightCycle이 없어 1배)
+        if (!healthScaledForDay) { maxHealth *= ZombieRules.HealthMultiplier; healthScaledForDay = true; }
         // main에서 추가된 API. Heal(0)은 currentHealth가 새 maxHealth까지 안 올라가서 교체됨.
         health.SetMaxHealth(maxHealth);
 

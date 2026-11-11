@@ -44,6 +44,7 @@ public class SurvivalDayHUD : MonoBehaviour
     static readonly Color FrameGold = new Color32(0xC9, 0xA2, 0x55, 0xE6);
 
     TextMeshProUGUI titleText, clockText, phaseText, goalText;
+    TextMeshProUGUI escapeFailText; // 7일 초과 시 "탈출 실패 횟수: N"
     Image phaseIcon;
     Image phaseDivider; // 해/달 아이콘과 시각 사이 세로선 (실내에서 아이콘과 같이 숨김)
     Image weatherIcon; // 낮/밤 글자 옆 날씨 아이콘 (WeatherManager)
@@ -91,6 +92,10 @@ public class SurvivalDayHUD : MonoBehaviour
         // ── 제목 ──
         titleText = HudStyle.NewText(root, "Title", "생존 1일차", HudStyle.SemiBold, 17f, titleColor,
             TextAlignmentOptions.Center, new Vector2(0f, TitleY), new Vector2(200f, 30f));
+        // 7일 초과: 테두리 아래에 "탈출 실패 횟수: N" (2026-11-12)
+        escapeFailText = HudStyle.NewText(root, "EscapeFail", "", HudStyle.SemiBold, 14f, new Color32(0xFF, 0x6B, 0x5E, 0xFF),
+            TextAlignmentOptions.Center, new Vector2(0f, FrameY - FrameH / 2f - 14f), new Vector2(260f, 22f));
+        escapeFailText.gameObject.SetActive(false);
         // (이전) 제목 양옆 가는 선 → 탭 테두리로 대체
         // var lineColor = new Color32(200, 196, 192, 200);
         // titleLineL = HudStyle.NewImage(root, "TitleLineL", null, lineColor, new Vector2(-123f, TitleY + 0.5f), new Vector2(115f, 2f));
@@ -160,7 +165,14 @@ public class SurvivalDayHUD : MonoBehaviour
         {
             shownDay = realDay;
             bool extended = realDay > totalDays;
-            titleText.text = extended ? $"생존 {realDay}일차 (연장)" : $"생존 {realDay}일차";
+            // titleText.text = extended ? $"생존 {realDay}일차 (연장)" : $"생존 {realDay}일차"; // (이전)
+            // 2026-11-12: 7일 넘으면 "생존 7일+N일차" + 아래에 탈출 실패 횟수 (7일차 이후 하루 지날 때마다 1회)
+            titleText.text = extended ? $"생존 {totalDays}일+{realDay - totalDays}일차" : $"생존 {realDay}일차";
+            if (escapeFailText != null)
+            {
+                escapeFailText.gameObject.SetActive(extended);
+                escapeFailText.text = $"탈출 실패 횟수: {realDay - totalDays}";
+            }
             if (titleLineL != null) titleLineL.enabled = titleLineR.enabled = !extended; // 긴 제목에 양옆 선이 겹침
             if (goalText != null) goalText.text = extended && spawner != null ? $"오늘 좀비 {spawner.TodayZombieCap}마리" : $"생존 목표 · {totalDays}일";
             for (int i = 0; i < dayFills.Length; i++)

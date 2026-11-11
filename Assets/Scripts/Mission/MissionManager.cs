@@ -8,7 +8,9 @@ using UnityEngine.SceneManagement;
 ///
 /// ━ 메인 미션 ━ (MainMissionData, Resources/Missions/Main)
 ///  게임 시작 시 풀(14개)에서 랜덤 6개 → Day 1~6에 하나씩, Day 7은 항상 "탈출 지점 도달".
-///  새 날(새벽→낮, DayNightCycle.onNewDay)이 되면 그날 미션이 공개됨. 못 끝낸 미션은 사라짐 (패널티 없음).
+///  새 날(새벽→낮, DayNightCycle.onNewDay)이 되면 그날 미션이 공개됨.
+///  (이전) 못 끝낸 미션은 사라짐 → 2026-11-12: 못 끝낸 메인·서브 미션은 다음 날로 넘어가 계속 진행 (조건 만족하면 언제든 완료).
+///  진행 중 메인 미션은 activeMains (미션별 상태 = MainMission). HUD는 탈출 → 오늘 → 이전 날 순서로 최대 3개 표시.
 ///  Day 7 "탈출 지점 도달" 완료 = 게임 클리어 (7일 넘어가면 계속 탈출 미션).
 ///
 /// ━ 서브 미션 ━ (SubMissionData, Resources/Missions/Sub)
@@ -61,11 +63,21 @@ public class MissionManager : MonoBehaviour
 
     // ── 상태 ──
     public readonly List<MainMissionData> schedule = new List<MainMissionData>(); // [0] = Day 1
-    public MainMissionData CurrentMain { get; private set; }
-    public int MainProgress { get; private set; }
-    public bool MainDone { get; private set; }
-    public string MainDetail { get; private set; } = ""; // HUD 미션명 옆 보조 표시 (예: "7/20")
-    public readonly List<SubMission> subMissions = new List<SubMission>(); // 오늘 할당 (발견 전 포함)
+    // (이전) 오늘 미션 1개 상태를 직접 들고 있었음 → 미션별 상태(MainMission)로 옮기고, 아래는 "오늘 공개된 미션" 기준 호환용
+    // public MainMissionData CurrentMain { get; private set; }
+    // public int MainProgress { get; private set; }
+    // public bool MainDone { get; private set; }
+    // public string MainDetail { get; private set; } = "";
+    /// <summary>진행 중인 메인 미션 (미완료는 날이 바뀌어도 남음 + 오늘 완료한 것). 2026-11-12</summary>
+    public readonly List<MainMission> activeMains = new List<MainMission>();
+    /// <summary>오늘 공개된 메인 미션</summary>
+    public MainMission TodayMain { get; private set; }
+    public MainMissionData CurrentMain => TodayMain?.data;
+    public int MainProgress => TodayMain != null ? TodayMain.progress : 0;
+    public bool MainDone => TodayMain != null && TodayMain.done;
+    public string MainDetail => TodayMain != null ? TodayMain.detail : ""; // HUD 미션명 옆 보조 표시 (예: "7/20")
+    public const int MaxShownMains = 3;
+    public readonly List<SubMission> subMissions = new List<SubMission>(); // 진행 중 서브 (오늘 할당 + 어제까지 발견했지만 못 끝낸 것)
     public int CompletedMainMissions { get; private set; }
     public int CompletedSubMissions { get; private set; }
     public bool Finished { get; private set; }
@@ -74,10 +86,15 @@ public class MissionManager : MonoBehaviour
     public event System.Action EscapeUnlocked;
     public readonly List<KeyCardPickup> keyCardsInWorld = new List<KeyCardPickup>(); // PlayerRandomSpawn도 참조
     public EscapePoint EscapePointObj { get; private set; }
+    /// <summary>전력 복구 미션을 끝냈는지 - 밤에도 실내등이 밝아짐 (DayNightCycle 실내 조명). 판마다 초기화 (2026-11-12)</summary>
+    public static bool PowerRestored { get; private set; }
 
     public int SurvivalGoalDays => DayNightCycle.Instance != null ? DayNightCycle.Instance.totalDays : 7;
     public int CurrentDay => DayNightCycle.Instance != null ? DayNightCycle.Instance.CurrentDay : 1;
-    public bool CanEscape => !Finished && CurrentMain != null && CurrentMain.type == MainMissionType.Escape;
+    // public bool CanEscape => !Finished && CurrentMain != null && CurrentMain.type == MainMissionType.Escape; // (이전)
+    public bool CanEscape => !Finished && activeMains.Exists(m => m.IsEscape && !m.done);
+    /// <summary>7일차가 지나도록 탈출 못 한 횟수 (Day 8 = 1회). HUD "탈출 실패 횟수"</summary>
+    public int EscapeFailCount => Mathf.Max(0, CurrentDay - SurvivalGoalDays);
     public int DoneSubCount { get { int n = 0; foreach (var s in subMissions) if (s.Rewarded) n++; return n; } }
     // /// <summary>오늘 진행률 0~100 (메인 60 + 서브 20씩)</summary>
     // public float DayProgress => Mathf.Clamp((MainDone ? MainWeight : 0f) + DoneSubCount * SubWeight, 0f, 100f); // (이전) 하루치
@@ -85,7 +102,9 @@ public class MissionManager : MonoBehaviour
     /// <summary>7일 전체 진행률 0~100 (메인 1개 = 70/7 = 10%, 서브 = 하루 30/7 ≈ 4.3%를 그날 서브 수로 나눔)</summary>
     public float TotalProgress => Mathf.Clamp(totalProgress, 0f, 100f);
     float MainStep => MainWeightTotal / Mathf.Max(1, SurvivalGoalDays);
-    float SubStep => SubWeightTotal / Mathf.Max(1, SurvivalGoalDays) / Mathf.Max(1, subMissions.Count);
+    // float SubStep => SubWeightTotal / Mathf.Max(1, SurvivalGoalDays) / Mathf.Max(1, subMissions.Count); // (이전) 완료 순간 목록 수 기준
+    // 2026-11-12: 서브가 다음 날로 넘어가면 목록 수가 바뀌므로, 할당할 때 1개당 몫을 정해 SubMission.progressStep에 저장
+    float DailySubShare => SubWeightTotal / Mathf.Max(1, SurvivalGoalDays);
     // public string FooterText => CurrentDay < SurvivalGoalDays ? $"{CurrentDay + 1}일차 시작 시 새 미션 개방" : "탈출 지점에 도달하면 생존 성공"; // (이전)
     public string FooterText => CurrentDay < SurvivalGoalDays ? $"{CurrentDay + 1}일차 시작 시 새 미션 개방" : "헬리패드에서 구조 헬기에 타면 생존 성공";
 
@@ -94,12 +113,7 @@ public class MissionManager : MonoBehaviour
     Vector3 lastPlayerPos;
     float nextPoll;
     float dayMeters;                       // 오늘 이동 거리 (서브 "이동" 발견 조건)
-    readonly List<GameObject> mainObjects = new List<GameObject>(); // 오늘 메인 미션 오브젝트 (다음 날 정리)
-    Vector3 hordeCenter;
-    readonly List<Transform> reconFlags = new List<Transform>();
-    readonly List<bool> reconVisited = new List<bool>();
-    float radioSeconds;
-    Vector3? guideTarget;                  // 방향 화살표 대상
+    // (이전) 오늘 미션 1개분 상태 → MainMission으로 옮김 (mainObjects / hordeCenter / reconFlags / reconVisited / radioSeconds / guideTarget)
     List<LootCrate> crates = new List<LootCrate>();
     float nextCrateScan;
     static List<string> lastSchedule, lastSubTitles; // 직전 판/어제와 같은 조합 피하기
@@ -119,7 +133,7 @@ public class MissionManager : MonoBehaviour
         new GameObject("MissionManager").AddComponent<MissionManager>();
     }
 
-    void Awake() => Instance = this;
+    void Awake() { Instance = this; PowerRestored = false; }
 
     void OnEnable()
     {
@@ -193,7 +207,7 @@ public class MissionManager : MonoBehaviour
 
     MainMissionData MainForDay(int day) => schedule.Count == 0 ? null : schedule[Mathf.Clamp(day, 1, schedule.Count) - 1];
 
-    /// <summary>새 날(새벽→낮): 어제 미완료 미션은 버리고 오늘 미션 공개 (패널티 없음)</summary>
+    /// <summary>새 날(새벽→낮): 오늘 미션 공개. 어제까지 못 끝낸 미션은 그대로 이어서 진행 (2026-11-12)</summary>
     void OnNewDay(int day)
     {
         if (Finished) return;
@@ -202,20 +216,50 @@ public class MissionManager : MonoBehaviour
 
     void StartDay(int day)
     {
-        CleanupMainObjects();
-        CurrentMain = MainForDay(day);
-        MainProgress = 0;
-        MainDone = false;
-        MainDetail = "";
+        // (이전) CleanupMainObjects(); 로 어제 미션을 통째로 버림
+        // 완료된 미션만 정리 (오브젝트 삭제 + 목록에서 뺌). 미완료는 남겨서 계속 진행
+        for (int i = activeMains.Count - 1; i >= 0; i--)
+        {
+            if (!activeMains[i].done) continue;
+            activeMains[i].Cleanup(keyCardsInWorld);
+            activeMains.RemoveAt(i);
+        }
+
+        var data = MainForDay(day);
+        TodayMain = null;
+        if (data != null)
+        {
+            // 8일차부터는 일정이 끝나서 탈출 미션이 다시 나옴 → 이미 진행 중이면 그걸 오늘 미션으로
+            TodayMain = activeMains.Find(m => m.data == data);
+            if (TodayMain == null)
+            {
+                TodayMain = new MainMission(data, day);
+                activeMains.Add(TodayMain);
+                SetupMain(TodayMain);
+            }
+        }
         dayMeters = 0f;
-        SetupMain();
         AssignSubMissions(day);
 
         PlaySound(l => l.missionNotification); // notification-bell
         if (CurrentMain != null)
             Hud?.ShowToast(MissionHUD.ToastKind.NewDay, $"{day}일차 메인 미션", CurrentMain.title);
-        if (debugLog) Debug.Log($"[MissionManager] Day {day} 메인: {CurrentMain?.title} / 서브 {subMissions.Count}개: " + string.Join(", ", subMissions.ConvertAll(s => s.title)));
+        if (debugLog) Debug.Log($"[MissionManager] Day {day} 메인: {CurrentMain?.title} (진행 중 {activeMains.Count}개: {string.Join(", ", activeMains.ConvertAll(m => m.Title))}) / 서브 {subMissions.Count}개: " + string.Join(", ", subMissions.ConvertAll(s => s.title)));
         if (CanEscape) { EscapeUnlocked?.Invoke(); }
+    }
+
+    /// <summary>HUD 표시 순서: 탈출 미션 → 오늘 미션 → 이전 날 미션(최근 순). 최대 MaxShownMains개</summary>
+    public List<MainMission> MainsForHud()
+    {
+        var list = new List<MainMission>(activeMains);
+        list.Sort((a, b) =>
+        {
+            if (a.IsEscape != b.IsEscape) return a.IsEscape ? -1 : 1;
+            if ((a == TodayMain) != (b == TodayMain)) return a == TodayMain ? -1 : 1;
+            return b.day.CompareTo(a.day);
+        });
+        if (list.Count > MaxShownMains) list.RemoveRange(MaxShownMains, list.Count - MaxShownMains);
+        return list;
     }
 
     MissionHUD hud;
@@ -223,12 +267,11 @@ public class MissionManager : MonoBehaviour
 
     // ── 메인 미션: 배치 ───────────────────────────
 
-    void SetupMain()
+    void SetupMain(MainMission mm)
     {
-        guideTarget = null;
-        MainDetail = "";
-        if (CurrentMain == null) return;
-        var m = CurrentMain;
+        mm.guideTarget = null;
+        mm.detail = "";
+        var m = mm.data;
         switch (m.type)
         {
             case MainMissionType.EmergencyRadio:
@@ -239,37 +282,37 @@ public class MissionManager : MonoBehaviour
                 if (atTower) pos = NearGround(tower.position, 3.5f);
                 else if (!TryPointIn(FindBuilding(LootDatabase.BuildingKind.Police), out pos)) pos = RandomOutdoor(60f, 200f);
                 var t = MissionProps.Radio(pos, out var beacon);
-                AddInteractable(t, "무전기 가동", m.holdSeconds, beacon);
+                AddInteractable(mm, t, "무전기 가동", m.holdSeconds, beacon);
                 break;
             }
             case MainMissionType.KeyCardA:
             case MainMissionType.KeyCardB:
             case MainMissionType.KeyCardC:
-                PlaceKeyCard(m.type == MainMissionType.KeyCardA ? "A" : m.type == MainMissionType.KeyCardB ? "B" : "C");
+                PlaceKeyCard(mm, m.type == MainMissionType.KeyCardA ? "A" : m.type == MainMissionType.KeyCardB ? "B" : "C");
                 break;
             case MainMissionType.PowerRestore:
             {
                 Vector3 pos = MissionPlaces.TryGet(MissionPlaces.Kind.PowerPlant, out var plant) && TryPointIn(plant.building, out var p) ? p : RandomOutdoor(60f, 200f);
                 var t = MissionProps.Generator(pos, out var beacon);
-                AddInteractable(t, "전력 복구", m.holdSeconds, beacon);
+                AddInteractable(mm, t, "전력 복구", m.holdSeconds, beacon);
                 break;
             }
             case MainMissionType.ZombieHorde:
             {
-                hordeCenter = RandomOutdoor(80f, 250f);
-                Track(MissionProps.HordeArea(hordeCenter, hordeRadius));
+                mm.hordeCenter = RandomOutdoor(80f, 250f);
+                Track(mm, MissionProps.HordeArea(mm.hordeCenter, hordeRadius));
                 var spawner = FindFirstObjectByType<ZombieSpawner>();
                 int spawned = 0;
-                for (int i = 0; spawner != null && i < hordeExtraZombies; i++) if (spawner.SpawnExtraNear(hordeCenter, 3f, 20f) != null) spawned++;
-                guideTarget = hordeCenter;
-                if (debugLog) Debug.Log($"[MissionManager] 좀비 떼 지역 {hordeCenter:F0} (추가 좀비 {spawned})");
+                for (int i = 0; spawner != null && i < hordeExtraZombies; i++) if (spawner.SpawnExtraNear(mm.hordeCenter, 3f, 20f) != null) spawned++;
+                mm.guideTarget = mm.hordeCenter;
+                if (debugLog) Debug.Log($"[MissionManager] 좀비 떼 지역 {mm.hordeCenter:F0} (추가 좀비 {spawned})");
                 break;
             }
             case MainMissionType.FuelCollect:
             {
                 Vector3 pos = MissionPlaces.TryGet(MissionPlaces.Kind.GasStation, out var gas) && TryPointIn(gas.building, out var p) ? p : RandomOutdoor(60f, 200f);
                 var t = MissionProps.FuelCan(pos, out var beacon);
-                AddInteractable(t, "연료통 획득", m.holdSeconds, beacon, radius: 1.8f, promptHeight: 1.4f);
+                AddInteractable(mm, t, "연료통 획득", m.holdSeconds, beacon, radius: 1.8f, promptHeight: 1.4f);
                 break;
             }
             case MainMissionType.Armory:
@@ -277,7 +320,7 @@ public class MissionManager : MonoBehaviour
                 if (!TryPointIn(FindBuilding(LootDatabase.BuildingKind.Police), out var pos) && !TryPointIn(FindBuilding(LootDatabase.BuildingKind.Warehouse), out pos))
                     pos = RandomOutdoor(60f, 200f);
                 var t = MissionProps.ArmoryLocker(pos, out var beacon);
-                AddInteractable(t, "무기고 열기", m.holdSeconds, beacon, promptHeight: 2.7f);
+                AddInteractable(mm, t, "무기고 열기", m.holdSeconds, beacon, promptHeight: 2.7f);
                 break;
             }
             case MainMissionType.Barricade:
@@ -285,48 +328,41 @@ public class MissionManager : MonoBehaviour
                 Vector3 pos = RandomOutdoor(60f, 200f);
                 var t = MissionProps.BarricadeSpot(pos, out var beacon);
                 float yaw = t.eulerAngles.y;
-                AddInteractable(t, "바리케이드 설치", m.holdSeconds, beacon, onDone: () => MissionProps.BarricadeBuilt(pos, yaw)); // 완성품은 다음 날에도 남김
+                AddInteractable(mm, t, "바리케이드 설치", m.holdSeconds, beacon, onDone: () => MissionProps.BarricadeBuilt(pos, yaw)); // 완성품은 다음 날에도 남김
                 break;
             }
             case MainMissionType.Recon:
-                PlaceReconFlags();
+                PlaceReconFlags(mm);
                 break;
             case MainMissionType.RadioSignal:
-                radioSeconds = 0f;
-                if (MissionPlaces.TryGet(MissionPlaces.Kind.RadioTower, out var rt)) guideTarget = rt.position;
+                mm.radioSeconds = 0f;
+                if (MissionPlaces.TryGet(MissionPlaces.Kind.RadioTower, out var rt)) mm.guideTarget = rt.position;
                 break;
             case MainMissionType.Escape:
-                if (EscapePointObj != null) guideTarget = EscapePointObj.transform.position;
+                if (EscapePointObj != null) mm.guideTarget = EscapePointObj.transform.position;
                 break;
         }
-        RefreshMainDetail();
+        RefreshMainDetail(mm);
     }
 
-    void Track(Transform t) { if (t != null) mainObjects.Add(t.gameObject); }
+    void Track(MainMission mm, Transform t) { if (t != null) mm.objects.Add(t.gameObject); }
 
-    void AddInteractable(Transform t, string action, float hold, Light beacon, float radius = 2.4f, float promptHeight = 2.2f, System.Action onDone = null)
+    void AddInteractable(MainMission mm, Transform t, string action, float hold, Light beacon, float radius = 2.4f, float promptHeight = 2.2f, System.Action onDone = null)
     {
-        Track(t);
+        Track(mm, t);
         var it = t.gameObject.AddComponent<MissionInteractable>();
         it.actionText = action;
         it.holdSeconds = hold;
         it.radius = radius;
         it.promptHeight = promptHeight;
         it.beacon = beacon;
-        it.onDone = () => { onDone?.Invoke(); CompleteMain(); };
-        guideTarget = t.position;
+        it.onDone = () => { onDone?.Invoke(); CompleteMain(mm); };
+        mm.guideTarget = t.position;
         if (debugLog) Debug.Log($"[MissionManager] {action} 지점 {t.position:F0}");
     }
 
-    void CleanupMainObjects()
-    {
-        foreach (var go in mainObjects) if (go != null) Destroy(go);
-        mainObjects.Clear();
-        foreach (var k in keyCardsInWorld) if (k != null) Destroy(k.gameObject);
-        keyCardsInWorld.Clear();
-        reconFlags.Clear();
-        reconVisited.Clear();
-    }
+    // (이전) 날이 바뀌면 오늘 미션 오브젝트를 전부 정리 → MainMission.Cleanup (완료된 미션만, StartDay에서)
+    // void CleanupMainObjects() { 오브젝트·열쇠 카드·정찰 깃발 전부 삭제 }
 
     BuildingInterior FindBuilding(LootDatabase.BuildingKind kind) => buildingList.Find(b => b != null && LootDatabase.Classify(b) == kind);
 
@@ -373,7 +409,7 @@ public class MissionManager : MonoBehaviour
         return from + playerTf.forward * 5f;
     }
 
-    void PlaceKeyCard(string letter)
+    void PlaceKeyCard(MainMission mm, string letter)
     {
         Vector3 me = playerTf.position;
         var candidates = KeyCardSpawnPoints.Build(buildingList);
@@ -384,11 +420,12 @@ public class MissionManager : MonoBehaviour
         card.name = $"KeyCard_{letter}_{label}";
         card.transform.SetParent(transform, true);
         keyCardsInWorld.Add(card);
+        mm.keyCards.Add(card);
         if (debugLog) Debug.Log($"[MissionManager] 열쇠 카드 {letter} → {label} {pos:F0}");
     }
 
     /// <summary>맵을 4등분(북서/북동/남서/남동)해서 구역마다 정찰 깃발 1개</summary>
-    void PlaceReconFlags()
+    void PlaceReconFlags(MainMission mm)
     {
         var terrain = Terrain.activeTerrain;
         Vector3 center = terrain != null ? terrain.transform.position + terrain.terrainData.size / 2f : playerTf.position;
@@ -406,10 +443,10 @@ public class MissionManager : MonoBehaviour
                 found = true;
             }
             if (!found) { Debug.LogWarning($"[MissionManager] 정찰 구역 {q + 1} 지점을 못 찾음"); continue; }
-            var flag = MissionProps.ReconFlag(pos, reconFlags.Count);
-            Track(flag);
-            reconFlags.Add(flag);
-            reconVisited.Add(false);
+            var flag = MissionProps.ReconFlag(pos, mm.reconFlags.Count);
+            Track(mm, flag);
+            mm.reconFlags.Add(flag);
+            mm.reconVisited.Add(false);
         }
     }
 
@@ -417,29 +454,37 @@ public class MissionManager : MonoBehaviour
 
     void PollMain()
     {
-        if (CurrentMain == null || MainDone) return;
+        // 진행 중인 메인 미션 전부 (어제 못 끝낸 것도 조건 만족하면 완료) - 완료 처리 중 목록이 바뀌어도 안전하게 복사본으로
+        foreach (var mm in activeMains.ToArray()) if (!mm.done) PollMain(mm);
+    }
+
+    void PollMain(MainMission mm)
+    {
+        var CurrentMain = mm.data; // 아래 판정 코드를 그대로 쓰려고 같은 이름 - 이 미션의 정의
+        var reconFlags = mm.reconFlags;
+        var reconVisited = mm.reconVisited;
         Vector3 me = playerTf.position;
         switch (CurrentMain.type)
         {
             case MainMissionType.MedicalSupplies:
             {
                 int bandage = CountItems(i => NameIs(i, "Bandage")), pill = CountItems(i => NameIs(i, "Painkiller"));
-                MainDetail = $"붕대 {Mathf.Min(bandage, CurrentMain.target)}/{CurrentMain.target} · 진통제 {Mathf.Min(pill, CurrentMain.altTarget)}/{CurrentMain.altTarget}";
-                if (bandage >= CurrentMain.target || (CurrentMain.altTarget > 0 && pill >= CurrentMain.altTarget)) CompleteMain();
+                mm.detail = $"붕대 {Mathf.Min(bandage, CurrentMain.target)}/{CurrentMain.target} · 진통제 {Mathf.Min(pill, CurrentMain.altTarget)}/{CurrentMain.altTarget}";
+                if (bandage >= CurrentMain.target || (CurrentMain.altTarget > 0 && pill >= CurrentMain.altTarget)) CompleteMain(mm);
                 break;
             }
             case MainMissionType.WaterSupply:
             {
                 int water = CountItems(i => NameIs(i, "Water"));
-                MainDetail = $"{Mathf.Min(water, CurrentMain.target)}/{CurrentMain.target}";
-                if (water >= CurrentMain.target) CompleteMain();
+                mm.detail = $"{Mathf.Min(water, CurrentMain.target)}/{CurrentMain.target}";
+                if (water >= CurrentMain.target) CompleteMain(mm);
                 break;
             }
             case MainMissionType.FoodSupply:
             {
                 int canned = CountItems(i => NameIs(i, "CannedFood")), food = CountItems(i => i is ConsumableData c && c.foodAmount >= 15f);
-                MainDetail = $"통조림 {Mathf.Min(canned, CurrentMain.target)}/{CurrentMain.target} · 식량 {Mathf.Min(food, CurrentMain.altTarget)}/{CurrentMain.altTarget}";
-                if (canned >= CurrentMain.target || (CurrentMain.altTarget > 0 && food >= CurrentMain.altTarget)) CompleteMain();
+                mm.detail = $"통조림 {Mathf.Min(canned, CurrentMain.target)}/{CurrentMain.target} · 식량 {Mathf.Min(food, CurrentMain.altTarget)}/{CurrentMain.altTarget}";
+                if (canned >= CurrentMain.target || (CurrentMain.altTarget > 0 && food >= CurrentMain.altTarget)) CompleteMain(mm);
                 break;
             }
             case MainMissionType.Recon:
@@ -458,49 +503,50 @@ public class MissionManager : MonoBehaviour
                     if (reconVisited[i]) visited++;
                     else if (d.sqrMagnitude < best) { best = d.sqrMagnitude; nearest = i; }
                 }
-                MainProgress = visited;
-                guideTarget = nearest >= 0 ? reconFlags[nearest].position : (Vector3?)null;
-                if (reconFlags.Count > 0 && visited >= reconFlags.Count) CompleteMain();
+                mm.progress = visited;
+                mm.guideTarget = nearest >= 0 ? reconFlags[nearest].position : (Vector3?)null;
+                if (reconFlags.Count > 0 && visited >= reconFlags.Count) CompleteMain(mm);
                 break;
             }
             case MainMissionType.RadioSignal:
             {
-                if (guideTarget.HasValue)
+                if (mm.guideTarget.HasValue)
                 {
-                    Vector3 d = guideTarget.Value - me; d.y = 0f;
-                    if (d.sqrMagnitude <= radioSignalRadius * radioSignalRadius) radioSeconds += 0.25f;
+                    Vector3 d = mm.guideTarget.Value - me; d.y = 0f;
+                    if (d.sqrMagnitude <= radioSignalRadius * radioSignalRadius) mm.radioSeconds += 0.25f;
                 }
-                MainProgress = Mathf.FloorToInt(radioSeconds);
-                if (radioSeconds >= CurrentMain.target) CompleteMain();
+                mm.progress = Mathf.FloorToInt(mm.radioSeconds);
+                if (mm.radioSeconds >= CurrentMain.target) CompleteMain(mm);
                 break;
             }
         }
-        RefreshMainDetail();
+        RefreshMainDetail(mm);
     }
 
-    void RefreshMainDetail()
+    void RefreshMainDetail(MainMission mm)
     {
-        if (CurrentMain == null) return;
-        switch (CurrentMain.type)
+        var m = mm.data;
+        switch (m.type)
         {
-            case MainMissionType.ZombieHorde: MainDetail = $"{Mathf.Min(MainProgress, CurrentMain.target)}/{CurrentMain.target}"; break;
-            case MainMissionType.Recon: MainDetail = $"{MainProgress}/{Mathf.Max(reconFlags.Count, 1)}"; break;
-            case MainMissionType.RadioSignal: MainDetail = $"{Mathf.Min(MainProgress, CurrentMain.target)}/{CurrentMain.target}초"; break;
+            case MainMissionType.ZombieHorde: mm.detail = $"{Mathf.Min(mm.progress, m.target)}/{m.target}"; break;
+            case MainMissionType.Recon: mm.detail = $"{mm.progress}/{Mathf.Max(mm.reconFlags.Count, 1)}"; break;
+            case MainMissionType.RadioSignal: mm.detail = $"{Mathf.Min(mm.progress, m.target)}/{m.target}초"; break;
         }
     }
 
-    void CompleteMain()
+    void CompleteMain(MainMission mm)
     {
-        if (MainDone || Finished || CurrentMain == null) return;
-        MainDone = true;
-        MainProgress = CurrentMain.target;
+        if (mm == null || mm.done || Finished) return;
+        mm.done = true;
+        mm.progress = mm.data.target;
         CompletedMainMissions++;
         totalProgress += MainStep;
-        guideTarget = null;
-        if (CurrentMain.type == MainMissionType.Escape) return; // 탈출은 Escape()에서 엔딩
+        mm.guideTarget = null;
+        if (mm.Type == MainMissionType.PowerRestore) PowerRestored = true; // 실내등 밝아짐
+        if (mm.IsEscape) return; // 탈출은 Escape()에서 엔딩
         PlaySound(l => l.missionComplete);
-        Hud?.ShowToast(MissionHUD.ToastKind.MainComplete, "메인 미션 완료", CurrentMain.title);
-        if (debugLog) Debug.Log($"[MissionManager] 메인 미션 완료: {CurrentMain.title} (전체 진행률 {TotalProgress:F1}%)");
+        Hud?.ShowToast(MissionHUD.ToastKind.MainComplete, "메인 미션 완료", mm.Title);
+        if (debugLog) Debug.Log($"[MissionManager] 메인 미션 완료: {mm.Title} ({mm.day}일차 미션, 전체 진행률 {TotalProgress:F1}%)");
     }
 
     public void CollectKeyCard(KeyCardPickup card)
@@ -508,8 +554,9 @@ public class MissionManager : MonoBehaviour
         if (Finished) return;
         keyCardsInWorld.Remove(card);
         if (debugLog) Debug.Log($"[MissionManager] 열쇠 카드 획득 ({card.buildingLabel})");
-        if (CurrentMain != null && (CurrentMain.type == MainMissionType.KeyCardA || CurrentMain.type == MainMissionType.KeyCardB || CurrentMain.type == MainMissionType.KeyCardC))
-            CompleteMain();
+        // 이 카드를 놓은 미션 완료 (어제 미션 카드여도 인정)
+        var owner = activeMains.Find(m => m.keyCards.Contains(card));
+        if (owner != null) { owner.keyCards.Remove(card); CompleteMain(owner); }
     }
 
     /// <summary>인벤토리 + 핫바(소비 아이템 칸)의 개수 합</summary>
@@ -601,7 +648,7 @@ public class MissionManager : MonoBehaviour
     public void Escape(bool showEnding = true)
     {
         if (Finished) return;
-        CompleteMain();
+        CompleteMain(activeMains.Find(m => m.IsEscape && !m.done));
         Finished = true;
         Escaped = true;
         if (debugLog) Debug.Log("[MissionManager] 탈출 성공!");
@@ -653,8 +700,12 @@ public class MissionManager : MonoBehaviour
     /// <summary>HUD 방향 화살표 대상 (열쇠 카드/아이템 수집은 직접 찾아야 해서 없음)</summary>
     public bool TryGetGuideTarget(out Vector3 pos)
     {
-        pos = guideTarget ?? Vector3.zero;
-        return guideTarget.HasValue && !MainDone && !Finished;
+        // 표시 순서(탈출 → 오늘 → 이전)에서 목표 지점이 있는 첫 미션
+        pos = Vector3.zero;
+        if (Finished) return false;
+        foreach (var mm in MainsForHud())
+            if (!mm.done && mm.guideTarget.HasValue) { pos = mm.guideTarget.Value; return true; }
+        return false;
     }
 
     // ── 미니맵 핀 (MinimapMissionPins가 매 프레임 읽음) ──
@@ -679,21 +730,22 @@ public class MissionManager : MonoBehaviour
     {
         result.Clear();
         if (Finished) return;
-        if (CurrentMain != null && !MainDone)
+        foreach (var mm in activeMains) // 진행 중인 메인 미션 전부 (2026-11-12: 어제 못 끝낸 미션 포함)
         {
-            switch (CurrentMain.type)
+            if (mm.done) continue;
+            switch (mm.Type)
             {
                 case MainMissionType.Recon: // 정찰: 안 간 깃발 전부 (화살표는 가장 가까운 것만 가리켰음)
-                    for (int i = 0; i < reconFlags.Count; i++)
-                        if (reconFlags[i] != null && !reconVisited[i]) result.Add(new MapPin { pos = reconFlags[i].position, main = true });
+                    for (int i = 0; i < mm.reconFlags.Count; i++)
+                        if (mm.reconFlags[i] != null && !mm.reconVisited[i]) result.Add(new MapPin { pos = mm.reconFlags[i].position, main = true });
                     break;
                 case MainMissionType.KeyCardA:
                 case MainMissionType.KeyCardB:
                 case MainMissionType.KeyCardC: // 열쇠 카드: 화살표는 없었지만 미니맵에는 대략적 위치만 (±30m)
-                    foreach (var k in keyCardsInWorld) if (k != null) result.Add(new MapPin { pos = k.transform.position, main = true });
+                    foreach (var k in mm.keyCards) if (k != null) result.Add(new MapPin { pos = k.transform.position, main = true });
                     break;
                 default:
-                    if (guideTarget.HasValue) result.Add(new MapPin { pos = guideTarget.Value, main = true });
+                    if (mm.guideTarget.HasValue) result.Add(new MapPin { pos = mm.guideTarget.Value, main = true });
                     break;
             }
         }
@@ -720,8 +772,15 @@ public class MissionManager : MonoBehaviour
 
     void AssignSubMissions(int day)
     {
-        foreach (var s in subMissions) s.OnDiscovered -= OnSubDiscovered;
-        subMissions.Clear();
+        // (이전) 매일 목록을 비우고 새로 뽑음 → 2026-11-12: 발견했지만 못 끝낸 서브는 유지 (리셋 X).
+        // 발견 전 서브(HUD에 안 보였던 것)와 완료한 서브만 정리
+        for (int i = subMissions.Count - 1; i >= 0; i--)
+        {
+            var old = subMissions[i];
+            if (old.Discovered && !old.Rewarded) continue;
+            old.OnDiscovered -= OnSubDiscovered;
+            subMissions.RemoveAt(i);
+        }
 
         var pool = new List<SubMissionData>(Resources.LoadAll<SubMissionData>("Missions/Sub"));
         if (pool.Count == 0) pool = MissionDefaults.Sub();
@@ -730,6 +789,7 @@ public class MissionManager : MonoBehaviour
                          || (d.trigger == SubMissionTrigger.RainWeather && WeatherManager.Current != WeatherManager.Weather.Rain)
                          || (d.trigger == SubMissionTrigger.NearPlace && !MissionPlaces.TryGet(PlaceOf(d.type), out _)));
 
+        pool.RemoveAll(d => subMissions.Exists(s => s.Type == d.type)); // 이어서 진행 중인 것과 같은 종류는 빼기
         int count = Mathf.Clamp(Random.Range(minDailySubMissions, maxDailySubMissions + 1), 0, MaxDailySubMissions);
         var picked = new List<SubMissionData>();
         for (int attempt = 0; attempt < 20; attempt++)
@@ -746,7 +806,7 @@ public class MissionManager : MonoBehaviour
         }
         foreach (var d in picked)
         {
-            var s = new SubMission(d);
+            var s = new SubMission(d) { progressStep = DailySubShare / Mathf.Max(1, picked.Count) }; // 그날 할당 수로 하루 몫을 나눔
             s.OnDiscovered += OnSubDiscovered;
             subMissions.Add(s);
         }
@@ -832,7 +892,7 @@ public class MissionManager : MonoBehaviour
         if (!s.Done) return;
         s.Rewarded = true;
         CompletedSubMissions++;
-        totalProgress += SubStep;
+        totalProgress += s.progressStep; // (이전) SubStep
         GiveReward(s);
         Hud?.ShowToast(MissionHUD.ToastKind.SubComplete, "서브 미션 완료", $"{s.title} · 보상 {s.RewardText}");
     }
@@ -851,13 +911,15 @@ public class MissionManager : MonoBehaviour
         if (DayNightCycle.Instance != null && DayNightCycle.Instance.IsNight) AdvanceType(SubMissionType.NightKills);
         if (WeatherManager.Current == WeatherManager.Weather.Rain) AdvanceType(SubMissionType.RainKills);
 
-        // 메인: 좀비 떼 지역 안에서 처치
-        if (CurrentMain != null && CurrentMain.type == MainMissionType.ZombieHorde && !MainDone && z != null
-            && FlatDistSq(z.transform.position, hordeCenter) <= hordeRadius * hordeRadius)
+        // 메인: 좀비 떼 지역 안에서 처치 (진행 중인 좀비 떼 미션 전부)
+        if (z == null) return;
+        foreach (var mm in activeMains.ToArray())
         {
-            MainProgress++;
-            RefreshMainDetail();
-            if (MainProgress >= CurrentMain.target) CompleteMain();
+            if (mm.done || mm.Type != MainMissionType.ZombieHorde) continue;
+            if (FlatDistSq(z.transform.position, mm.hordeCenter) > hordeRadius * hordeRadius) continue;
+            mm.progress++;
+            RefreshMainDetail(mm);
+            if (mm.progress >= mm.data.target) CompleteMain(mm);
         }
     }
 
