@@ -7,8 +7,9 @@ using UnityEngine;
 ///   1. StencilGhost - 플레이어가 보이는 곳에 스텐실=1 마킹 (마스크 역할)
 ///   2. XRayGhost    - 가려졌을 때만 텍스처 표시 (스텐실≠1 영역에만)
 /// → 자기 자신(몸/총)에 의한 가림은 X-Ray 안 뜸, 외부(벽/나무)에 가려질 때만 뜸.
-/// 고스트는 건물 안(입구로 들어가 BuildingInterior.Current가 있을 때)에서만 켬.
-/// 야외에서는 꺼서 원래 불투명한 몸 그대로 보임 (나무·공원 언덕에 가려질 때 몸이 반투명해 보이던 문제)
+/// 고스트는 실제로 가려진 픽셀에만 그려지므로, 안 가려진 몸은 항상 불투명.
+/// (2026-11-11) 공원에서 몸이 반투명해 보이던 건 공원 언덕 속을 걸어서였음 → 공원 콜라이더로 해결.
+///   한때 X-Ray를 실내 전용(indoorOnly)으로 바꿨으나, 야외에서 나무·건물 뒤에 서면 캐릭터가 아예 안 보여서 기본은 다시 항상 켬.
 /// </summary>
 public class PlayerXRay : MonoBehaviour
 {
@@ -17,6 +18,10 @@ public class PlayerXRay : MonoBehaviour
 
     [Header("가려졌을 때 투명도")]
     [Range(0f, 1f)] public float occludedAlpha = 0.85f;
+
+    [Header("실내에서만 X-Ray (끄면 야외에서도 가려질 때 보임)")]
+    [Tooltip("켜면 건물 안(BuildingInterior.Current)에서만 X-Ray. 야외에서 나무·건물 뒤에 서면 캐릭터가 안 보이게 됨")]
+    public bool indoorOnly = false;
 
     [Header("새 렌더러 감지 주기 (초)")]
     public float refreshInterval = 0.3f;
@@ -50,8 +55,8 @@ public class PlayerXRay : MonoBehaviour
             nextRefreshTime = Time.time + refreshInterval;
             RefreshGhosts();
         }
-        // 실내에서만 X-Ray. 건물에 들어가고 나오는 그 프레임에 바로 바뀜
-        SetGhostsVisible(BuildingInterior.Current != null);
+        // indoorOnly면 실내에서만 X-Ray (건물에 들어가고 나오는 그 프레임에 바로 바뀜), 아니면 항상 (가려진 곳에만 그려짐)
+        SetGhostsVisible(!indoorOnly || BuildingInterior.Current != null);
     }
 
     void SetGhostsVisible(bool on)
