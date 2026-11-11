@@ -46,7 +46,7 @@ public static class BuildingColliderChecker
     const float WalkHeight = 0.4f;       // 걸을 때 몸 중심
     // 건물이 아닌 큰 것 (지형·바닥·배경숲·물·도로·구역 표시 등) - 이름에 들어 있으면 제외
     static readonly string[] SkipRootNames = { "ground", "terrain", "landskape", "road", "zone", "forest", "waterfall", "sky", "player", "canvas", "navmesh", "camera", "light", "decal", "debris", "fog", "rain", "mapguide" };
-    // 건물이 아닌 큰 모델 (에셋 경로로 판단 - 씬 이름이 "scene"처럼 의미 없는 경우): 공원(나무·벤치·잔디 바닥)은 메시 콜라이더를 씌우면 잔디에 걸려서 제외
+    // 건물이 아닌 큰 모델 (에셋 경로로 판단 - 씬 이름이 "scene"처럼 의미 없는 경우): 공원은 건물 점검에서 빼고 "4. Make Park Walkable"이 따로 처리
     static readonly string[] SkipAssetPaths = { "city_park", "forest", "landscape" };
 
     // ── 1) 점검 ───────────────────────────────────
@@ -360,6 +360,41 @@ public static class BuildingColliderChecker
         if (added > 0 || split > 0) { EditorSceneManager.MarkSceneDirty(scene); EditorSceneManager.SaveScene(scene); AssetDatabase.SaveAssets(); }
         Debug.Log($"[BuildingColliderChecker] 콜라이더 없던 구조물 {roots.Count}개에 MeshCollider {added}개 추가 (작은 장식 {skipped}개 생략), 큰 삼각형 쪼갠 충돌 메시 {split}개, 씬 저장\n{sb}" +
                   "\n→ 좀비 길도 막히게: Tools → Map → Rebake NavMesh With Building Walls");
+    }
+
+    // ── 4) 공원 바닥 ───────────────────────────────
+    // 공원(city_park_at_sunset)은 언덕·잔디 흙 메시가 실제 지면(Ground, Y=15)보다 최대 5m 높이 떠 있는데 콜라이더가 없어서
+    // 플레이어·좀비가 언덕 속을 걸었음 → 좀비가 흙에 묻혀 안 보이고, 플레이어는 가려졌다고 X-Ray(반투명)로 보임.
+    // 공원 메시에 MeshCollider를 붙여 그 위를 걷게 함 (물만 제외). 붙인 뒤 NavMesh를 다시 구워야 좀비도 언덕 위로 다님
+    [MenuItem("Tools/Map/Building Colliders/4. Make Park Walkable")]
+    public static void MakeParkWalkable()
+    {
+        if (EditorApplication.isPlaying) { Debug.LogError("[BuildingColliderChecker] Play 중에는 수정할 수 없어요"); return; }
+        int added = 0, split = 0, parks = 0;
+        foreach (var go in EditorSceneManager.GetActiveScene().GetRootGameObjects())
+        {
+            var src = PrefabUtility.GetCorrespondingObjectFromOriginalSource(go);
+            string asset = src != null ? AssetDatabase.GetAssetPath(src).ToLowerInvariant() : "";
+            if (!asset.Contains("city_park")) continue;
+            parks++;
+            foreach (var mf in go.GetComponentsInChildren<MeshFilter>(true))
+            {
+                if (mf.sharedMesh == null || mf.GetComponent<Collider>() != null) continue;
+                if (mf.name.ToLowerInvariant().Contains("acqua")) continue; // 분수 물 표면은 빠지는 게 자연스러움
+                Mesh render = mf.sharedMesh;
+                mf.sharedMesh = null; // AddComponent가 바로 구우면서 큰 삼각형 경고가 나지 않게 (Fix와 같은 방식)
+                var mc = Undo.AddComponent<MeshCollider>(mf.gameObject);
+                mf.sharedMesh = render;
+                mc.sharedMesh = render.isReadable && MaxEdge(render) > 490f ? SplitCopy(render, go.name + "_park") : render;
+                if (mc.sharedMesh != render) split++;
+                added++;
+            }
+            EditorUtility.SetDirty(go);
+        }
+        var scene = EditorSceneManager.GetActiveScene();
+        if (added > 0) { EditorSceneManager.MarkSceneDirty(scene); EditorSceneManager.SaveScene(scene); AssetDatabase.SaveAssets(); }
+        Debug.Log($"[BuildingColliderChecker] 공원 {parks}곳에 MeshCollider {added}개 추가 (큰 삼각형 쪼갠 메시 {split}개), 씬 저장" +
+                  "\n→ 좀비도 공원 언덕 위로 다니게: Tools → Map → Rebake NavMesh With Building Walls");
     }
 
     static float MaxEdge(Mesh m)
