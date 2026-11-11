@@ -16,6 +16,10 @@ public class BuildingInterior : MonoBehaviour
     [Tooltip("입구 제외 반경 (m): 바깥 좀비는 이 안을 목적지로 삼지 않고, 이 안에서 서성이면 5m 밖으로 물러남 (ZombieRules)")]
     public float exclusionRadius = 3f;
 
+    [Header("루팅 (LootWorldSpawner)")]
+    [Tooltip("게임 시작 시 이 건물 실내에 상자 1개를 반드시 놓음 (등급 일반 70% / 희귀 25% / 전설 5%)")]
+    public bool mustHaveCrate = true;
+
     [Header("1층 높이 (건물 바닥에서 이 높이 위는 전부 잘라내서 1층만 보이게 함)")]
     public float groundFloorHeight = 5f;
 

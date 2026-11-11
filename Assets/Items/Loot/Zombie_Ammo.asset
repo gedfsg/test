@@ -20,10 +20,10 @@ MonoBehaviour:
     minAmount: 5
     maxAmount: 10
   - item: {fileID: 11400000, guid: d7d64191447ce2049a3bbb05cb355656, type: 2}
-    weight: 1
-    minAmount: 5
-    maxAmount: 15
+    weight: 0.5
+    minAmount: 3
+    maxAmount: 9
   - item: {fileID: 11400000, guid: b5d195c9fff6c404a9210a71ade6433b, type: 2}
-    weight: 1
-    minAmount: 2
-    maxAmount: 4
+    weight: 0.5
+    minAmount: 1
+    maxAmount: 3
