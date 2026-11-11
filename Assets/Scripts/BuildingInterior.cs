@@ -302,7 +302,9 @@ public class BuildingInterior : MonoBehaviour
 
     bool playerInTrigger;      // 트리거 상자 안 (아직 실내가 아닐 수 있음)
     bool playerInside;         // 입구로 들어와서 실내 뷰가 켜진 상태
-    struct DoorGate { public Vector3 center, outDir, lat; public float halfWidth; }
+    struct DoorGate { public Vector3 center, outDir, lat; public float halfWidth, reach; }
+    bool doorPassed;           // 문 구멍을 안쪽으로 지났고 아직 문 앞으로 다시 나가지 않음
+    Transform gatePlayer;
     System.Collections.Generic.List<DoorGate> doorGates;
     Transform wallRoot; // 문 있는 벽을 찾은 곳 (보통 이 건물, 벽이 형제에 있으면 부모)
 
@@ -326,14 +328,49 @@ public class BuildingInterior : MonoBehaviour
     {
         if (doorGates == null) BuildDoorGates();
         if (doorGates.Count == 0) return true; // 문 정보가 없는 건물: 예전 방식
+        if (doorPassed || InDoorZone(pos, out _)) return true;
+        return FullyEnclosed(pos + Vector3.up * WallProbeHeight);
+    }
+
+    // 문 구멍 통로: 문 폭(+여유) 안 + 문턱 바로 바깥 ~ 안쪽 reach(문에서 실내 트리거까지 + 1m, 최소 3m)
+    // behindFront = 통로 폭 안에서 문 앞(바깥)으로 나가 있음
+    bool InDoorZone(Vector3 pos, out bool behindFront)
+    {
+        behindFront = false;
         foreach (var g in doorGates)
         {
             Vector3 rel = pos - g.center;
             float along = Vector3.Dot(rel, g.lat);
             float depth = -Vector3.Dot(rel, g.outDir); // + = 문 안쪽
-            if (Mathf.Abs(along) <= g.halfWidth + DoorSideMargin && depth >= -DoorDepthOut && depth <= DoorDepthIn) return true;
+            if (Mathf.Abs(along) > g.halfWidth + DoorSideMargin) continue;
+            if (depth >= -DoorDepthOut && depth <= g.reach) return true;
+            if (depth < -DoorDepthOut) behindFront = true;
         }
-        return FullyEnclosed(pos + Vector3.up * WallProbeHeight);
+        return false;
+    }
+
+    // 넓은 현관·로비가 있는 건물은 실내 트리거가 문에서 3.5~9m 안쪽부터 시작함 (교회·경찰서 등 6곳, 실제 걷기 점검)
+    // → 문을 지나면 표시를 남겨 두고, 표시가 있는 채로 트리거에 들어가면 실내. 문 앞으로 다시 나가면 표시 지움
+    void Update()
+    {
+        if (playerInside || doorGates == null && !NearAnyDoorCheap()) return;
+        if (doorGates == null) BuildDoorGates();
+        if (doorGates.Count == 0) return;
+        if (gatePlayer == null) { var p = GameObject.FindWithTag(playerTag); if (p == null) return; gatePlayer = p.transform; }
+        Vector3 pos = gatePlayer.position;
+        bool inZone = InDoorZone(pos, out bool outsideFront);
+        if (inZone) doorPassed = true;
+        else if (outsideFront) doorPassed = false;
+    }
+
+    // 문 정보를 아직 안 만든 건물: 플레이어가 트리거 근처(30m)에 오기 전엔 아무것도 안 함
+    bool NearAnyDoorCheap()
+    {
+        if (gatePlayer == null) { var p = GameObject.FindWithTag(playerTag); if (p == null) return false; gatePlayer = p.transform; }
+        var t = FindTriggerCollider();
+        if (t == null) return false;
+        Vector3 c = t.bounds.ClosestPoint(gatePlayer.position);
+        return (c - gatePlayer.position).sqrMagnitude < 30f * 30f;
     }
 
     // 문을 안 지났어도 실내로 칠 곳: 8방향 전부 가까이(30m)에 이 건물 벽이 있음 (실내에서 시작·순간이동).
@@ -381,7 +418,14 @@ public class BuildingInterior : MonoBehaviour
                 Vector3 corner = w.doorSlotCenter + new Vector3((i & 1) == 0 ? -e.x : e.x, (i & 2) == 0 ? -e.y : e.y, (i & 4) == 0 ? -e.z : e.z);
                 half = Mathf.Max(half, Mathf.Abs(Vector3.Dot(w.transform.TransformPoint(corner) - c, lat)));
             }
-            doorGates.Add(new DoorGate { center = c, outDir = outDir, lat = lat, halfWidth = half });
+            // 문에서 안쪽으로 실내 트리거가 시작되는 거리 (+1m). 못 찾으면 3m
+            float reach = DoorDepthIn;
+            for (float d = 0f; d <= 20f; d += 0.5f)
+            {
+                Vector3 p = c - outDir * d; p.y = trig.bounds.min.y + 0.6f;
+                if (trig.ClosestPoint(p) == p) { reach = Mathf.Max(DoorDepthIn, d + 1f); break; }
+            }
+            doorGates.Add(new DoorGate { center = c, outDir = outDir, lat = lat, halfWidth = half, reach = reach });
         }
     }
 
@@ -403,7 +447,8 @@ public class BuildingInterior : MonoBehaviour
     {
         if (!other.CompareTag(playerTag)) return;
         playerInTrigger = false;
-        if (!playerInside) return; // 측면·후면에서 트리거만 스치고 지나감 → 실내 뷰를 켠 적 없음
+        if (!playerInside) return;
+        doorPassed = false; // 나갈 때 문을 지나며 다시 켜질 수 있음 → 문 앞으로 나가면 Update가 지움 // 측면·후면에서 트리거만 스치고 지나감 → 실내 뷰를 켠 적 없음
         playerInside = false;
         SetCut(false);
         occupied.Remove(this);
