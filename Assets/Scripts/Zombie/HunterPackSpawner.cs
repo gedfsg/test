@@ -129,7 +129,8 @@ public class HunterPackSpawner : MonoBehaviour
     [Tooltip("몸 크기 배율. 공격 사거리도 같이 늘어난다 (팔이 길어지니까)")]
     [Range(1f, 1.6f)] public float hunterScale = 1.2f;
     [Tooltip("체력 배율 (프로필 체력 × 이 값)")]
-    public float healthMultiplier = 2.5f;
+    // (이전) 2.5 = 체력 125 → 2026-11-12 처치가 너무 어려워서 70%로 (1.75 = 체력 87.5: AR-15 5발, 샷건 2~3발). 돌진 공격력은 그대로
+    public float healthMultiplier = 1.75f;
     [Tooltip("공격력 배율")]
     public float damageMultiplier = 1.5f;
     [Tooltip("맞았을 때 멈칫·휘청하는 정도 배율 —— 엘리트는 덜 흔들린다")]
@@ -508,6 +509,7 @@ public class HunterPackSpawner : MonoBehaviour
                     Vector3 cand = player.position + Quaternion.Euler(0f, ang, 0f) * Vector3.forward * dist;
 
                     if (!NavMesh.SamplePosition(cand, out NavMeshHit hit, 4f, NavMesh.AllAreas)) continue;
+                    if (WaterZone.IsUnderwater(hit.position)) continue; // 다리 아래 물속 제외 (2026-11-12)
                     if (TooClose(hit.position, result)) continue;
                     if (!NavMesh.CalculatePath(hit.position, player.position, NavMesh.AllAreas, path) ||
                         path.status != NavMeshPathStatus.PathComplete) continue;
@@ -559,6 +561,7 @@ public class HunterPackSpawner : MonoBehaviour
                 float dist = Random.Range(minDistance, maxDistance);
                 Vector3 cand = player.position + Quaternion.Euler(0f, ang, 0f) * Vector3.forward * dist;
                 if (!NavMesh.SamplePosition(cand, out NavMeshHit hit, 4f, NavMesh.AllAreas)) continue;
+                if (WaterZone.IsUnderwater(hit.position)) continue; // 다리 아래 물속 제외 (2026-11-12)
                 if (TooClose(hit.position, keep)) continue;
                 if (!NavMesh.CalculatePath(hit.position, player.position, NavMesh.AllAreas, path) ||
                     path.status != NavMeshPathStatus.PathComplete) continue;

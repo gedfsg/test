@@ -14,10 +14,12 @@ public class DayNightCycle : MonoBehaviour
 
     [Header("시간 설정 (초) - 실제 밸런스는 하루 15분(낮8+노을1+밤5+새벽1).")]
     [Tooltip("지금은 테스트하기 쉽게 하루 2분(낮1+노을15초+밤30초+새벽15초)으로 맞춰둠. 실제 플레이용 15분으로 쓰려면 480/60/300/60으로 바꿀 것.")]
-    public float dayDuration   = 150f;  // 하루 300초(5분): 낮 150 + 노을 37.5 + 밤 75 + 새벽 37.5 (기존 120초와 같은 비율)
-    public float duskDuration  = 37.5f;
-    public float nightDuration = 75f;
-    public float dawnDuration  = 37.5f;
+    // (이전) 하루 300초(5분): 낮 150 + 노을 37.5 + 밤 75 + 새벽 37.5
+    // 2026-11-12: 5분은 너무 짧음 → 하루 480초(8분): 낮 240 + 노을 60 + 밤 120 + 새벽 60 (같은 비율). 설정 화면에서 바꿀 수 있게 public 유지
+    public float dayDuration   = 240f;
+    public float duskDuration  = 60f;
+    public float nightDuration = 120f;
+    public float dawnDuration  = 60f;
     public int   totalDays     = 7;
 
     [Header("라이팅")]
@@ -41,6 +43,25 @@ public class DayNightCycle : MonoBehaviour
 
     [Tooltip("날씨(흐림/비)가 조명 강도에 곱하는 값 (WeatherManager가 설정)")]
     [HideInInspector] public float weatherLightMultiplier = 1f;
+
+    [Header("실내 조명 (2026-11-12) - 건물 안에서는 바깥 낮밤과 상관없이 일정한 실내등 밝기")]
+    [Tooltip("실내(BuildingInterior.Current)에 있을 때 해(Directional) 밝기 - 낮밤과 무관하게 고정 (그림자 방향만 유지)")]
+    public float indoorSunIntensity = 0.35f;
+    [Tooltip("실내 환경광 (낮)")]
+    public Color indoorAmbientDay = new Color(0.42f, 0.41f, 0.38f);
+    [Tooltip("실내 환경광 (밤, 전력 복구 전) - 살짝 어둡게")]
+    public Color indoorAmbientNight = new Color(0.27f, 0.27f, 0.26f);
+    [Tooltip("실내 환경광 (밤, 전력 복구 미션 완료 후) - 실내등이 들어와 낮에 가깝게")]
+    public Color indoorAmbientNightPowered = new Color(0.36f, 0.35f, 0.32f);
+    [Tooltip("플레이어 머리 위 실내등(Point Light) 밝기 (낮 / 밤 / 밤·전력 복구 후)")]
+    public float indoorLampDay = 0.9f, indoorLampNight = 0.6f, indoorLampNightPowered = 1.0f;
+    public float indoorLampRange = 14f;
+    public Color indoorLampColor = new Color(1f, 0.9f, 0.75f);
+    [Tooltip("들어가고 나올 때 조명이 바뀌는 시간(초)")]
+    public float indoorBlendSeconds = 0.6f;
+    float indoor01;
+    Light indoorLamp;
+    Transform indoorLampTarget;
 
     [Header("안개 (실내에 있는 동안은 BuildingInterior가 안개를 따로 관리하니 건드리지 않음)")]
     public bool  controlFog = true;
@@ -247,6 +268,57 @@ public class DayNightCycle : MonoBehaviour
             RenderSettings.ambientLight = Color.Lerp(nightAmbient, dayAmbient, day01) * Mathf.Lerp(1f, weatherLightMultiplier, day01);
         }
         directionalLight.transform.rotation = Quaternion.Euler(targetAngle, -30f, 0f);
+
+        ApplyIndoorLighting();
+    }
+
+    /// <summary>
+    /// 실내 조명 고정 (2026-11-12): 플레이어가 건물 안이면 해·환경광을 바깥 낮밤과 무관한 실내 값으로 섞고,
+    /// 머리 위 실내등(Point Light)을 켬. 밤에는 살짝 어둡게, 전력 복구 미션 완료 후엔 밤에도 밝게.
+    /// ApplyLighting 끝에서 매 프레임 호출 (바깥 값을 먼저 계산한 뒤 덮어씀)
+    /// </summary>
+    void ApplyIndoorLighting()
+    {
+        var current = BuildingInterior.Current;
+        float blend = indoorBlendSeconds > 0f ? Time.deltaTime / indoorBlendSeconds : 1f;
+        indoor01 = Mathf.MoveTowards(indoor01, current != null ? 1f : 0f, blend);
+
+        bool night = CurrentPhase == Phase.Night || CurrentPhase == Phase.Dusk && GetPhaseProgress() > 0.5f || CurrentPhase == Phase.Dawn && GetPhaseProgress() < 0.5f;
+        bool powered = MissionManager.PowerRestored;
+
+        if (indoor01 > 0f)
+        {
+            directionalLight.intensity = Mathf.Lerp(directionalLight.intensity, indoorSunIntensity, indoor01);
+            directionalLight.color = Color.Lerp(directionalLight.color, new Color(1f, 0.97f, 0.92f), indoor01);
+            if (controlAmbient)
+            {
+                Color inside = night ? (powered ? indoorAmbientNightPowered : indoorAmbientNight) : indoorAmbientDay;
+                RenderSettings.ambientLight = Color.Lerp(RenderSettings.ambientLight, inside, indoor01);
+            }
+        }
+
+        // 실내등: 플레이어 머리 위 (천장 높이쯤), 실내에서만
+        if (indoorLamp == null && indoor01 > 0f)
+        {
+            var go = new GameObject("IndoorLamp");
+            indoorLamp = go.AddComponent<Light>();
+            indoorLamp.type = LightType.Point;
+            indoorLamp.shadows = LightShadows.None;
+            indoorLamp.renderMode = LightRenderMode.ForcePixel;
+        }
+        if (indoorLamp != null)
+        {
+            if (indoorLampTarget == null) { var p = GameObject.FindWithTag("Player"); if (p != null) indoorLampTarget = p.transform; }
+            var player = indoorLampTarget;
+            indoorLamp.enabled = indoor01 > 0.01f;
+            if (indoorLamp.enabled && player != null)
+            {
+                indoorLamp.transform.position = player.position + Vector3.up * 2.6f;
+                indoorLamp.range = indoorLampRange;
+                indoorLamp.color = indoorLampColor;
+                indoorLamp.intensity = (night ? (powered ? indoorLampNightPowered : indoorLampNight) : indoorLampDay) * indoor01;
+            }
+        }
     }
 
     // 실내에 있는 동안은 BuildingInterior가 안개를 좀보이드 스타일로 따로 관리하므로

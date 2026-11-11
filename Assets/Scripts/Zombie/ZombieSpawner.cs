@@ -661,11 +661,14 @@ public class ZombieSpawner : MonoBehaviour
     }
 
     private int doorRejected, screenRejected; // 디버그: 문 앞 / 화면 안이라 거부한 수
+    private int waterRejected;                // 디버그: 물속이라 거부한 수
 
     /// <summary>pos에 좀비 생성. 1층 바닥이 아니거나(위층/지붕) 문 앞이거나 화면 안이거나 플레이어가 못 가는 곳이면 생성 안 하고 false</summary>
     bool Spawn(Vector3 pos, List<GameObject> list)
     {
         if (!IsGroundFloor(pos)) return false;
+        // 강·다리 아래 물속 제외 (2026-11-12): 강 바닥(y≈0)에도 NavMesh가 있고 지형 높이도 강 바닥이라 IsGroundFloor로는 못 걸렀음
+        if (WaterZone.IsUnderwater(pos)) { waterRejected++; return false; }
         if (IsNearDoor(pos))
         {
             doorRejected++;
@@ -717,6 +720,7 @@ public class ZombieSpawner : MonoBehaviour
             candidate.y = GroundY(candidate) + 0.5f;
             if (!NavMesh.SamplePosition(candidate, out NavMeshHit hit, 4f, NavMesh.AllAreas)) continue;
             if (Mathf.Abs(hit.position.y - center.y) > 6f || !IsGroundFloor(hit.position)) continue; // 지붕·나무 꼭대기 NavMesh 제외
+            if (WaterZone.IsUnderwater(hit.position)) continue; // 강·물속 제외 (2026-11-12)
             // 헬리패드까지 걸어올 수 있는 곳만
             if (centerHit.hit && (!NavMesh.CalculatePath(hit.position, centerHit.position, NavMesh.AllAreas, path) || path.status != NavMeshPathStatus.PathComplete)) continue;
 
