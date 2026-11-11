@@ -62,11 +62,8 @@ public class SettingsPanel : MonoBehaviour
         if (screenShake != null) screenShake.onValueChanged.AddListener(v => { if (!filling) working.screenShake = v; });
         if (vsync != null) vsync.onValueChanged.AddListener(v => { if (!filling) working.vsync = v; });
 
-        SetOptions(screenMode, SettingsManager.ScreenModeNames);
-        SetOptions(quality, QualityOptions());
-        SetOptions(shadows, SettingsManager.ShadowNames);
         SetOptions(language, SettingsManager.LanguageNames);
-        SetOptions(colorBlind, SettingsManager.ColorBlindNames);
+        SetTranslatedOptions();
         Listen(screenMode, v => working.screenMode = v);
         Listen(quality, v => working.quality = v);
         Listen(shadows, v => working.shadows = v);
@@ -77,6 +74,42 @@ public class SettingsPanel : MonoBehaviour
         if (backButton != null) backButton.onClick.AddListener(Close);
         if (defaultsButton != null) defaultsButton.onClick.AddListener(RestoreDefaults);
         if (applyButton != null) applyButton.onClick.AddListener(ApplyNow);
+
+        // 언어: 패널 글자 등록 + 적용으로 언어가 바뀌면 드롭다운 목록도 다시 채움
+        Localization.Register(gameObject);
+        Localization.Changed += OnLanguageChanged;
+        // 영어 "Restore Defaults"는 버튼 폭에 꽉 차서 넘치면 글자를 줄임
+        var defLabel = defaultsButton != null ? defaultsButton.GetComponent<UIButton>()?.label : null;
+        if (defLabel != null)
+        {
+            defLabel.margin = new Vector4(10f, 0f, 10f, 0f);
+            defLabel.fontSizeMax = defLabel.fontSize;
+            defLabel.fontSizeMin = 16f;
+            defLabel.enableAutoSizing = true;
+        }
+    }
+
+    void OnDestroy() => Localization.Changed -= OnLanguageChanged;
+
+    void SetTranslatedOptions()
+    {
+        SetOptions(screenMode, Translate(SettingsManager.ScreenModeNames));
+        SetOptions(quality, Translate(QualityOptions()));
+        SetOptions(shadows, Translate(SettingsManager.ShadowNames));
+        SetOptions(colorBlind, Translate(SettingsManager.ColorBlindNames));
+    }
+
+    static string[] Translate(string[] names)
+    {
+        var r = new string[names.Length];
+        for (int i = 0; i < names.Length; i++) r[i] = Localization.T(names[i]);
+        return r;
+    }
+
+    void OnLanguageChanged()
+    {
+        SetTranslatedOptions();
+        if (IsOpen && working != null) Fill(); // 선택값 다시 표시
     }
 
     // ── 열기 / 닫기 ─────────────────────────────────
@@ -110,6 +143,45 @@ public class SettingsPanel : MonoBehaviour
     {
         if (SettingsManager.Instance != null) SettingsManager.Instance.Apply(working);
         working = working.Clone();
+        // 눌렀다는 표시: 잠깐 눌림 + "적용됨" (예전엔 소리만 나서 안 눌리는 것처럼 보였음)
+        if (applyFeedback != null) StopCoroutine(applyFeedback);
+        applyFeedback = StartCoroutine(ApplyFeedback());
+    }
+
+    Coroutine applyFeedback;
+
+    System.Collections.IEnumerator ApplyFeedback()
+    {
+        var t = applyButton.transform;
+        var ub = applyButton.GetComponent<UIButton>();
+        var label = ub != null ? ub.label : null;
+        if (label != null) label.text = Localization.T("적용됨");
+        // 일시정지 중(timeScale 0)에도 움직이게 unscaled 시간
+        for (float e = 0f; e < 0.15f; e += Time.unscaledDeltaTime)
+        {
+            t.localScale = Vector3.one * Mathf.Lerp(0.92f, 1f, e / 0.15f);
+            yield return null;
+        }
+        t.localScale = Vector3.one;
+        yield return new WaitForSecondsRealtime(1.1f);
+        RestoreApplyLabel();
+        applyFeedback = null;
+    }
+
+    void RestoreApplyLabel()
+    {
+        applyButton.transform.localScale = Vector3.one;
+        var ub = applyButton.GetComponent<UIButton>();
+        if (ub == null || ub.label == null) return;
+        var lt = ub.label.GetComponent<LocalizedText>();
+        if (lt != null) lt.Refresh();
+        else ub.label.text = Localization.T("적용");
+    }
+
+    void OnDisable()
+    {
+        // 표시 중에 닫히면 코루틴이 멈추므로 글자를 바로 되돌림
+        if (applyFeedback != null) { applyFeedback = null; if (applyButton != null) RestoreApplyLabel(); }
     }
 
     // ── UI 채우기 ───────────────────────────────────

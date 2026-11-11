@@ -16,6 +16,7 @@ public class ControlsPanel : MonoBehaviour
 
     void Awake()
     {
+        Localization.Register(gameObject); // 메뉴 글자 언어 (설정 → 언어)
         if (backButton != null) backButton.onClick.AddListener(Close);
     }
 

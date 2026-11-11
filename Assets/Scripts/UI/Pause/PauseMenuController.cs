@@ -25,6 +25,7 @@ public class PauseMenuController : MonoBehaviour
 
     void Awake()
     {
+        Localization.Register(gameObject); // 메뉴 글자 언어 (설정 → 언어)
         if (resumeButton != null) resumeButton.onClick.AddListener(Close);
         if (settingsButton != null) settingsButton.onClick.AddListener(OpenSettings);
         if (controlsButton != null) controlsButton.onClick.AddListener(OpenControls);

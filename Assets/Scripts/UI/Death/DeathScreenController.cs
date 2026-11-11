@@ -39,6 +39,7 @@ public class DeathScreenController : MonoBehaviour
 
     void Awake()
     {
+        Localization.Register(gameObject); // 메뉴 글자 언어 (설정 → 언어)
         if (restartButton != null) restartButton.onClick.AddListener(MenuUI.RestartGame);
         if (mainMenuButton != null) mainMenuButton.onClick.AddListener(MenuUI.LoadMainMenu);
         if (backdrop != null) backdrop.gameObject.SetActive(false);
@@ -98,9 +99,9 @@ public class DeathScreenController : MonoBehaviour
         var s = GameStats.Instance;
         int day = s != null ? s.CurrentDay : 1;
         int total = s != null ? s.TotalDays : 7;
-        if (dayValue != null) dayValue.text = $"{day}<size=55%><color=#C9CDD4> / {total}일</color></size>";
+        if (dayValue != null) dayValue.text = $"{day}<size=55%><color=#C9CDD4> / {total}{(Localization.IsEnglish ? " days" : "일")}</color></size>";
         if (timeValue != null) timeValue.text = GameStats.FormatTime(s != null ? s.PlayTime : 0f);
-        if (missionValue != null) missionValue.text = $"{(s != null ? s.CompletedMissions : 0)}<size=55%><color=#C9CDD4> 개</color></size>";
+        if (missionValue != null) missionValue.text = $"{(s != null ? s.CompletedMissions : 0)}<size=55%><color=#C9CDD4>{(Localization.IsEnglish ? "" : " 개")}</color></size>";
 
         if (dayDots == null) return;
         for (int i = 0; i < dayDots.Length; i++)

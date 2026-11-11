@@ -20,6 +20,7 @@ public class MainMenuController : MonoBehaviour
 
     void Awake()
     {
+        Localization.Register(gameObject); // 메뉴 글자 언어 (설정 → 언어)
         Time.timeScale = 1f;
         if (startButton != null) startButton.onClick.AddListener(MenuUI.StartGame);
         if (controlsButton != null) controlsButton.onClick.AddListener(OpenControls);

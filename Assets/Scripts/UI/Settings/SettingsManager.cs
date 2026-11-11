@@ -16,7 +16,7 @@ using UnityEngine.SceneManagement;
 ///   마우스 민감도 → 휠 줌 속도 (CameraZoom.WheelSensitivity) - 탑뷰라 조준은 커서 위치를 그대로 따라감
 ///   카메라 회전 → Q/E 회전 속도 (CameraRotate.SpeedMultiplier)
 ///   미니맵 크기 → 미니맵 패널 크기 / HUD 투명도 → HUD 캔버스 CanvasGroup.alpha (게임 씬이 뜰 때마다 다시 적용)
-///   화면 흔들림 / 언어 / 색맹 모드 → 값만 저장 (게임에 아직 해당 기능이 없음: ScreenShake / Language / ColorBlindMode로 조회)
+///   언어 → 메뉴 UI 글자 (Localization). 화면 흔들림 / 색맹 모드 → 값만 저장 (게임에 아직 해당 기능이 없음: ScreenShake / ColorBlindMode로 조회)
 /// </summary>
 public class SettingsManager : MonoBehaviour
 {
@@ -38,7 +38,7 @@ public class SettingsManager : MonoBehaviour
         public bool vsync = true;
         public int shadows = 3;  // 0 끄기 / 1 낮음 / 2 중간 / 3 높음 / 4 최고
         // 접근성
-        public int language;     // 0 한국어
+        public int language;     // 0 한국어 / 1 English (메뉴 UI만, Localization)
         public float minimapSize = 100f; // 50~150 %
         public float hudOpacity = 100f;  // 20~100 %
         public int colorBlind;   // 0 끄기 / 1 적색맹 / 2 녹색맹 / 3 청색맹
@@ -56,7 +56,7 @@ public class SettingsManager : MonoBehaviour
     public static readonly string[] ScreenModeNames = { "전체화면", "테두리 없는 창", "창 모드" };
     public static readonly string[] QualityNames = { "매우 낮음", "낮음", "중간", "높음", "매우 높음", "최고" };
     public static readonly string[] ShadowNames = { "끄기", "낮음", "중간", "높음", "최고" };
-    public static readonly string[] LanguageNames = { "한국어" };
+    public static readonly string[] LanguageNames = { "한국어", "English" }; // 각 언어 이름은 번역하지 않음
     public static readonly string[] ColorBlindNames = { "끄기", "적색맹", "녹색맹", "청색맹" };
 
     static int projectQuality = -1;   // 프로젝트 기본 품질 레벨 (처음 실행 기본값)
@@ -144,6 +144,7 @@ public class SettingsManager : MonoBehaviour
     /// <summary>값을 저장하고 전부 적용 (설정 패널의 "적용")</summary>
     public void Apply(Data d)
     {
+        bool languageChanged = Current == null || Current.language != d.language;
         Current = d.Clone();
         PreviewSound(d); // AudioManager가 볼륨 키를 PlayerPrefs에 같이 저장
         PlayerPrefs.SetFloat(P + "MouseSensitivity", d.mouseSensitivity);
@@ -162,6 +163,7 @@ public class SettingsManager : MonoBehaviour
         PlayerPrefs.Save();
         ApplyGraphics(d);
         ApplyGameplay(d);
+        if (languageChanged) Localization.NotifyChanged(); // 열려 있는 메뉴 글자를 바로 바꿈
     }
 
     // ── 적용 ───────────────────────────────────────
