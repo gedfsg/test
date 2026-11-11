@@ -121,6 +121,14 @@ public class UIAudio : MonoBehaviour
         }
     }
 
+    /// <summary>메뉴 BGM을 time초 동안 줄여서 끔 (씬 전환 페이드아웃과 같이 - SceneFader)</summary>
+    public static void FadeOutBgm(float time)
+    {
+        if (instance == null || instance.bgm == null || !instance.bgm.isPlaying) return;
+        instance.bgmTarget = 0f;
+        instance.bgmFadeSpeed = Mathf.Max(instance.bgm.volume, 0.01f) / Mathf.Max(0.05f, time);
+    }
+
     void Update()
     {
         if (bgm == null || !bgm.isPlaying) return;

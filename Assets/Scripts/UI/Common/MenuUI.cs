@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 메뉴 UI 공용 (메인 메뉴 / 일시정지 / 생존 종료 / 설정 / 조작 방법).
-///  - 씬 이동: StartGame / RestartGame / LoadMainMenu / Quit (전부 timeScale을 1로 되돌린 뒤 이동)
+///  - 씬 이동: StartGame / RestartGame / LoadMainMenu / Quit (검은 화면 페이드 전환 SceneFader, 검어진 뒤 timeScale 1로)
 ///  - 게임 씬 자동 배치: 게임 씬이 뜨면 MenuUIPrefabs(Resources/UI)의 일시정지·생존 종료 프리팹을
 ///    전용 캔버스에 비활성 상태로 꺼내 둠 + GameStats 생성. main.unity(바이너리·LFS)는 건드리지 않음
 ///  - 배경 흐림: 현재 화면을 찍어 작게 줄인 뒤 늘려서 보여줌 (일시정지·생존 종료 뒤 배경)
@@ -33,9 +33,13 @@ public static class MenuUI
 
     static void Load(string scene)
     {
-        Time.timeScale = 1f;
-        PauseOpen = DeathShown = InventoryOpen = false;
-        SceneManager.LoadScene(scene);
+        // 검은 화면으로 페이드아웃 → 로드 → 페이드인 (SceneFader). 어두워지는 동안은 지금 상태(일시정지 등)를 그대로 두고,
+        // 완전히 검어진 뒤 timeScale·플래그를 되돌림 (사망 화면에서 다시 시작할 때 어두워지는 사이 게임이 다시 움직이지 않게)
+        SceneFader.Load(scene, () =>
+        {
+            Time.timeScale = 1f;
+            PauseOpen = DeathShown = InventoryOpen = false;
+        });
     }
 
     public static void Quit()
