@@ -261,14 +261,33 @@ public class HelicopterCutscene : MonoBehaviour
         {
             float a = i * 45f * Mathf.Deg2Rad;
             Vector3 d = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+            // 실제로 날아올 곡선(Approach)과 떠나갈 직선(TakeOff)을 20구간씩 따라가며 헬기 크기(반경 4m)로 막힘 검사
+            // (예전: 출발점→헬리패드 직선 하나만 봐서 높은 건물 사이에선 곡선 일부가 건물을 뚫을 수 있었음)
+            Vector3 side = Vector3.Cross(Vector3.up, d).normalized;
+            Vector3 from = p + Vector3.up * spawnHeight + d * spawnDistance;
+            Vector3 ctrl = p + d * 35f + side * 30f + Vector3.up * 45f;
+            Vector3 hover = p + Vector3.up * hoverHeight;
+            Vector3 away = hover + Vector3.up * takeOffRise - d * takeOffDistance;
             int clear = 0;
-            // 경로 몇 군데 + 와이드 샷 카메라 자리(반대편)가 트였는지
-            if (!Physics.Linecast(p + Vector3.up * 12f, p + Vector3.up * spawnHeight + d * spawnDistance, ~0, QueryTriggerInteraction.Ignore)) clear += 2;
-            if (!Physics.Linecast(p + Vector3.up * 12f, p + d * 35f + Vector3.up * 40f, ~0, QueryTriggerInteraction.Ignore)) clear++;
-            if (!Physics.Linecast(p + Vector3.up * 3f, p - d * 38f + Vector3.up * 30f, ~0, QueryTriggerInteraction.Ignore)) clear++;
+            for (int k = 0; k < 20; k++)
+            {
+                if (SegmentClear(Bezier(from, ctrl, hover, k / 20f), Bezier(from, ctrl, hover, (k + 1) / 20f))) clear++;
+                float t0 = k / 20f, t1 = (k + 1) / 20f;
+                if (SegmentClear(Vector3.Lerp(hover, away, t0 * t0), Vector3.Lerp(hover, away, t1 * t1))) clear++;
+            }
+            // 와이드 샷 카메라 자리(반대편)가 트였는지도 조금 반영
+            if (!Physics.Linecast(p + Vector3.up * 3f, p - d * 38f + Vector3.up * 30f, ~0, QueryTriggerInteraction.Ignore)) clear += 2;
             if (clear > bestScore) { bestScore = clear; best = d; }
         }
         return best;
+    }
+
+    static bool SegmentClear(Vector3 a, Vector3 b)
+    {
+        Vector3 d = b - a;
+        float len = d.magnitude;
+        if (len < 0.01f) return true;
+        return !Physics.SphereCast(a, 4f, d / len, out _, len, ~0, QueryTriggerInteraction.Ignore) && !Physics.CheckSphere(a, 4f, ~0, QueryTriggerInteraction.Ignore);
     }
 
     // ── 좀비 ───────────────────────────────────────
@@ -463,8 +482,17 @@ public class HelicopterCutscene : MonoBehaviour
         caption.alpha = 0f;
     }
 
+    // 건물 입구 이름표(EntranceMarkers 라벨) 등 카메라를 향하는 3D 글자 - 캔버스가 아니라 따로 숨김
+    readonly List<GameObject> hiddenBillboards = new List<GameObject>();
+
     void HideHudCanvases()
     {
+        foreach (var f in FindObjectsByType<FaceCamera>(FindObjectsSortMode.None))
+        {
+            if (!f.gameObject.activeSelf || f.gameObject.scene != gameObject.scene) continue;
+            f.gameObject.SetActive(false);
+            hiddenBillboards.Add(f.gameObject);
+        }
         foreach (var c in FindObjectsByType<Canvas>(FindObjectsSortMode.None))
         {
             if (!c.isRootCanvas || !c.enabled || c == overlay || c.gameObject.scene != gameObject.scene) continue;
@@ -511,6 +539,8 @@ public class HelicopterCutscene : MonoBehaviour
 
     void RestoreHud()
     {
+        foreach (var g in hiddenBillboards) if (g != null) g.SetActive(true);
+        hiddenBillboards.Clear();
         foreach (var c in hiddenCanvases) if (c != null) c.enabled = true;
         hiddenCanvases.Clear();
         if (barTop != null) barTop.sizeDelta = barBottom.sizeDelta = Vector2.zero;

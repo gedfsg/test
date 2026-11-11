@@ -565,6 +565,8 @@ public class MissionManager : MonoBehaviour
         }
 
         var candidates = new List<Vector3>();
+        // 1차: 위가 트인 곳만 (헬기용) → 하나도 없으면 2차로 예전 조건 (탈출 지점이 아예 안 생기면 게임을 끝낼 수 없음)
+        for (int pass = 0; pass < 2 && candidates.Count == 0; pass++)
         for (int i = 0; i < 600 && candidates.Count < 40; i++)
         {
             if (!TryGroundPoint(Random.Range(area.min.x, area.max.x), Random.Range(area.min.z, area.max.z), start.y, out Vector3 c)) continue; // 지붕/위층/맵 아래 제외
@@ -572,8 +574,8 @@ public class MissionManager : MonoBehaviour
             if (trigs.Exists(t => t.Contains(c))) continue;                   // 건물 안/바로 옆 제외
             if (Physics.CheckSphere(c + Vector3.up * 2.6f, 2f, ~0, QueryTriggerInteraction.Ignore)) continue; // 주변이 트여 있어야
             var sky = new Bounds(c + Vector3.up * 18f, new Vector3(14f, 33f, 14f));          // 헬리패드 둘레 7m, 높이 1.5~34.5m
-            if (Physics.CheckBox(sky.center, sky.extents, Quaternion.identity, ~0, QueryTriggerInteraction.Ignore)) continue;
-            if (tall.Exists(t => t.Intersects(sky))) continue;
+            if (pass == 0 && Physics.CheckBox(sky.center, sky.extents, Quaternion.identity, ~0, QueryTriggerInteraction.Ignore)) continue;
+            if (pass == 0 && tall.Exists(t => t.Intersects(sky))) continue;
             candidates.Add(c);
         }
         if (candidates.Count == 0) { result = Vector3.zero; return false; }
