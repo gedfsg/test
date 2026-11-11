@@ -86,7 +86,8 @@ public class MissionManager : MonoBehaviour
     public float TotalProgress => Mathf.Clamp(totalProgress, 0f, 100f);
     float MainStep => MainWeightTotal / Mathf.Max(1, SurvivalGoalDays);
     float SubStep => SubWeightTotal / Mathf.Max(1, SurvivalGoalDays) / Mathf.Max(1, subMissions.Count);
-    public string FooterText => CurrentDay < SurvivalGoalDays ? $"{CurrentDay + 1}일차 시작 시 새 미션 개방" : "탈출 지점에 도달하면 생존 성공";
+    // public string FooterText => CurrentDay < SurvivalGoalDays ? $"{CurrentDay + 1}일차 시작 시 새 미션 개방" : "탈출 지점에 도달하면 생존 성공"; // (이전)
+    public string FooterText => CurrentDay < SurvivalGoalDays ? $"{CurrentDay + 1}일차 시작 시 새 미션 개방" : "헬리패드에서 구조 헬기에 타면 생존 성공";
 
     List<BuildingInterior> buildingList;
     Transform playerTf;
@@ -554,13 +555,25 @@ public class MissionManager : MonoBehaviour
         var trigs = new List<Bounds>();
         foreach (var b in buildings) { var t = LootWorldSpawner.FindTrigger(b); if (t != null) { var e = t.bounds; e.Expand(new Vector3(12f, 40f, 12f)); trigs.Add(e); } }
 
+        // 헬리패드 = 구조 헬기가 내려와 10m 위에 떠 있는 곳 → 위가 트여 있어야 (나무·가로등 등 콜라이더 없는 장식은 렌더러 범위로)
+        var tall = new List<Bounds>();
+        foreach (var r in FindObjectsByType<Renderer>(FindObjectsSortMode.None))
+        {
+            if (!r.enabled || r is SkinnedMeshRenderer || r is ParticleSystemRenderer || r.GetComponent<Collider>() != null) continue;
+            Bounds rb = r.bounds;
+            if (rb.size.y >= 3f && rb.size.x <= 60f && rb.size.z <= 60f) tall.Add(rb);
+        }
+
         var candidates = new List<Vector3>();
-        for (int i = 0; i < 400 && candidates.Count < 40; i++)
+        for (int i = 0; i < 600 && candidates.Count < 40; i++)
         {
             if (!TryGroundPoint(Random.Range(area.min.x, area.max.x), Random.Range(area.min.z, area.max.z), start.y, out Vector3 c)) continue; // 지붕/위층/맵 아래 제외
             if ((c - start).sqrMagnitude < escapeMinDistance * escapeMinDistance) continue;
             if (trigs.Exists(t => t.Contains(c))) continue;                   // 건물 안/바로 옆 제외
             if (Physics.CheckSphere(c + Vector3.up * 2.6f, 2f, ~0, QueryTriggerInteraction.Ignore)) continue; // 주변이 트여 있어야
+            var sky = new Bounds(c + Vector3.up * 18f, new Vector3(14f, 33f, 14f));          // 헬리패드 둘레 7m, 높이 1.5~34.5m
+            if (Physics.CheckBox(sky.center, sky.extents, Quaternion.identity, ~0, QueryTriggerInteraction.Ignore)) continue;
+            if (tall.Exists(t => t.Intersects(sky))) continue;
             candidates.Add(c);
         }
         if (candidates.Count == 0) { result = Vector3.zero; return false; }
@@ -578,10 +591,12 @@ public class MissionManager : MonoBehaviour
         return true;
     }
 
-    public string EscapeLockedReason() => $"탈출 지점은 {SurvivalGoalDays}일차에 열립니다 (지금 {CurrentDay}일차)";
+    // public string EscapeLockedReason() => $"탈출 지점은 {SurvivalGoalDays}일차에 열립니다 (지금 {CurrentDay}일차)"; // (이전)
+    public string EscapeLockedReason() => $"구조 헬기는 {SurvivalGoalDays}일차에 옵니다 (지금 {CurrentDay}일차)";
 
-    /// <summary>탈출 지점 도달 → 클리어 (Day 7 메인 미션 완료)</summary>
-    public void Escape()
+    /// <summary>구조 헬기 탑승 → 클리어 (Day 7 메인 미션 완료). 헬기 컷신(HelicopterCutscene)이 끝날 때 부름.
+    /// showEnding=false면 옛 엔딩 화면(DeathUI) 대신 컷신이 GAME CLEAR 화면을 띄움</summary>
+    public void Escape(bool showEnding = true)
     {
         if (Finished) return;
         CompleteMain();
@@ -589,6 +604,7 @@ public class MissionManager : MonoBehaviour
         Escaped = true;
         if (debugLog) Debug.Log("[MissionManager] 탈출 성공!");
         PlaySound(l => l.missionSuccess);
+        if (!showEnding) return;
         FindFirstObjectByType<DeathUI>()?.ShowEnding("탈출 성공", new Color(0.3f, 1f, 0.45f),
             $"{CurrentDay}일 생존 · 메인 미션 {CompletedMainMissions}개 · 서브 미션 {CompletedSubMissions}개");
     }

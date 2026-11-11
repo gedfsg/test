@@ -50,6 +50,7 @@ public class PauseMenuController : MonoBehaviour
         var kb = Keyboard.current;
         if (kb == null || !kb.escapeKey.wasPressedThisFrame) return;
         if (MenuUI.DeathShown) return; // 사망 후엔 생존 종료 화면만
+        if (MenuUI.CutsceneActive) return; // 탈출 컷신 중엔 일시정지 안 됨
 
         if (!IsOpen) Open();
         else if (settingsPanel != null && settingsPanel.IsOpen) settingsPanel.Close();

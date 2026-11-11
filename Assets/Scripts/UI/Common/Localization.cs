@@ -144,5 +144,9 @@ public static class Localization
         { "도달 일차", "Day Reached" },
         { "생존 시간", "Time Survived" },
         { "완료한 미션", "Missions Done" },
+
+        // 탈출 헬기 컷신 (HelicopterCutscene)
+        { "구조 헬기 접근 중...", "Rescue helicopter approaching..." },
+        { "생존자 구출 성공", "Survivor Rescued" },
     };
 }

@@ -26,7 +26,8 @@ public static class MissionDefaults
             M(MainMissionType.FoodSupply, "긴급 식량 조달", 10, alt: 15),          // 통조림 10개 or 식량 15개
             M(MainMissionType.Recon, "정찰 완료", 4),                              // 4개 구역
             M(MainMissionType.RadioSignal, "무전 신호 수신", 30),                   // 라디오 타워 근처 30초
-            M(MainMissionType.Escape, "탈출 지점 도달", 1, lastDay: true),
+            // M(MainMissionType.Escape, "탈출 지점 도달", 1, lastDay: true), // (이전)
+            M(MainMissionType.Escape, "구조 헬기 탑승", 1, lastDay: true),
         };
     }
 

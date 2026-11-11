@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Main_Escape
   m_EditorClassIdentifier: Assembly-CSharp::MainMissionData
   type: 14
-  title: "\uD0C8\uCD9C \uC9C0\uC810 \uB3C4\uB2EC"
+  title: "\uAD6C\uC870 \uD5EC\uAE30 \uD0D1\uC2B9"
   target: 1
   altTarget: 0
   holdSeconds: 2

@@ -699,6 +699,40 @@ public class ZombieSpawner : MonoBehaviour
         return true;
     }
 
+    /// <summary>
+    /// 좀비 떼 한꺼번에 소환 (탈출 헬기 컷신 - HelicopterCutscene). center 둘레 radius 안(가운데 45%는 비움)에 count마리.
+    /// 평소 스폰과 달리 화면 안·문 근처도 허용하고, 실내/실외 목록에 넣지 않음 → 좀비 수 제한(최대 150)과 거리별 정리 대상이 아님.
+    /// 소환한 좀비는 center 쪽 소리를 들은 것처럼 몰려옴 (HearNoiseNow)
+    /// </summary>
+    public List<ZombieController> SpawnHorde(Vector3 center, float radius, int count)
+    {
+        var result = new List<ZombieController>();
+        if (zombiePrefabs == null || zombiePrefabs.Length == 0) return result;
+        var path = new NavMeshPath();
+        NavMesh.SamplePosition(center, out NavMeshHit centerHit, 4f, NavMesh.AllAreas);
+        for (int tries = 0; result.Count < count && tries < count * 10; tries++)
+        {
+            Vector2 r = Random.insideUnitCircle.normalized * Random.Range(radius * 0.45f, radius);
+            Vector3 candidate = center + new Vector3(r.x, 0f, r.y);
+            candidate.y = GroundY(candidate) + 0.5f;
+            if (!NavMesh.SamplePosition(candidate, out NavMeshHit hit, 4f, NavMesh.AllAreas)) continue;
+            if (Mathf.Abs(hit.position.y - center.y) > 6f || !IsGroundFloor(hit.position)) continue; // 지붕·나무 꼭대기 NavMesh 제외
+            // 헬리패드까지 걸어올 수 있는 곳만
+            if (centerHit.hit && (!NavMesh.CalculatePath(hit.position, centerHit.position, NavMesh.AllAreas, path) || path.status != NavMeshPathStatus.PathComplete)) continue;
+
+            Vector3 face = center - hit.position; face.y = 0f;
+            var go = Instantiate(PickWeightedPrefab(), hit.position, face.sqrMagnitude > 0.01f ? Quaternion.LookRotation(face) : Quaternion.identity);
+            var na = go.GetComponent<NavMeshAgent>();
+            if (na != null) na.Warp(hit.position);
+            var z = go.GetComponent<ZombieController>();
+            if (z == null) continue;
+            z.HearNoiseNow(center);
+            result.Add(z);
+        }
+        if (debugLog) Debug.Log($"[ZombieSpawner] 좀비 떼 {result.Count}/{count}마리 소환 (중심 {center}, 반경 {radius}m)");
+        return result;
+    }
+
     void OnDrawGizmosSelected()
     {
         // 실내 - 빨간 구
