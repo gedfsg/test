@@ -7,6 +7,8 @@ using UnityEngine;
 ///   1. StencilGhost - 플레이어가 보이는 곳에 스텐실=1 마킹 (마스크 역할)
 ///   2. XRayGhost    - 가려졌을 때만 텍스처 표시 (스텐실≠1 영역에만)
 /// → 자기 자신(몸/총)에 의한 가림은 X-Ray 안 뜸, 외부(벽/나무)에 가려질 때만 뜸.
+/// 고스트는 건물 안(입구로 들어가 BuildingInterior.Current가 있을 때)에서만 켬.
+/// 야외에서는 꺼서 원래 불투명한 몸 그대로 보임 (나무·공원 언덕에 가려질 때 몸이 반투명해 보이던 문제)
 /// </summary>
 public class PlayerXRay : MonoBehaviour
 {
@@ -24,6 +26,8 @@ public class PlayerXRay : MonoBehaviour
     private Shader stencilShader;
     private float  nextRefreshTime;
     private readonly HashSet<Renderer> processed = new HashSet<Renderer>();
+    private readonly List<Renderer> ghosts = new List<Renderer>(); // 만든 고스트 (실내/야외 전환 때 켜고 끔)
+    private bool ghostsOn = true;
 
     void Start()
     {
@@ -46,6 +50,16 @@ public class PlayerXRay : MonoBehaviour
             nextRefreshTime = Time.time + refreshInterval;
             RefreshGhosts();
         }
+        // 실내에서만 X-Ray. 건물에 들어가고 나오는 그 프레임에 바로 바뀜
+        SetGhostsVisible(BuildingInterior.Current != null);
+    }
+
+    void SetGhostsVisible(bool on)
+    {
+        if (on == ghostsOn) return;
+        ghostsOn = on;
+        ghosts.RemoveAll(g => g == null);
+        foreach (var g in ghosts) g.enabled = on;
     }
 
     /// <summary>외부에서 즉시 갱신 호출 (예: 무기 장착 직후)</summary>
@@ -126,6 +140,8 @@ public class PlayerXRay : MonoBehaviour
             newSmr.rootBone        = smr.rootBone;
             newSmr.localBounds     = smr.localBounds;
             newSmr.sharedMaterials = mats;
+            newSmr.enabled = ghostsOn;
+            ghosts.Add(newSmr);
         }
         else if (original is MeshRenderer)
         {
@@ -134,6 +150,8 @@ public class PlayerXRay : MonoBehaviour
             ghost.AddComponent<MeshFilter>().sharedMesh = mfOrig.sharedMesh;
             MeshRenderer newMr = ghost.AddComponent<MeshRenderer>();
             newMr.sharedMaterials = mats;
+            newMr.enabled = ghostsOn;
+            ghosts.Add(newMr);
         }
         else
         {
