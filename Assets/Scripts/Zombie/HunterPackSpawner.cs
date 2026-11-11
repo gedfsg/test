@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
+using UnityEngine.SceneManagement;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
@@ -18,9 +19,17 @@ using UnityEngine.InputSystem;
 ///   SlotRL  : 조율기가 자리를 정하고, 그 자리까지 움직이는 건 '조율기+RL 모델'이 한다
 ///             (_RL_Slot 프리팹 필요 —— 'RL 프리팹 만들기 (조율기+RL 모델)' 메뉴).
 ///
-/// 설치:
+/// 등장 조건:
+///   상자 열기 : 상자를 열면 소리를 듣고 무리가 몰려온다 (등급이 높을수록 잘 나온다 —— 군용 상자를 지키는 사냥꾼).
+///   밤        : 밤마다 일정에 따라 투입 (spawnAtNight를 켰을 때).
+///
+/// 설치 (씬을 안 건드리는 방법 —— main 씬은 팀원도 자주 고쳐서 머지 때 우리 변경이 날아간다):
+///   설정을 마친 이 컴포넌트를 프리팹으로 만들어 Assets/Resources/HunterPackSpawner.prefab 으로 두면,
+///   ZombieSpawner가 있는 씬(= 게임 씬)이 열릴 때 자동으로 생긴다. 씬에 이미 있으면 그걸 쓴다.
+///
+/// 설치 (씬에 직접):
 ///   1. 게임 씬에 빈 오브젝트를 만들고 이 컴포넌트를 붙인 뒤 Hunter Prefab에 좀비 프리팹을 넣는다
-///   2. 플레이 → 밤이 되면 등장. F6으로 언제든 바로 소환해 볼 수 있다.
+///   2. 플레이 → 상자를 열면(또는 밤이 되면) 등장. F6으로 언제든 바로 소환해 볼 수 있다.
 ///      (예전엔 F10이었는데 녹화 프로그램 단축키와 겹쳐서 바꿨다. 테스트 소환기는 F7~F9)
 /// </summary>
 public class HunterPackSpawner : MonoBehaviour
@@ -38,6 +47,9 @@ public class HunterPackSpawner : MonoBehaviour
     [Header("프리팹")]
     [Tooltip("Slot: 아무 좀비 프리팹 (일반 FSM 프리팹 권장)\nRLModel: RL 뇌를 단 _RL 프리팹\nSlotRL: _RL_Slot 프리팹")]
     public GameObject hunterPrefab;
+    [Tooltip("채우면 무리의 각 마리가 이 중에서 무작위로 나온다 (생김새 섞기). 비우면 위의 Hunter Prefab만.\n" +
+             "모두 같은 방식의 프리팹이어야 한다 (SlotRL이면 전부 _RL_Shoot). 설치 메뉴가 자동으로 채운다.")]
+    public GameObject[] hunterVariants;
 
     [Header("무리 구성 — 기본값 = 학습 조건")]
     [Tooltip("한 무리의 마리 수. 학습은 5마리로 했다 (3~6 정도까지는 무난)")]
@@ -62,7 +74,26 @@ public class HunterPackSpawner : MonoBehaviour
              "학습은 5마리 중 탱커 0~1, 달리기 0~2로 했으니 그 범위 안에서 쓰는 게 안전하다.")]
     public PackSlot[] composition;
 
-    [Header("등장 일정 (밤에만)")]
+    [Header("등장 조건: 상자 열기")]
+    [Tooltip("상자를 열면 그 소리를 듣고 사냥꾼 무리가 몰려온다")]
+    public bool spawnOnCrateOpen = true;
+    [Tooltip("나무 상자(Common)를 열었을 때 무리가 나올 확률")]
+    [Range(0f, 1f)] public float woodCrateChance = 0.05f;
+    [Tooltip("금속 상자(Rare)를 열었을 때 무리가 나올 확률")]
+    [Range(0f, 1f)] public float metalCrateChance = 0.25f;
+    [Tooltip("군용 상자(Epic 이상)를 열었을 때 무리가 나올 확률 —— 좋은 무기가 든 상자는 사냥꾼이 지킨다")]
+    [Range(0f, 1f)] public float militaryCrateChance = 0.6f;
+    [Tooltip("상자를 열고 무리가 등장하기까지(초) —— 소리를 듣고 오는 느낌")]
+    public float crateSpawnDelay = 3f;
+    [Tooltip("상자로 무리가 나온 뒤 이 시간(초) 동안은 상자를 열어도 다시 안 나온다")]
+    public float crateCooldown = 120f;
+    [Tooltip("이 일차부터 상자 무리가 나온다 (1 = 첫날부터)")]
+    [Min(1)] public int crateMinDay = 1;
+    public string crateWarningMessage = "상자 소리에 사냥꾼 무리가 몰려온다";
+
+    [Header("등장 일정 (밤)")]
+    [Tooltip("켜면 밤마다 아래 일정대로도 무리가 나온다 (상자 무리와 별개)")]
+    public bool spawnAtNight = false;
     [Tooltip("Day별로 한 밤에 나오는 무리 수. 0번 칸 = Day 1. 날이 배열보다 길면 마지막 값을 쓴다.")]
     public int[] packsPerNightByDay = { 0, 1, 1, 2, 2, 3, 3 };
     [Tooltip("밤이 시작되고 첫 무리가 나오기까지(초)")]
@@ -94,10 +125,43 @@ public class HunterPackSpawner : MonoBehaviour
     [Tooltip("새벽이 되면 플레이어에서 이 거리보다 멀리 있는 사냥꾼은 물러난다(제거). 0이면 끝까지 남는다.")]
     public float retreatDistanceAtDawn = 20f;
 
+    [Header("사냥꾼 강화 (엘리트)")]
+    [Tooltip("몸 크기 배율. 공격 사거리도 같이 늘어난다 (팔이 길어지니까)")]
+    [Range(1f, 1.6f)] public float hunterScale = 1.2f;
+    [Tooltip("체력 배율 (프로필 체력 × 이 값)")]
+    public float healthMultiplier = 2.5f;
+    [Tooltip("공격력 배율")]
+    public float damageMultiplier = 1.5f;
+    [Tooltip("맞았을 때 멈칫·휘청하는 정도 배율 —— 엘리트는 덜 흔들린다")]
+    [Range(0f, 1f)] public float staggerScale = 0.5f;
+    [Tooltip("켜면 무리가 다 둘러싼 뒤 조율기가 '덮쳐' 할 때 다 같이 '왁!' 하고 달려든다 (일반 돌진형과 같은 연출·속도).\n" +
+             "끄면 학습한 속도 그대로 조여 들어온다. 플레이 중에 바꿔도 바로 반영된다.")]
+    public bool lungeOnClose = true;
+    // 이동 속도는 일부러 안 올린다: 학습 조건(위의 moveSpeed 3.5)과 다르면 RL 모델이 배운 거리감이 어긋난다
+
     [Header("연출")]
-    [Tooltip("사냥꾼 몸 색을 살짝 바꿔 일반 좀비와 구분한다")]
+    [Tooltip("사냥꾼 몸을 붉게 칠해 일반 좀비와 구분한다")]
     public bool tint = true;
-    public Color tintColor = new Color(1f, 0.55f, 0.55f);
+    [Tooltip("사냥꾼 몸 색")]
+    public Color hunterColor = new Color(1f, 0.22f, 0.2f);
+    [Tooltip("원래 색에서 얼마나 붉게 바꿀지 (1 = hunterColor 그대로 곱함)")]
+    [Range(0f, 1f)] public float colorStrength = 0.9f;
+    [Tooltip("붉게 빛나는 눈 (+ 얼굴을 비추는 붉은 빛). 죽으면 천천히 꺼진다")]
+    public bool glowingEyes = true;
+    public Color eyeColor = new Color(1f, 0.12f, 0.05f);
+    [Tooltip("눈 주변 붉은 조명 (밤에 특히 잘 보인다). 성능이 걱정되면 끈다")]
+    public bool eyeLight = true;
+    [Tooltip("포위하는 동안 몸을 웅크리고 고개를 숙인 채 노려본다 (덮칠 때 '왁!'으로 일어선다)")]
+    public bool stalkPose = true;
+    [Tooltip("등장할 때 한 마리가 울부짖고 나머지가 차례로 응답한다")]
+    public bool howlRelay = true;
+    [Tooltip("응답 간격(초) 범위")]
+    public Vector2 relayDelay = new Vector2(0.25f, 0.7f);
+    [Tooltip("무리가 다 둘러싸고 덮치기 시작하면 화면 가장자리가 붉게 맥박친다")]
+    public bool closingVignette = true;
+    public Color vignetteColor = new Color(0.75f, 0f, 0f);
+    [Range(0f, 1f)] public float vignetteAlpha = 0.45f;
+
     [Tooltip("비워두면 Canvas 상단에 자동으로 만든다")]
     public TMPro.TextMeshProUGUI warningText;
     public string warningMessage = "사냥꾼 무리가 냄새를 맡았다";
@@ -116,6 +180,7 @@ public class HunterPackSpawner : MonoBehaviour
         public readonly List<ZombieController> members = new List<ZombieController>();
         public int spawned;
         public HunterPackTactics tactics;   // Slot 방식일 때만
+        public HunterPackTactics.Phase lastPhase = HunterPackTactics.Phase.Searching;
 
         public int Alive
         {
@@ -134,6 +199,9 @@ public class HunterPackSpawner : MonoBehaviour
     private int   spawnedThisNight;
     private float nightTimer;
     private Coroutine warningRoutine;
+    private float     crateReadyAt;
+    private bool      crateSpawnPending;
+    private string    nextWarning;
 
     private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
     private static readonly int ColorId     = Shader.PropertyToID("_Color");
@@ -176,11 +244,74 @@ public class HunterPackSpawner : MonoBehaviour
         if (DayNightCycle.Instance != null) lastPhase = DayNightCycle.Instance.CurrentPhase;
     }
 
+    // ── 자동 생성: Resources/HunterPackSpawner 프리팹이 있으면 게임 씬(ZombieSpawner가 있는 씬)에 하나 만든다 ──
+    public const string ResourcePath = "HunterPackSpawner";
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    private static void AutoCreateOnLoad()
+    {
+        SceneManager.sceneLoaded -= OnSceneLoadedAuto;
+        SceneManager.sceneLoaded += OnSceneLoadedAuto;
+        TryAutoCreate();
+    }
+
+    private static void OnSceneLoadedAuto(Scene scene, LoadSceneMode mode) => TryAutoCreate();
+
+    private static void TryAutoCreate()
+    {
+        if (FindFirstObjectByType<HunterPackSpawner>(FindObjectsInactive.Include) != null) return;   // 씬에 이미 있다
+        if (FindFirstObjectByType<ZombieSpawner>(FindObjectsInactive.Include) == null) return;       // 게임 씬이 아니다 (학습장 등)
+        var prefab = Resources.Load<GameObject>(ResourcePath);
+        if (prefab == null) return;
+        var go = Instantiate(prefab);
+        go.name = prefab.name + " (자동)";
+        Debug.Log("[사냥꾼] Resources/HunterPackSpawner 프리팹으로 사냥꾼 스포너를 자동 생성했습니다.");
+    }
+
+    void OnEnable()  { LootCrate.AnyOpened += OnCrateOpened; }
+    void OnDisable() { LootCrate.AnyOpened -= OnCrateOpened; }
+
+    /// <summary>상자가 열렸다 → 등급별 확률로 사냥꾼 무리가 몰려온다</summary>
+    private void OnCrateOpened(LootCrate crate)
+    {
+        if (!spawnOnCrateOpen || crate == null || crateSpawnPending) return;
+        if (Time.time < crateReadyAt) return;
+        int day = DayNightCycle.Instance != null ? DayNightCycle.Instance.CurrentDay : 1;
+        if (day < crateMinDay) return;
+        if (ActivePacks() >= maxActivePacks) return;   // 이미 무리가 돌아다니면 더 안 부른다
+
+        float chance = crate.crateTier == Rarity.Common || crate.crateTier == Rarity.Uncommon ? woodCrateChance
+                     : crate.crateTier == Rarity.Rare ? metalCrateChance
+                     : militaryCrateChance;
+        if (Random.value >= chance)
+        {
+            if (debugLog) Debug.Log($"[사냥꾼] {LootCrate.TierName(crate.crateTier)} 상자 열림 — 이번엔 무리 없음 (확률 {chance:P0})");
+            return;
+        }
+        StartCoroutine(CrateSpawnRoutine(crate.crateTier, chance));
+    }
+
+    private IEnumerator CrateSpawnRoutine(Rarity tier, float chance)
+    {
+        crateSpawnPending = true;
+        if (crateSpawnDelay > 0f) yield return new WaitForSeconds(crateSpawnDelay);
+        crateSpawnPending = false;
+        nextWarning = crateWarningMessage;
+        if (SpawnPack())
+        {
+            crateReadyAt = Time.time + crateCooldown;
+            if (debugLog) Debug.Log($"[사냥꾼] {LootCrate.TierName(tier)} 상자 소리를 듣고 무리 등장 (확률 {chance:P0}, 다음 상자 무리는 {crateCooldown:0}초 뒤부터)");
+        }
+        nextWarning = null;
+    }
+
     void Update()
     {
         if (enableHotkey && HotkeyPressed()) SpawnPack();
 
         packs.RemoveAll(p => p.Alive == 0);
+        SyncLungeOnClose();
+        WatchClosing();
 
         var cycle = DayNightCycle.Instance;
         if (cycle == null) return;   // 낮밤 시스템이 없는 씬이면 F6 소환만 동작
@@ -192,7 +323,7 @@ public class HunterPackSpawner : MonoBehaviour
             {
                 spawnedThisNight = 0;
                 nightTimer = firstPackDelay;
-                if (debugLog) Debug.Log($"[사냥꾼] Day {cycle.CurrentDay} 밤 — 오늘 밤 무리 {PacksTonight(cycle.CurrentDay)}개");
+                if (debugLog && spawnAtNight) Debug.Log($"[사냥꾼] Day {cycle.CurrentDay} 밤 — 오늘 밤 무리 {PacksTonight(cycle.CurrentDay)}개");
             }
             else if (phase == DayNightCycle.Phase.Dawn)
             {
@@ -201,7 +332,7 @@ public class HunterPackSpawner : MonoBehaviour
             lastPhase = phase;
         }
 
-        if (phase != DayNightCycle.Phase.Night) return;
+        if (!spawnAtNight || phase != DayNightCycle.Phase.Night) return;
         if (spawnedThisNight >= PacksTonight(cycle.CurrentDay)) return;
 
         nightTimer -= Time.deltaTime;
@@ -263,6 +394,7 @@ public class HunterPackSpawner : MonoBehaviour
 
             var go = Instantiate(prefab, pos, Quaternion.LookRotation(Flat(player.position - pos)));
             go.name = $"{prefab.name} (사냥꾼)";
+            if (hunterScale > 1.001f) go.transform.localScale = prefab.transform.localScale * hunterScale;
 
             var na = go.GetComponent<NavMeshAgent>();
             if (na != null) na.Warp(pos);
@@ -270,6 +402,7 @@ public class HunterPackSpawner : MonoBehaviour
             var c = go.GetComponent<ZombieController>();
             if (c != null) pack.members.Add(c);
             if (tint) ApplyTint(go);
+            if (glowingEyes) HunterEyes.Attach(go, eyeColor, eyeLight);
             StartCoroutine(SetupNextFrame(c, speed));
 
             summary.Append(speed > 0f ? speed.ToString("0.0") : "프로필").Append(' ');
@@ -295,6 +428,8 @@ public class HunterPackSpawner : MonoBehaviour
 
         ShowWarning();
         if (spawnSound != null) AudioSource.PlayClipAtPoint(spawnSound, player.position);
+        if (howlRelay) StartCoroutine(HowlRelay(pack, 0.6f));
+        if (closingVignette) PulseVignette(vignetteAlpha * 0.4f);
         string tacticName = tactic == HunterTactic.Slot ? "자리 배정 포위"
                           : tactic == HunterTactic.SlotRL ? "조율기+RL"
                           : "RL 모델";
@@ -303,6 +438,20 @@ public class HunterPackSpawner : MonoBehaviour
     }
 
     /// <summary>이번 무리의 (프리팹, 속도) 목록. composition이 있으면 그 구성, 없으면 Hunter Prefab × Pack Size. 순서는 섞는다.</summary>
+    /// <summary>생김새 섞기: 후보 중 무작위 (없으면 Hunter Prefab)</summary>
+    private GameObject PickHunterPrefab()
+    {
+        if (hunterVariants != null && hunterVariants.Length > 0)
+        {
+            for (int tries = 0; tries < 8; tries++)
+            {
+                var p = hunterVariants[Random.Range(0, hunterVariants.Length)];
+                if (p != null) return p;
+            }
+        }
+        return hunterPrefab;
+    }
+
     private List<(GameObject prefab, float speed)> BuildMemberList()
     {
         var list = new List<(GameObject, float)>();
@@ -315,9 +464,10 @@ public class HunterPackSpawner : MonoBehaviour
                 for (int k = 0; k < slot.count; k++) list.Add((slot.prefab, slot.moveSpeed));
             }
         }
-        else if (hunterPrefab != null)
+        else if (hunterPrefab != null || (hunterVariants != null && hunterVariants.Length > 0))
         {
-            for (int k = 0; k < Mathf.Max(1, packSize); k++) list.Add((hunterPrefab, moveSpeed));
+            for (int k = 0; k < Mathf.Max(1, packSize); k++) list.Add((PickHunterPrefab(), moveSpeed));
+            list.RemoveAll(m => m.Item1 == null);
         }
 
         // 종류별로 한쪽에 몰려 나오지 않게 등장 자리를 섞는다
@@ -432,6 +582,7 @@ public class HunterPackSpawner : MonoBehaviour
         if (c == null || c.IsDead) yield break;
 
         if (speed > 0f) c.moveSpeed = speed;
+        ApplyEliteStats(c);
         if (alertOnSpawn && player != null) c.HearNoise(player.position);
     }
 
@@ -453,8 +604,147 @@ public class HunterPackSpawner : MonoBehaviour
         if (debugLog && removed > 0) Debug.Log($"[사냥꾼] 새벽 — {removed}마리 물러남");
     }
 
+    /// <summary>'덮칠 때 돌진'·'웅크린 포위' 설정을 살아 있는 사냥꾼들에게 맞춘다 (플레이 중 토글 바로 반영)</summary>
+    private void SyncLungeOnClose()
+    {
+        foreach (var p in packs)
+            foreach (var m in p.members)
+            {
+                if (m == null || m.IsDead) continue;
+                var q = m.GetComponent<ZombieQuirks>();
+                if (q == null) continue;
+                if (q.hunterLungeOnClose != lungeOnClose) q.hunterLungeOnClose = lungeOnClose;
+                if (q.hunterStalkPose != stalkPose) q.hunterStalkPose = stalkPose;
+            }
+    }
+
+    // ── 연출: 울부짖음 릴레이 · 덮칠 때 붉은 화면 ──────────────
+    /// <summary>한 마리가 울부짖고 나머지가 차례로 응답한다</summary>
+    private IEnumerator HowlRelay(Pack pack, float firstDelay)
+    {
+        if (firstDelay > 0f) yield return new WaitForSeconds(firstDelay);
+        var order = new List<ZombieController>(pack.members);
+        for (int i = order.Count - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            (order[i], order[j]) = (order[j], order[i]);
+        }
+        for (int i = 0; i < order.Count; i++)
+        {
+            var m = order[i];
+            if (m != null && !m.IsDead) ZombieVoiceManager.Play(m, ZombieVoiceManager.State.Attack);
+            float lo = Mathf.Min(relayDelay.x, relayDelay.y), hi = Mathf.Max(relayDelay.x, relayDelay.y);
+            yield return new WaitForSeconds(i == 0 ? hi + 0.2f : Random.Range(lo, hi));   // 첫 울음 뒤엔 잠깐 정적
+        }
+    }
+
+    /// <summary>무리가 덮치기 시작하는 순간을 잡는다 (조율기 단계가 Closing으로 바뀔 때)</summary>
+    private void WatchClosing()
+    {
+        foreach (var p in packs)
+        {
+            if (p.tactics == null) continue;
+            var ph = p.tactics.CurrentPhase;
+            if (ph == HunterPackTactics.Phase.Closing && p.lastPhase != HunterPackTactics.Phase.Closing)
+            {
+                if (closingVignette) PulseVignette(vignetteAlpha);
+                // 돌진이 꺼져 있으면 '왁!' 비명이 없으니 울음으로 덮치는 순간을 알린다
+                if (!lungeOnClose && howlRelay) StartCoroutine(HowlRelay(p, 0f));
+                if (debugLog) Debug.Log("[사냥꾼] 포위 완료 — 덮친다");
+            }
+            p.lastPhase = ph;
+        }
+    }
+
+    private UnityEngine.UI.Image vignette;
+    private Coroutine vignetteRoutine;
+
+    private void PulseVignette(float peak)
+    {
+        if (peak <= 0f) return;
+        if (vignette == null) BuildVignette();
+        if (vignette == null) return;
+        if (vignetteRoutine != null) StopCoroutine(vignetteRoutine);
+        vignetteRoutine = StartCoroutine(VignetteRoutine(peak));
+    }
+
+    private IEnumerator VignetteRoutine(float peak)
+    {
+        // 두 번 맥박친다 (쿵-쿵)
+        for (int beat = 0; beat < 2; beat++)
+        {
+            float a = beat == 0 ? peak : peak * 0.6f;
+            for (float t = 0f; t < 0.12f; t += Time.deltaTime) { SetVignette(Mathf.Lerp(0f, a, t / 0.12f)); yield return null; }
+            for (float t = 0f; t < 0.45f; t += Time.deltaTime) { SetVignette(Mathf.Lerp(a, 0f, t / 0.45f)); yield return null; }
+        }
+        SetVignette(0f);
+        vignetteRoutine = null;
+    }
+
+    private void SetVignette(float a)
+    {
+        if (vignette != null) vignette.color = new Color(vignetteColor.r, vignetteColor.g, vignetteColor.b, a);
+    }
+
+    private void BuildVignette()
+    {
+        var canvasGo = GameObject.Find("Canvas");
+        Canvas canvas = canvasGo != null ? canvasGo.GetComponent<Canvas>() : null;
+        if (canvas == null) canvas = FindFirstObjectByType<Canvas>();
+        if (canvas == null) return;
+
+        var go = new GameObject("HunterVignette", typeof(RectTransform));
+        go.transform.SetParent(canvas.transform, false);
+        vignette = go.AddComponent<UnityEngine.UI.Image>();
+        vignette.raycastTarget = false;
+        vignette.sprite = BuildVignetteSprite();
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
+        rt.offsetMin = rt.offsetMax = Vector2.zero;
+        go.transform.SetAsLastSibling();
+        SetVignette(0f);
+    }
+
+    /// <summary>가운데는 투명하고 가장자리로 갈수록 진해지는 방사형 그라디언트</summary>
+    private static Sprite BuildVignetteSprite()
+    {
+        const int n = 128;
+        var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, name = "HunterVignette(Runtime)" };
+        var px = new Color[n * n];
+        for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+            {
+                float dx = (x + 0.5f) / n * 2f - 1f, dy = (y + 0.5f) / n * 2f - 1f;
+                float d = Mathf.Sqrt(dx * dx + dy * dy) / 1.4142f;          // 0 가운데 ~ 1 모서리
+                float a = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.45f, 1f, d));
+                px[y * n + x] = new Color(1f, 1f, 1f, a);
+            }
+        tex.SetPixels(px);
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f));
+    }
+
+    /// <summary>엘리트 능력치: 체력·공격력·사거리·경직 (프로필이 적용된 뒤 —— Awake 다음 프레임)</summary>
+    private void ApplyEliteStats(ZombieController c)
+    {
+        if (healthMultiplier > 0f && !Mathf.Approximately(healthMultiplier, 1f))
+        {
+            c.maxHealth *= healthMultiplier;
+            var h = c.GetComponent<Health>();
+            if (h != null) h.SetMaxHealth(c.maxHealth);
+        }
+        if (damageMultiplier > 0f) c.attackDamage *= damageMultiplier;
+        if (hunterScale > 1.001f)  c.attackRange  *= Mathf.Lerp(1f, hunterScale, 0.6f);
+
+        var q = c.GetComponent<ZombieQuirks>();
+        if (q != null) q.staggerTime *= staggerScale;
+        var bm = c.GetComponent<ZombieBodyMotion>();
+        if (bm != null) bm.flinchAngle *= Mathf.Lerp(1f, staggerScale, 0.6f);   // 휘청은 조금만 줄인다 (맞는 손맛은 남게)
+    }
+
     private void ApplyTint(GameObject go)
     {
+        Color mul = Color.Lerp(Color.white, hunterColor, colorStrength);
         var block = new MaterialPropertyBlock();
         foreach (var r in go.GetComponentsInChildren<Renderer>())
         {
@@ -467,15 +757,18 @@ public class HunterPackSpawner : MonoBehaviour
             if (id == -1) continue;
 
             r.GetPropertyBlock(block);
-            block.SetColor(id, mat.GetColor(id) * tintColor);
+            block.SetColor(id, mat.GetColor(id) * mul);
             r.SetPropertyBlock(block);
         }
     }
 
     // ── 경고 문구 ────────────────────────────────────
+    private string currentWarning;
+
     private void ShowWarning()
     {
-        if (string.IsNullOrEmpty(warningMessage) || warningDuration <= 0f) return;
+        currentWarning = string.IsNullOrEmpty(nextWarning) ? warningMessage : nextWarning;
+        if (string.IsNullOrEmpty(currentWarning) || warningDuration <= 0f) return;
         if (warningText == null) BuildWarningUI();
         if (warningText == null) return;
 
@@ -489,7 +782,7 @@ public class HunterPackSpawner : MonoBehaviour
 
     private IEnumerator WarningRoutine()
     {
-        warningText.text = warningMessage;
+        warningText.text = currentWarning;
         warningText.gameObject.SetActive(true);
 
         float t = 0f;

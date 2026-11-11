@@ -74,6 +74,8 @@ public class ZombieBodyMotion : MonoBehaviour
     public float roarRear = 10f;
     [Tooltip("'왁!' 때 고개를 드는 각도(°)")]
     public float roarHeadUp = 16f;
+    [Tooltip("사냥꾼이 '포위' 중일 때 웅크리는 정도 (노림 자세 대비 배율)")]
+    [Range(0f, 1.5f)] public float stalkCrouch = 0.8f;
 
     [Header("디버그")]
     [Tooltip("켜면 처음 뼈대를 찾을 때 어떤 뼈를 썼는지 콘솔에 한 줄 남긴다")]
@@ -128,6 +130,14 @@ public class ZombieBodyMotion : MonoBehaviour
     public static void Flinch(GameObject zombie, Vector3 dir, Vector3 hitPoint, float scale = 1f)
     {
         if (zombie == null) return;
+        // 죽어서 래그돌이면 몸에 그 힘을 준다 (마지막 한 방에 튕겨 나가기 / 쓰러진 몸을 쏘면 들썩)
+        var rd = zombie.GetComponent<ZombieRagdoll>();
+        if (rd != null && rd.IsActive)
+        {
+            var zc = zombie.GetComponent<ZombieController>();
+            rd.Hit(dir, hitPoint, zc != null ? zc.LastDamage : 25f, scale);
+            return;
+        }
         var m = zombie.GetComponent<ZombieBodyMotion>();
         if (m != null) m.Flinch(dir, hitPoint, scale);
     }
@@ -243,7 +253,8 @@ public class ZombieBodyMotion : MonoBehaviour
 
         // ── 6. 돌진 예고 자세 ──────────────────────
         string poseLabel = quirks.Label;
-        float wantPose = !telegraphPose ? 0f : poseLabel == "노림" ? 1f : poseLabel == "왁!" ? -1f : 0f;
+        float wantPose = !telegraphPose ? 0f : poseLabel == "노림" ? 1f : poseLabel == "포위" ? stalkCrouch
+                       : poseLabel == "왁!" ? -1f : 0f;
         float poseRate = wantPose < 0f ? 12f : wantPose > 0f ? 4f : 6f;   // 젖힐 땐 확, 웅크릴 땐 스르륵
         pose = Mathf.MoveTowards(pose, wantPose, poseRate * dt);
         if (Mathf.Abs(pose) > 0.001f)

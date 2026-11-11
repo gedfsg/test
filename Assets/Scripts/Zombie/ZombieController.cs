@@ -57,6 +57,11 @@ public class ZombieController : MonoBehaviour
              "비워두면 모든 구역의 좀비가 씬에서 처음 찾은 플레이어 하나를 공유하게 된다.")]
     public Transform targetOverride;
 
+    [Header("사망")]
+    [Tooltip("죽을 때 래그돌로 쓰러진다 (맞은 방향으로 튕기고, 달리던 속도로 고꾸라짐). 끄면 사망 애니메이션.\n" +
+             "휴머노이드가 아니면 자동으로 사망 애니메이션. 학습장 좀비는 항상 애니메이션.")]
+    public bool ragdollOnDeath = true;
+
     [Header("밤 / 최종 공격 (팀원 kimozero/dev에서 옮겨 옴)")]
     [Tooltip("밤에 감지 범위 배수 (30m → 60m). 플레이어가 가만히 있어도 주변 좀비가 몰려옴")]
     public float nightDetectionMultiplier = 2f;
@@ -913,6 +918,7 @@ public class ZombieController : MonoBehaviour
     {
         if (isDead) return;
         isDead = true;
+        Vector3 deathVelocity = agent != null && agent.enabled ? agent.velocity : Vector3.zero;   // 래그돌이 이어받는다
         AnyDied?.Invoke(this);
 
         // 사망 사운드 (팀원 사운드 시스템): 단말마 + 피 튀는 소리 + 쓰러지는 소리. 학습장에서는 안 냄
@@ -936,8 +942,12 @@ public class ZombieController : MonoBehaviour
 
         foreach (var b in GetComponents<ZombieBrain>()) b.enabled = false;
 
-        // 사망 애니메이션(Die)이 컨트롤러에 있으면 그걸 재생, 없으면 예전 코드 쓰러뜨리기
-        if (HasParam(HashDie))
+        // 래그돌 → 안 되면 사망 애니메이션(Die) → 그것도 없으면 예전 코드 쓰러뜨리기
+        if (ragdollOnDeath && targetOverride == null && ZombieRagdoll.TryActivate(gameObject, deathVelocity))
+        {
+            StartCoroutine(RagdollDeathRoutine());
+        }
+        else if (HasParam(HashDie))
         {
             if (HasParam(HashHit)) anim.ResetTrigger(HashHit);   // 같은 프레임 피격 트리거가 남아 있으면 사망 후 다시 일어남
             anim.SetTrigger(HashDie);
@@ -948,6 +958,24 @@ public class ZombieController : MonoBehaviour
             if (anim != null) anim.enabled = false;   // 가짜 죽음 회전과 충돌 방지
             StartCoroutine(FakeDeathRoutine());
         }
+    }
+
+    // 래그돌로 쓰러짐 → 굳힘 → 땅 밑으로 가라앉으며 사라짐
+    System.Collections.IEnumerator RagdollDeathRoutine()
+    {
+        var ragdoll = GetComponent<ZombieRagdoll>();
+        yield return new WaitForSeconds(ragdoll != null ? ragdoll.settleTime : 4f);
+        if (ragdoll != null) ragdoll.Freeze();
+        yield return new WaitForSeconds(1f);
+        float sinkDuration = 1.2f, sinkElapsed = 0f;
+        Vector3 sinkStart = transform.position, sinkEnd = sinkStart + Vector3.down * 1.5f;
+        while (sinkElapsed < sinkDuration)
+        {
+            sinkElapsed += Time.deltaTime;
+            transform.position = Vector3.Lerp(sinkStart, sinkEnd, sinkElapsed / sinkDuration);
+            yield return null;
+        }
+        Destroy(gameObject);
     }
 
     // 사망 애니메이션 재생 → 누워있다가 → 땅 밑으로 가라앉으며 사라짐

@@ -37,6 +37,8 @@ public class ZombieHitEffect : MonoBehaviour
     MaterialPropertyBlock mpb;
     NavMeshAgent agent;
     Coroutine flashRoutine, knockRoutine;
+    MaterialPropertyBlock[] savedBlocks;   // 플래시 전 색 (사냥꾼 붉은색 등) —— 플래시가 끝나면 되돌린다
+    bool flashing;
 
     // 외부 호출 진입점 - 컴포넌트가 없으면 붙이고 재생
     public static void Play(GameObject zombie, Vector3 hitPoint, Vector3 bulletDir)
@@ -138,17 +140,26 @@ public class ZombieHitEffect : MonoBehaviour
 
     void SetFlash(bool on)
     {
-        foreach (var r in renderers)
+        if (savedBlocks == null || savedBlocks.Length != renderers.Length) savedBlocks = new MaterialPropertyBlock[renderers.Length];
+        for (int i = 0; i < renderers.Length; i++)
         {
+            var r = renderers[i];
             if (r == null || r is ParticleSystemRenderer) continue;
             if (on)
             {
+                if (!flashing)
+                {
+                    if (savedBlocks[i] == null) savedBlocks[i] = new MaterialPropertyBlock();
+                    r.GetPropertyBlock(savedBlocks[i]);   // 플래시 전 색 기억 (사냥꾼 붉은색이 첫 피격에 지워지던 문제)
+                }
                 r.GetPropertyBlock(mpb);
                 mpb.SetColor(ColorId, flashColor);
                 r.SetPropertyBlock(mpb);
             }
+            else if (savedBlocks[i] != null && !savedBlocks[i].isEmpty) r.SetPropertyBlock(savedBlocks[i]); // 원래 블록으로 복귀
             else r.SetPropertyBlock(null); // 블록 제거 = 원래 머티리얼 색으로 복귀
         }
+        flashing = on;
     }
 
     void OnDisable()
