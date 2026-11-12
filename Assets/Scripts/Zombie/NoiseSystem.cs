@@ -25,6 +25,11 @@ public static class NoiseSystem
 
     public static bool debugLog = false;
 
+    /// <summary>소음이 날 때마다 (위치, 실제 반경 - 날씨 반영). NoiseVisualizer 등 시각화용 (2026-11-12)</summary>
+    public static event System.Action<Vector3, float> Emitted;
+    /// <summary>마지막 Emit에서 소리를 듣고 반응한 좀비들 (시각화·발표 영상용, 다음 Emit 때 갱신)</summary>
+    public static readonly List<ZombieController> LastHeard = new List<ZombieController>(32);
+
     public static float RadiusFor(WeaponType type)
     {
         switch (type)
@@ -62,6 +67,7 @@ public static class NoiseSystem
 
         float sqRadius = radius * radius;
         int heard = 0;
+        LastHeard.Clear();
 
         for (int i = listeners.Count - 1; i >= 0; i--)
         {
@@ -75,8 +81,9 @@ public static class NoiseSystem
             float effectiveSq = sqRadius * sensitivity * sensitivity;
             if ((z.transform.position - position).sqrMagnitude > effectiveSq) continue;
 
-            if (z.HearNoise(position)) heard++;
+            if (z.HearNoise(position)) { heard++; LastHeard.Add(z); }
         }
+        Emitted?.Invoke(position, radius);
         if (debugLog) Debug.Log($"[Noise] 반경 {radius:F0}m (기본 {baseRadius:F0} × 날씨 {WeatherManager.NoiseMultiplier:F2}) → 좀비 {heard}마리 반응");
         return radius;
     }
@@ -84,6 +91,6 @@ public static class NoiseSystem
 #if UNITY_EDITOR
     /// <summary>에디터에서 Play 정지 후 도메인 리로드를 끈 경우 대비.</summary>
     [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.SubsystemRegistration)]
-    private static void ResetStatics() => listeners.Clear();
+    private static void ResetStatics() { listeners.Clear(); LastHeard.Clear(); Emitted = null; }
 #endif
 }
