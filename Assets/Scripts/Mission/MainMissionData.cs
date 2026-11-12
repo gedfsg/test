@@ -30,6 +30,8 @@ public class MainMissionData : ScriptableObject
     public MainMissionType type;
     [Tooltip("HUD에 표시되는 미션명")]
     public string title;
+    [Tooltip("HUD 미션명 아래 회색 작은 글씨로 보여줄 구체적인 행동 (예: 생수 5병을 '습득'). 비우면 MissionDefaults 기본 문장")]
+    public string actionDescription;
     [Tooltip("목표 수 (처치 수, 대기 초, 구역 수, 아이템 개수 등). 종류에 따라 의미가 다름")]
     public int target = 1;
     [Tooltip("두 번째 조건 개수 (의료품: 진통제 수 / 식량: 식량 수). 0이면 없음")]
@@ -38,4 +40,7 @@ public class MainMissionData : ScriptableObject
     public float holdSeconds = 2f;
     [Tooltip("항상 마지막 날(Day 7)에 배치 (탈출 지점 도달)")]
     public bool fixedLastDay;
+
+    /// <summary>HUD 2번째 줄 문장 (에셋 값이 비어 있으면 종류별 기본 문장)</summary>
+    public string ActionText => string.IsNullOrEmpty(actionDescription) ? MissionDefaults.ActionFor(type) : actionDescription;
 }

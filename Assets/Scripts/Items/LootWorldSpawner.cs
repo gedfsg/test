@@ -7,6 +7,8 @@ using UnityEngine.AI;
 ///  1) 상자: 나무 50 / 금속 10 / 군용 2 를 야외 NavMesh 위 랜덤 위치에 (건물 안, 서로 10m 이내, 시작 지점 15m 이내 제외)
 ///  2) 건물별 루팅: 집/경찰서/마트/교회/창고 실내 바닥에 아이템 배치
 ///  3) 창고: 좀비 추가 스폰
+///  4) 실내 상자: mustHaveCrate 건물마다 1개 (2026-11-12)
+///  5) 가방 보장: 민가·상점·창고 종류별 1개 + 시작 지점 가까운 집 1개 (2026-11-12)
 /// 씬에 따로 둘 필요 없음 - Player가 있는 씬이 열리면 자동 생성 (Resources/LootDatabase 필요).
 /// </summary>
 public class LootWorldSpawner : MonoBehaviour
@@ -50,7 +52,9 @@ public class LootWorldSpawner : MonoBehaviour
         int crates = SpawnCrates(db);
         int items = 0, zombies = 0;
         foreach (var b in buildings) SpawnBuildingLoot(db, b, ref items, ref zombies);
-        Debug.Log($"[LootWorldSpawner] 상자 {crates}개, 건물 루팅 아이템 {items}개, 창고 좀비 {zombies}마리 배치");
+        int indoorCrates = SpawnInteriorCrates(db, buildings);   // 2026-11-12: 건물마다 상자 1개 보장
+        int bags = EnsureBackpacks(buildings);                    // 2026-11-12: 민가·상점·창고 + 시작 근처 가방 보장
+        Debug.Log($"[LootWorldSpawner] 상자 {crates}개(실내 {indoorCrates}개 별도), 건물 루팅 아이템 {items}개, 창고 좀비 {zombies}마리, 보장 가방 {bags}개 배치");
     }
 
     // ── 상자 ──
@@ -134,7 +138,11 @@ public class LootWorldSpawner : MonoBehaviour
                 if (TryInteriorPoint(trig.bounds, out Vector3 p))
                 {
                     var drop = WorldItemDrop.Spawn(p, item, amount);
-                    if (drop != null) { drop.transform.SetParent(transform, true); items++; }
+                    if (drop != null)
+                    {
+                        drop.transform.SetParent(transform, true); items++;
+                        if (item is BackpackData) bagKinds.Add(LootDatabase.Classify(b)); // 가방 보장 체크용
+                    }
                 }
             }
         }
@@ -145,6 +153,74 @@ public class LootWorldSpawner : MonoBehaviour
             for (int i = 0; spawner != null && i < rule.extraZombies; i++)
                 if (TryInteriorPoint(trig.bounds, out Vector3 p) && spawner.SpawnExtraNear(p, 0.5f, 2f) != null) zombies++;
         }
+    }
+
+    // ── 실내 상자 보장 (2026-11-12) ──
+    // 파밍 루프 강화: mustHaveCrate가 켜진 건물마다 실내 바닥에 상자 1개. 등급은 일반 70% / 희귀 25% / 전설(군용) 5%
+    int SpawnInteriorCrates(LootDatabase db, BuildingInterior[] buildings)
+    {
+        int placed = 0;
+        foreach (var b in buildings)
+        {
+            if (!b.mustHaveCrate) continue;
+            var trig = FindTrigger(b);
+            if (trig == null) continue;
+
+            float r = Random.value;
+            Rarity tier = r < 0.05f ? Rarity.Epic : r < 0.30f ? Rarity.Rare : Rarity.Common;
+            LootTable table = tier == Rarity.Epic ? db.crateMilitary : tier == Rarity.Rare ? db.crateMetal : db.crateWood;
+            LootTable guaranteed = tier == Rarity.Epic ? db.crateMilitaryGuaranteed : null;
+            if (table == null) continue;
+
+            // 상자 자리(1m)가 비어 있는 실내 바닥점을 몇 번 찾아봄
+            for (int i = 0; i < 8; i++)
+            {
+                if (!TryInteriorPoint(trig.bounds, out Vector3 p)) continue;
+                if (Physics.CheckBox(p + Vector3.up * 0.4f, new Vector3(0.6f, 0.3f, 0.5f), Quaternion.identity, ~0, QueryTriggerInteraction.Ignore)) continue;
+                var crate = LootCrate.CreateCrate(p, Random.Range(0f, 360f), tier, table, guaranteed);
+                crate.transform.SetParent(transform, true);
+                placed++;
+                break;
+            }
+        }
+        return placed;
+    }
+
+    // ── 가방 보장 (2026-11-12) ──
+    // 가방이 드물어 인벤토리 확장이 어려움 → 민가·상점·창고 종류마다 가방이 하나도 안 나왔으면 그 종류 건물 1곳에 1개,
+    // 그리고 시작 위치에서 가장 가까운 집에 1개 (Day 1~2에도 얻을 수 있게)
+    readonly HashSet<LootDatabase.BuildingKind> bagKinds = new HashSet<LootDatabase.BuildingKind>();
+
+    int EnsureBackpacks(BuildingInterior[] buildings)
+    {
+        var bag = Resources.Load<BackpackData>("Backpacks/Backpack_Medium");
+        if (bag == null) return 0;
+        int placed = 0;
+
+        foreach (var kind in new[] { LootDatabase.BuildingKind.House, LootDatabase.BuildingKind.Mart, LootDatabase.BuildingKind.Warehouse })
+        {
+            if (bagKinds.Contains(kind)) continue;
+            var list = System.Array.FindAll(buildings, x => LootDatabase.Classify(x) == kind && FindTrigger(x) != null);
+            if (list.Length == 0) continue;
+            if (PlaceBag(bag, list[Random.Range(0, list.Length)])) placed++;
+        }
+
+        // 시작 지점에서 가장 가까운 집 (실내 바닥을 못 찾으면 그다음 집)
+        Vector3 start = GameObject.FindWithTag("Player").transform.position;
+        var houses = System.Array.FindAll(buildings, x => LootDatabase.Classify(x) == LootDatabase.BuildingKind.House && FindTrigger(x) != null);
+        System.Array.Sort(houses, (a, c) => (a.transform.position - start).sqrMagnitude.CompareTo((c.transform.position - start).sqrMagnitude));
+        for (int i = 0; i < houses.Length && i < 5; i++)
+            if (PlaceBag(bag, houses[i])) { placed++; break; }
+        return placed;
+    }
+
+    bool PlaceBag(BackpackData bag, BuildingInterior b)
+    {
+        if (!TryInteriorPoint(FindTrigger(b).bounds, out Vector3 p)) return false;
+        var drop = WorldItemDrop.Spawn(p, bag, 1);
+        if (drop == null) return false;
+        drop.transform.SetParent(transform, true);
+        return true;
     }
 
     // 실내 바닥 위 걸을 수 있는 점 (트리거 범위 안쪽, 아래로 레이 → NavMesh 0.6m 이내, NavMesh 없으면 빈 공간 체크)

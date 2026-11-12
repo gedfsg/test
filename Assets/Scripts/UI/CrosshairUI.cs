@@ -118,6 +118,7 @@ public class CrosshairUI : MonoBehaviour
         CursorMode want = CursorMode.Crosshair;
         if (SlotDragDrop.IsDragging) want = CursorMode.Grab;
         else if (inventoryUI != null && inventoryUI.isInventoryOpen) want = CursorMode.Arrow;
+        else if (MenuUI.BlockingOpen) want = CursorMode.Arrow; // 일시정지 / 생존 종료 화면
         if (want == cursorMode) return;
         cursorMode = want;
 

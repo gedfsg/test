@@ -189,16 +189,25 @@ public class ZombieController : MonoBehaviour
     void Start()
     {
         EnsureAnimatorClips();
+
+        // 건물 규칙: 스폰 위치가 건물 안이면 실내 좀비. 플레이어가 이미 그 건물 안이면 1초 뒤 알아차림 (학습장 좀비는 제외)
+        if (targetOverride == null)
+        {
+            homeBuilding = currentBuilding = ZombieRules.BuildingAt(transform.position);
+            if (homeBuilding != null && BuildingInterior.Current == homeBuilding) indoorAlertAt = Time.time + ZombieRules.IndoorAlertDelay;
+        }
     }
 
     void OnEnable()
     {
         NoiseSystem.Register(this);
         if (!All.Contains(this)) All.Add(this);
+        BuildingInterior.PlayerEntered += OnPlayerEnteredBuilding;
     }
     void OnDisable()
     {
         NoiseSystem.Unregister(this);
+        BuildingInterior.PlayerEntered -= OnPlayerEnteredBuilding;
         All.Remove(this);
         ZombieVoiceManager.Forget(this);   // 목소리 쿨타임 기록 정리
     }
@@ -255,10 +264,14 @@ public class ZombieController : MonoBehaviour
             Debug.LogError($"[Zombie] {name}: ❌ Avatar 유효하지 않음 - 본 매핑 확인 필요");
     }
 
+    bool healthScaledForDay; // 7일 이후 체력 배수를 이미 곱했는지 (SetupHealth가 다시 불려도 중복 적용 안 되게)
+
     void SetupHealth()
     {
         health = GetComponent<Health>();
         if (health == null) health = gameObject.AddComponent<Health>();
+        // 7일 이후 난이도: 하루마다 체력 +10% (2026-11-12). 스폰 시 한 번만 적용 (학습장은 DayNightCycle이 없어 1배)
+        if (!healthScaledForDay) { maxHealth *= ZombieRules.HealthMultiplier; healthScaledForDay = true; }
         // main에서 추가된 API. Heal(0)은 currentHealth가 새 maxHealth까지 안 올라가서 교체됨.
         health.SetMaxHealth(maxHealth);
 
@@ -336,14 +349,21 @@ public class ZombieController : MonoBehaviour
         // 게임 규칙 (팀원 ZombieRules): 스폰 보호 중이면 판단·좀비다움을 건너뛰고 느리게 어슬렁 (학습장 좀비는 제외)
         heldNow = targetOverride == null && ZombieRules.IsHeld(transform.position);
 
+        // 건물 규칙 (kimozero 2026-11): 지금 서 있는 건물 갱신 + 실내 좀비 알아차림 타이머
+        if (targetOverride == null) UpdateBuildingState();
+        // 실내 좀비(아직 못 알아차림): 판단·좀비다움을 건너뛰고 자기 건물 안에서 배회만 (감지/소음/공격 OFF)
+        bool dormant = !heldNow && targetOverride == null && IndoorDormant;
+
         // 2. Think
-        ZombieAction action = heldNow ? HeldAction(in obs, dt) : ThinkSafely(in obs, dt);
+        ZombieAction action = heldNow ? HeldAction(in obs, dt)
+                            : dormant ? DormantAction()
+                            : ThinkSafely(in obs, dt);
 
         // 2.5 좀비다움: 늦은 반응 / 가끔 멈춤 / 점점 가속 (판단은 그대로, 실행만 비튼다)
-        if (!heldNow && quirks != null && zombieQuirks) action = quirks.Filter(in action, in obs, State, dt);
+        if (!heldNow && !dormant && quirks != null && zombieQuirks) action = quirks.Filter(in action, in obs, State, dt);
 
-        // 2.7 게임 규칙: 건물에서 막 나온 플레이어 공격 금지 / 플레이어가 실내면 입구에서 물러남
-        if (!heldNow && targetOverride == null) action = ApplyGameRules(in action, in obs);
+        // 2.7 게임 규칙: 건물에서 막 나온 플레이어 공격 금지 / 플레이어가 실내면 바깥 좀비 추격 중단 / 입구 3m 제외 영역
+        if (!heldNow && !dormant && targetOverride == null) action = ApplyGameRules(in action, in obs);
 
         // 3. Act
         Execute(in action, in obs);
@@ -352,20 +372,43 @@ public class ZombieController : MonoBehaviour
         if (targetOverride == null)
         {
             var st = State;
-            bool chasing = !heldNow && !doorAvoiding && (st == ZombieState.Chase || st == ZombieState.Attack);
+            // bool chasing = !heldNow && !doorAvoiding && (st == ZombieState.Chase || st == ZombieState.Attack);  // (이전)
+            bool chasing = !heldNow && !dormant && !ruleWandering && !doorExiting && (st == ZombieState.Chase || st == ZombieState.Attack);
             ZombieVoiceManager.Tick(this, chasing ? ZombieVoiceManager.State.Chase : ZombieVoiceManager.State.Idle);
         }
     }
 
     // ── 게임 규칙 (팀원 kimozero/dev의 ZombieRules —— AI와 분리된 규칙을 같은 호출로 적용) ──
-    private bool    heldNow, doorAvoiding;
-    private float   heldRepickAt, doorAvoidUntil;
-    private Vector3 heldPoint, doorAvoidPoint;
+    private bool    heldNow;
+    private float   heldRepickAt;
+    private Vector3 heldPoint;
+    // private bool    doorAvoiding;     // (이전) 플레이어 실내 시 입구 반경 좀비를 밀어냄 → 다시 입구로 돌아와 맴도는 원인이라 아래 입구 규칙으로 교체
+    // private float   doorAvoidUntil;
+    // private Vector3 doorAvoidPoint;
+
+    // ── 건물 입구 규칙 (kimozero 2026-11, 판정은 ZombieRules) ──
+    //  - 실내 좀비: 스폰 때 건물 안이면 그 건물이 homeBuilding. 플레이어가 그 건물에 들어오기 전엔 건물 안에서만 배회
+    //    (감지/소음/공격 OFF). 들어오면 1초 뒤 알아차리고(그르렁) 추격. 건물 밖으로 나가면 바깥 좀비가 됨.
+    //  - 바깥 좀비: 플레이어가 실내면 추격·수색 중단 → 배회 (같은 건물 안 좀비, 최종 공격 좀비는 예외).
+    //    목적지가 입구 반경(3m) 안이면 반경 밖으로 보정하고, 반경 안에서 서성이면 5m 밖으로 물러남.
+    private BuildingInterior homeBuilding;    // 실내 좀비: 스폰 때 들어 있던 건물 (밖으로 나가면 null = 바깥 좀비)
+    private BuildingInterior currentBuilding; // 지금 서 있는 건물 (0.5초마다 갱신)
+    private bool    indoorAlerted;            // 실내 좀비가 플레이어를 알아차림
+    private float   indoorAlertAt = -1f;      // 이 시각에 알아차림 (플레이어가 들어오고 1초 뒤)
+    private float   nextBuildingCheck, indoorPingAt;
+    private bool    ruleWandering, doorExiting;   // 규칙 때문에 배회 중 / 입구 반경 밖으로 물러나는 중
+    private float   ruleWanderRepickAt, doorExitUntil, nextDoorExitCheck;
+    private Vector3 ruleWanderPoint, doorExitPoint;
+    /// <summary>실내 전용 좀비인지 (아직 자기 건물 안)</summary>
+    public bool IsIndoorZombie => homeBuilding != null;
+    private bool IndoorDormant => homeBuilding != null && !indoorAlerted;
 
     /// <summary>스폰 보호: 추격·공격 없이 주변을 느리게 어슬렁거리며 플레이어 쪽을 본다 ('경계')</summary>
     private ZombieAction HeldAction(in ZombieObservation obs, float dt)
     {
-        doorAvoiding = false;
+        // doorAvoiding = false;  // (이전)
+        doorExiting = false;
+        ruleWandering = false;
         float now = Time.time;
         Vector3 flat = heldPoint - transform.position; flat.y = 0f;
         if (now >= heldRepickAt || flat.sqrMagnitude < 1f)
@@ -391,33 +434,141 @@ public class ZombieController : MonoBehaviour
         // 건물에서 막 나온 플레이어: 입구 근처 좀비는 잠깐 공격 금지 (안전 창)
         if (a.attack && !ZombieRules.CanAttack(transform.position)) a.attack = false;
 
-        // 플레이어가 실내: 입구 반경 안의 바깥 좀비는 입구 반대쪽으로 물러난다 (최종 공격 좀비 떼는 제외)
+        // (이전) 플레이어가 실내: 입구 반경 안의 바깥 좀비는 입구 반대쪽으로 물러난다 (최종 공격 좀비 떼는 제외)
+        //  → 밀려난 좀비가 4초 뒤 다시 플레이어를 쫓아 입구로 돌아와 맴돌아서 아래 규칙으로 교체 (git 기록 참고)
+        // if (inReach || !ZombieRules.DoorAvoidApplies(huntPlayer)) { doorAvoiding = false; doorAvoidUntil = 0f; return a; }
+        // ... TryPickDoorAvoidDestination으로 4초간 물러남
+
         bool inReach = obs.hasTarget && obs.distance <= obs.attackRange;
-        if (inReach || !ZombieRules.DoorAvoidApplies(huntPlayer))
+        var  st = State;
+        bool pursuing = st == ZombieState.Chase || st == ZombieState.Attack || st == ZombieState.Investigate;
+
+        // 1. 플레이어가 실내인데 이 좀비는 그 건물 밖 → 추격·수색 그만두고 배회 (최종 공격 좀비는 예외)
+        if (pursuing && !ZombieRules.MayChasePlayer(transform.position, huntPlayer))
         {
-            doorAvoiding = false;
-            doorAvoidUntil = 0f;
+            // 플레이어를 바로 앞까지 쫓아왔다 멈춘 경우 입구 반경 안일 수 있음 → 먼저 5m 밖으로
+            if (UpdateDoorExit()) { ruleWandering = false; return ZombieAction.MoveTo(doorExitPoint, 0.75f); } // 다 물러나면 새 배회 지점부터
+            return RuleWanderAction();
+        }
+        ruleWandering = false;
+
+        // 2. 실내 쪽(실내 좀비 / 실내까지 쫓아 들어온 좀비)은 그대로
+        if (currentBuilding != null) { doorExiting = false; return a; }
+
+        // 3. 바깥 좀비가 쫓는 중: 입구 반경 안을 목적지로 삼지 않음 (실내 목적지는 AdjustDestination이 그대로 둠).
+        //    바로 앞까지 붙었으면(공격 거리) 보정 안 함 → 입구에서 나온 플레이어는 정상적으로 공격
+        if (pursuing)
+        {
+            doorExiting = false;
+            if (a.hasMoveTarget && !inReach) a.moveTarget = ZombieRules.AdjustDestination(a.moveTarget);
             return a;
         }
-        float now = Time.time;
-        if (!doorAvoiding || now >= doorAvoidUntil)
-        {
-            doorAvoiding = ZombieRules.TryPickDoorAvoidDestination(transform.position, out doorAvoidPoint);
-            doorAvoidUntil = now + 4f;
-        }
-        else
-        {
-            Vector3 left = doorAvoidPoint - transform.position; left.y = 0f;
-            if (left.sqrMagnitude < 1f) doorAvoiding = false;   // 도착 → 다시 원래대로
-        }
-        if (!doorAvoiding) return a;
 
-        a.hasMoveTarget = true;
-        a.moveTarget    = doorAvoidPoint;
-        a.speedScale    = 1f;
-        a.attack        = false;
-        a.faceTarget    = false;
+        // 4. 배회 중: 입구 반경 안에서 서성이면 5m 밖으로, 아니면 배회 목적지만 보정
+        if (UpdateDoorExit()) return ZombieAction.MoveTo(doorExitPoint, 0.75f);
+        if (a.hasMoveTarget) a.moveTarget = ZombieRules.AdjustDestination(a.moveTarget);
         return a;
+    }
+
+    // ── 건물 입구 규칙 (kimozero 2026-11) ───────────────────
+    /// <summary>플레이어가 건물에 들어옴 → 내 건물이면 1초 뒤 알아차림</summary>
+    void OnPlayerEnteredBuilding(BuildingInterior b)
+    {
+        if (homeBuilding == null || b != homeBuilding || indoorAlerted || indoorAlertAt > 0f) return;
+        indoorAlertAt = Time.time + ZombieRules.IndoorAlertDelay;
+    }
+
+    /// <summary>지금 서 있는 건물 갱신 + 실내 좀비 알아차림 / 다시 잠잠해짐</summary>
+    void UpdateBuildingState()
+    {
+        float now = Time.time;
+        if (now >= nextBuildingCheck)
+        {
+            nextBuildingCheck = now + 0.5f;
+            currentBuilding = ZombieRules.BuildingAt(transform.position);
+            if (homeBuilding != null && currentBuilding != homeBuilding) { homeBuilding = null; indoorAlertAt = -1f; } // 밖으로 나감 → 바깥 좀비
+        }
+        if (homeBuilding == null) return;
+
+        bool playerInMyBuilding = BuildingInterior.Current == homeBuilding;
+        if (indoorAlertAt > 0f && now >= indoorAlertAt)
+        {
+            indoorAlertAt = -1f;
+            if (playerInMyBuilding) // 1초 사이에 나갔으면 취소
+            {
+                indoorAlerted = true;
+                indoorPingAt = 0f;
+                ZombieVoiceManager.Play(this, ZombieVoiceManager.State.Chase); // "그르렁" (목소리 풀 상한 안에서)
+            }
+        }
+        if (!indoorAlerted) return;
+
+        Transform p = FindPlayer();
+        if (playerInMyBuilding)
+        {
+            // 실내 벽에 가려 시야로 못 봐도 같은 건물 안 플레이어는 쫓음: 1초마다 플레이어 위치를 '들은' 것으로 (최종 공격 좀비와 같은 방식)
+            if (p != null && now >= indoorPingAt) { indoorPingAt = now + 1f; HearNoiseNow(p.position); }
+        }
+        else if (p == null || (p.position - transform.position).magnitude > DetectionRangeNow)
+        {
+            indoorAlerted = false; // 플레이어가 나가서 멀어짐 → 다시 건물 안 배회
+        }
+    }
+
+    /// <summary>실내 좀비(못 알아차림): 자기 건물 안에서만 느리게 배회 (문 밖으로 나와 입구에 서 있지 않게)</summary>
+    private ZombieAction DormantAction()
+    {
+        doorExiting = false;
+        ruleWandering = false;
+        PickRuleWanderPoint(5f, true);
+        return ZombieAction.MoveTo(ruleWanderPoint, 0.5f);
+    }
+
+    /// <summary>플레이어가 실내라 쫓지 못하는 바깥 좀비: 주변 배회 (입구 반경은 피함)</summary>
+    private ZombieAction RuleWanderAction()
+    {
+        if (!ruleWandering) ruleWanderRepickAt = 0f; // 막 추격을 멈춤 → 바로 새 배회 지점
+        ruleWandering = true;
+        PickRuleWanderPoint(8f, false);
+        return ZombieAction.MoveTo(ruleWanderPoint, 0.5f);
+    }
+
+    /// <summary>배회 지점 고르기. insideHome이면 자기 건물 안에서만, 아니면 건물 밖 + 입구 반경 밖</summary>
+    private void PickRuleWanderPoint(float radius, bool insideHome)
+    {
+        float now = Time.time;
+        Vector3 flat = ruleWanderPoint - transform.position; flat.y = 0f;
+        if (now < ruleWanderRepickAt && flat.sqrMagnitude > 0.5f) return;
+        ruleWanderRepickAt = now + Random.Range(3f, 6f);
+        ruleWanderPoint = transform.position;
+        for (int i = 0; i < 6; i++)
+        {
+            Vector2 r = Random.insideUnitCircle * radius;
+            Vector3 c = transform.position + new Vector3(r.x, 0f, r.y);
+            if (!NavMesh.SamplePosition(c, out NavMeshHit hit, 3f, NavMesh.AllAreas)) continue;
+            BuildingInterior at = ZombieRules.BuildingAt(hit.position);
+            if (insideHome ? at != homeBuilding : at != null) continue;
+            ruleWanderPoint = insideHome ? hit.position : ZombieRules.AdjustDestination(hit.position);
+            return;
+        }
+    }
+
+    /// <summary>바깥 좀비가 입구 반경(3m) 안에서 서성이면 입구에서 5m 이상 떨어진 곳으로 (0.5초마다 검사). 물러나는 중이면 true</summary>
+    private bool UpdateDoorExit()
+    {
+        float now = Time.time;
+        if (doorExiting)
+        {
+            Vector3 left = doorExitPoint - transform.position; left.y = 0f;
+            if (now < doorExitUntil && left.sqrMagnitude > 0.5f) return true;
+            doorExiting = false; // 도착 (또는 4초 지남) → 원래 배회로
+        }
+        if (now < nextDoorExitCheck) return false;
+        nextDoorExitCheck = now + 0.5f; // 좀비 150마리 × 입구 100여 개를 매 프레임 돌지 않게
+        if (!ZombieRules.TryGetDoorExit(transform.position, out doorExitPoint)) return false;
+        doorExiting = true;
+        doorExitUntil = now + 4f;
+        return true;
     }
 
     private float huntTimer;
@@ -689,6 +840,13 @@ public class ZombieController : MonoBehaviour
     public bool HearNoise(Vector3 position)
     {
         if (isDead) return false;
+        if (targetOverride == null)
+        {
+            if (IndoorDormant) return false; // 실내 좀비는 플레이어가 들어오기 전까지 감지 OFF
+            // 건물 안에서 난 소리는 그 건물 안 좀비만 들음 (바깥 좀비가 실내 총소리를 듣고 입구로 몰려드는 것 방지)
+            BuildingInterior noiseIn = ZombieRules.BuildingAt(position);
+            if (noiseIn != null && noiseIn != ZombieRules.BuildingAt(transform.position)) return false;
+        }
         // 좀비다움: 못 들은 척하거나 늦게 반응 (늦게 반응하면 ZombieQuirks가 나중에 HearNoiseNow를 부른다)
         if (quirks != null && zombieQuirks && quirks.InterceptNoise(position)) return true;
         HearNoiseNow(position);

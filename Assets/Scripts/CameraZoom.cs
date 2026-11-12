@@ -14,6 +14,8 @@ public class CameraZoom : MonoBehaviour
 
     [Header("줌 속도")]
     [SerializeField] private float zoomStep = 3f;        // 스크롤 1회당 변화량
+    /// <summary>설정 - 마우스 민감도 (휠 줌 속도 배수, SettingsManager가 설정)</summary>
+    public static float WheelSensitivity = 1f;
     [SerializeField] private float zoomSmoothSpeed = 8f;  // 보간 속도
 
     [Header("우클릭 홀드 확대 비율 (0.12 = 12% 확대)")]
@@ -79,7 +81,7 @@ public class CameraZoom : MonoBehaviour
         if (scrollY != 0f)
         {
             // 위로 스크롤 → 줌인(거리 감소), 아래로 → 줌아웃(거리 증가)
-            baseTargetDistance -= (scrollY > 0f ? 1f : -1f) * zoomStep;
+            baseTargetDistance -= (scrollY > 0f ? 1f : -1f) * zoomStep * WheelSensitivity;
             baseTargetDistance = Mathf.Clamp(baseTargetDistance, minDistance, maxDistance);
         }
 

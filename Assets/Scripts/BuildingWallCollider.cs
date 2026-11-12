@@ -35,6 +35,11 @@ public class BuildingWallCollider : MonoBehaviour
     [Tooltip("콜라이더 벽 두께(m). 안쪽 면을 보이는 벽에서 이만큼 실내 쪽으로 둠.")]
     public float wallThickness = 0.25f;
 
+    // 2026-11-12: 농장 밭 두둑(Dirt 재질, 높이 ~1.6m)까지 벽 충돌이 돼서 밭 안에서 이동이 막혔음
+    //  → 이 재질 이름의 서브메시 삼각형은 충돌·NavMesh에서 뺌 (보이기만 하고 지나갈 수 있음). FarmOutdoorFixer가 설정
+    [Tooltip("충돌에서 뺄 재질 이름 (그 재질을 쓰는 서브메시는 통과 가능). 예: 농장 두둑 \"Dirt\"")]
+    public string[] walkThroughMaterials = new string[0];
+
     MeshCollider wallCollider;
 
     void Awake()
@@ -62,7 +67,8 @@ public class BuildingWallCollider : MonoBehaviour
         }
 
         Vector3[] srcVerts = src.vertices;
-        int[] srcTris = src.triangles;
+        // int[] srcTris = src.triangles; // (이전) 모든 서브메시
+        int[] srcTris = CollidableTriangles(src, mf.GetComponent<Renderer>());
         Bounds slot = new Bounds(doorSlotCenter, doorSlotSize);
 
         var verts = new List<Vector3>(srcVerts.Length);
@@ -96,9 +102,30 @@ public class BuildingWallCollider : MonoBehaviour
         m.SetTriangles(tris, 0);
         m.RecalculateBounds();
 
+        // AddComponent<MeshCollider>는 같은 오브젝트의 MeshFilter 메시(원본 렌더 메시)를 자동으로 넣고 바로 굽는데,
+        // 원본은 큰 삼각형이 쪼개지기 전이라 PhysX "triangles > 500 units" 경고가 났음 (교회 Node-Mesh 576).
+        // → 붙이는 순간만 MeshFilter를 비워서 원본이 구워지지 않게 하고, 쪼갠 메시를 넣음
+        Mesh render = mf.sharedMesh;
+        mf.sharedMesh = null;
         wallCollider = gameObject.AddComponent<MeshCollider>();
+        mf.sharedMesh = render;
         wallCollider.sharedMesh = m;
         return wallCollider;
+    }
+
+    /// <summary>충돌에 쓸 삼각형 (walkThroughMaterials 재질의 서브메시는 제외). 제외할 게 없으면 전체</summary>
+    int[] CollidableTriangles(Mesh src, Renderer r)
+    {
+        if (walkThroughMaterials == null || walkThroughMaterials.Length == 0 || r == null) return src.triangles;
+        var mats = r.sharedMaterials;
+        var list = new List<int>(src.triangles.Length);
+        for (int s = 0; s < src.subMeshCount; s++)
+        {
+            var mat = s < mats.Length ? mats[s] : null;
+            if (mat != null && System.Array.IndexOf(walkThroughMaterials, mat.name) >= 0) continue;
+            list.AddRange(src.GetTriangles(s));
+        }
+        return list.ToArray();
     }
 
     // 현재 삼각형들(바깥 면) 각각에 대해, 법선 반대 방향으로 wallThickness(월드 m)만큼 옮기고
@@ -130,7 +157,7 @@ public class BuildingWallCollider : MonoBehaviour
     }
 
     // PhysX는 꼭짓점 사이가 500 유닛 넘는 삼각형에 경고를 냄 (로컬 단위가 큰 glTF 건물). 가장 긴 변을 반으로 나눠서 이하로 만듦
-    static void SplitLargeTriangles(List<Vector3> verts, List<int> tris)
+    public static void SplitLargeTriangles(List<Vector3> verts, List<int> tris) // BuildingColliderChecker(에디터)도 사용
     {
         const float maxEdge = 400f;
         for (int i = 0; i < tris.Count; )

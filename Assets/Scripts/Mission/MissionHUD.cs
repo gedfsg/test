@@ -4,15 +4,17 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 미션 HUD (오른쪽 위, 레퍼런스 ui.jpg 레이아웃) + 토스트(화면 중앙 하단) + 목표 방향 화살표.
+/// 미션 HUD (오른쪽 위, 레퍼런스 ui.jpg 레이아웃) + 토스트(화면 중앙 하단).
+/// 목표 방향 화살표는 꺼둠 (showObjectiveArrow) - 위치는 미니맵 핀(MinimapMissionPins)으로만 대략 표시.
 ///
 ///   ┌──────────────────────────────┐
 ///   │ 진행률                    40% │  ← 주황, % 크게
-///   │ ████████░░░░░░░░░░░░░░░░░░░  │  ← 주황 그라데이션 바 (오늘 진행률, 실시간)
+///   │ ████████░░░░░░░░░░░░░░░░░░░  │  ← 주황 그라데이션 바 (7일 전체 진행률, 100% = Day 1~7 모든 미션)
 ///   │                    목표 100% │
 ///   ├──────────────────────────────┤
 ///   │ ◆ 메인 미션                   │
 ///   │ 비상 무전기 가동            ○ │  ← ○ 미완료 / ✓ 완료 (% 없음)
+///   │ 경찰서 무전기 앞에서 F키 '3초 유지' │  ← 2026-11-12: 할 일(회색 작은 글씨). 진행 중 미션 최대 3개 (탈출 → 오늘 → 이전 날)
 ///   ├──────────────────────────────┤
 ///   │ 🔍 탐색 서브 미션              │
 ///   │ 📍 주유소 수색          [발견] │  ← 발견된 것만 표시. 발견 / ○ / ✓
@@ -29,6 +31,8 @@ public class MissionHUD : MonoBehaviour
 
     const float Width = 340f, Pad = 18f, RowH = 26f;
     const float ArrowRadius = 130f; // 플레이어 중심에서 화살표까지 (UI px)
+    [Tooltip("화면 위 목표 방향 화살표. 기본 끔 (미션 위치는 미니맵에만 대략 표시)")]
+    public bool showObjectiveArrow = false;
 
     // 색상 (요청 스펙)
     static readonly Color Orange = new Color32(0xFF, 0xA5, 0x00, 0xFF);   // 제목 / % / 바
@@ -42,8 +46,14 @@ public class MissionHUD : MonoBehaviour
     MissionManager mm;
     RectTransform panel;
     Image panelFrame;
-    TextMeshProUGUI percentText, mainTitle, footerText, emptySubText;
-    Image barFill, mainStatus;
+    TextMeshProUGUI percentText, footerText, emptySubText;
+    Image barFill;
+    // (이전) 메인 미션 1줄: TextMeshProUGUI mainTitle; Image mainStatus;
+    // 2026-11-12: 진행 중 메인 미션 최대 3개, 각 2줄 (미션명 / 할 일)
+    const float MainRowH = 46f, ActionGap = 19f;
+    class MainRow { public RectTransform root; public TextMeshProUGUI title, action; public Image status; }
+    readonly List<MainRow> mainRows = new List<MainRow>();
+    const int MaxShownSubs = 4; // 서브도 다음 날로 넘어가서 하루 최대(2)보다 많아질 수 있음
     RectTransform div2, subHeader, div3;
     class SubRow { public RectTransform root; public Image pin, status; public TextMeshProUGUI title; public GameObject badge; }
     readonly List<SubRow> subRows = new List<SubRow>();
@@ -99,14 +109,13 @@ public class MissionHUD : MonoBehaviour
         Line(panel, "Div1", -94f);
         // ◆ 메인 미션
         HeaderRow(panel, "MainHeader", HudStyle.Diamond, "메인 미션", -114f);
-        mainTitle = Text(panel, "MainTitle", "", HudStyle.SemiBold, 16f, Color.white, TextAlignmentOptions.MidlineLeft, Pad, -142f, Width - Pad * 2f - 30f);
-        mainStatus = HudStyle.NewImage(panel, "MainStatus", HudStyle.Ring, Gray, Vector2.zero, new Vector2(16f, 16f));
-        TopLeft(mainStatus.rectTransform, Width - Pad - 16f, -142f, centerY: true);
+        // (이전) mainTitle = Text(panel, "MainTitle", ...); mainStatus = ...; (1줄)
+        for (int i = 0; i < MissionManager.MaxShownMains; i++) mainRows.Add(MainRowAt(-142f - i * MainRowH));
 
         div2 = Line(panel, "Div2", -164f);
         // 🔍 탐색 서브 미션
         subHeader = HeaderRow(panel, "SubHeader", HudStyle.Search, "탐색 서브 미션", -184f);
-        for (int i = 0; i < MissionManager.MaxDailySubMissions; i++) subRows.Add(SubRowAt(-212f - i * RowH));
+        for (int i = 0; i < MaxShownSubs; i++) subRows.Add(SubRowAt(-212f - i * RowH));
         emptySubText = Text(panel, "SubEmpty", "주변을 탐색해 서브 미션을 찾으세요", HudStyle.Regular, 13f, Gray, TextAlignmentOptions.MidlineLeft, Pad, -212f, Width - Pad * 2f);
 
         div3 = Line(panel, "Div3", -236f);
@@ -168,6 +177,19 @@ public class MissionHUD : MonoBehaviour
         return row;
     }
 
+    // 메인 미션 1개 = 미션명(큰 글씨, y) + 할 일(회색 작은 글씨, y - ActionGap) + ○/✓
+    MainRow MainRowAt(float y)
+    {
+        var r = new MainRow { root = HudStyle.NewRect(panel, "MainRow", Vector2.zero, new Vector2(Width, MainRowH)) };
+        TopLeft(r.root, 0f, y, centerY: false);
+        r.root.anchoredPosition = new Vector2(0f, y + RowH / 2f); // 미션명 중심이 y에 오게 (행 위쪽 기준)
+        r.title = Text(r.root, "Title", "", HudStyle.SemiBold, 16f, Color.white, TextAlignmentOptions.MidlineLeft, Pad, -RowH / 2f, Width - Pad * 2f - 30f);
+        r.action = Text(r.root, "Action", "", HudStyle.Regular, 12.5f, Gray, TextAlignmentOptions.MidlineLeft, Pad, -RowH / 2f - ActionGap, Width - Pad * 2f - 10f);
+        r.status = HudStyle.NewImage(r.root, "Status", HudStyle.Ring, Gray, Vector2.zero, new Vector2(16f, 16f));
+        TopLeft(r.status.rectTransform, Width - Pad - 16f, -RowH / 2f, centerY: true);
+        return r;
+    }
+
     SubRow SubRowAt(float y)
     {
         var r = new SubRow { root = HudStyle.NewRect(panel, "SubRow", Vector2.zero, new Vector2(Width, RowH)) };
@@ -195,23 +217,43 @@ public class MissionHUD : MonoBehaviour
         bool inventoryOpen = inventoryUI != null && inventoryUI.isInventoryOpen;
         panel.gameObject.SetActive(!inventoryOpen);
         compactText.gameObject.SetActive(inventoryOpen);
-        float p = mm.DayProgress;
-        if (inventoryOpen) compactText.text = $"진행률 {Mathf.FloorToInt(p)}% · 메인 미션 {(mm.MainDone ? "완료" : "진행 중")}";
+        float p = mm.TotalProgress; // (이전) mm.DayProgress - 하루치
+        // if (inventoryOpen) compactText.text = $"진행률 {Mathf.FloorToInt(p)}% · 메인 미션 {(mm.MainDone ? "완료" : "진행 중")}"; // (이전)
+        int openMains = mm.activeMains.FindAll(x => !x.done).Count;
+        if (inventoryOpen) compactText.text = $"진행률 {Mathf.FloorToInt(p)}% · 메인 미션 {(openMains == 0 ? "완료" : $"{openMains}개 진행 중")}";
 
         percentText.text = $"{Mathf.FloorToInt(p)}%";
         barFill.rectTransform.anchorMax = new Vector2(Mathf.Clamp01(p / 100f), 1f);
 
-        // 메인 미션: 미션명 (+ 진행 수) + ○/✓
-        var main = mm.CurrentMain;
-        string detail = string.IsNullOrEmpty(mm.MainDetail) || mm.MainDone ? "" : $"  <size=13><color=#9E9E9E>{mm.MainDetail}</color></size>";
-        mainTitle.text = main != null ? main.title + detail : "-";
-        SetStatus(mainStatus, mm.MainDone);
+        // 메인 미션: 미션명 (+ 진행 수) + ○/✓ / 아래 줄에 할 일 (진행 중인 것 최대 3개 - 탈출 → 오늘 → 이전 날)
+        // (이전) var main = mm.CurrentMain; mainTitle.text = main.title + detail; SetStatus(mainStatus, mm.MainDone);
+        var mains = mm.MainsForHud();
+        for (int i = 0; i < mainRows.Count; i++)
+        {
+            var row = mainRows[i];
+            bool on = i < mains.Count || (i == 0 && mains.Count == 0);
+            row.root.gameObject.SetActive(on);
+            if (!on) continue;
+            if (mains.Count == 0) { row.title.text = "-"; row.action.text = ""; SetStatus(row.status, false); continue; }
+            var m = mains[i];
+            string detail = string.IsNullOrEmpty(m.detail) || m.done ? "" : $"  <size=13><color=#9E9E9E>{m.detail}</color></size>";
+            string carried = m.day < mm.CurrentDay && !m.IsEscape ? $"<size=12><color=#FFA500>{m.day}일차</color></size> " : ""; // 이전 날에서 넘어온 미션
+            row.title.text = carried + m.Title + detail;
+            row.title.color = m.done ? Green : Color.white;
+            row.action.text = m.ActionText;
+            SetStatus(row.status, m.done);
+        }
+        int mainLines = Mathf.Max(1, Mathf.Min(mains.Count, mainRows.Count));
+        float shift = ActionGap + (mainLines - 1) * MainRowH; // 메인 줄 수만큼 아래 줄들을 내림 (이전 1줄 배치 기준)
+        TopLeft(div2, Pad - 4f, -164f - shift);
+        TopLeft(subHeader, 0f, -184f - shift);
 
         // 서브 미션: 발견된 것만
         int shown = 0;
         foreach (var s in mm.subMissions)
         {
             if (!s.Discovered || shown >= subRows.Count) continue;
+            TopLeft(subRows[shown].root, 0f, -212f - shift - shown * RowH);
             var row = subRows[shown++];
             row.root.gameObject.SetActive(true);
             bool countable = s.target > 1 && !s.Done;
@@ -226,10 +268,11 @@ public class MissionHUD : MonoBehaviour
         }
         for (int i = shown; i < subRows.Count; i++) subRows[i].root.gameObject.SetActive(false);
         emptySubText.gameObject.SetActive(shown == 0);
+        TopLeft(emptySubText.rectTransform, Pad, -212f - shift);
 
         // 아래쪽 줄 위치 (서브 줄 수에 맞춰)
         int lines = Mathf.Max(1, shown);
-        float subEnd = -212f - (lines - 1) * RowH;
+        float subEnd = -212f - shift - (lines - 1) * RowH;
         TopLeft(div3, Pad - 4f, subEnd - 22f);
         TopLeft(footerText.rectTransform, 0f, subEnd - 42f);
         footerText.text = mm.FooterText;
@@ -306,7 +349,7 @@ public class MissionHUD : MonoBehaviour
     {
         var cam = Camera.main;
         var player = GameObject.FindWithTag("Player");
-        bool show = mm.TryGetGuideTarget(out Vector3 target) && cam != null && player != null;
+        bool show = mm.TryGetGuideTarget(out Vector3 target) && showObjectiveArrow && cam != null && player != null;
         Color color = mm.CanEscape ? Green : Orange;
 
         Vector3 vp = show ? cam.WorldToViewportPoint(target) : Vector3.zero;

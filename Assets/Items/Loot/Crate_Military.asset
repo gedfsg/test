@@ -28,13 +28,13 @@ MonoBehaviour:
     minAmount: 20
     maxAmount: 30
   - item: {fileID: 11400000, guid: d7d64191447ce2049a3bbb05cb355656, type: 2}
-    weight: 12
-    minAmount: 30
-    maxAmount: 60
+    weight: 6
+    minAmount: 18
+    maxAmount: 36
   - item: {fileID: 11400000, guid: b5d195c9fff6c404a9210a71ade6433b, type: 2}
-    weight: 8
-    minAmount: 8
-    maxAmount: 16
+    weight: 4
+    minAmount: 5
+    maxAmount: 11
   - item: {fileID: 11400000, guid: dddcb140e924770448ebec47e41e1189, type: 2}
     weight: 2
     minAmount: 1
@@ -76,6 +76,6 @@ MonoBehaviour:
     minAmount: 1
     maxAmount: 1
   - item: {fileID: 11400000, guid: c409828ef0832274abd3c9cf70c42056, type: 2}
-    weight: 3
+    weight: 6
     minAmount: 1
     maxAmount: 1

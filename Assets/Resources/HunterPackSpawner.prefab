@@ -100,7 +100,7 @@ MonoBehaviour:
   alertOnSpawn: 1
   retreatDistanceAtDawn: 20
   hunterScale: 1.2
-  healthMultiplier: 2.5
+  healthMultiplier: 1.75
   damageMultiplier: 1.5
   staggerScale: 0.5
   lungeOnClose: 1

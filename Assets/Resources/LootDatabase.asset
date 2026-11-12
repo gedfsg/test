@@ -16,9 +16,9 @@ MonoBehaviour:
   crateMetal: {fileID: 11400000, guid: fcb9d7e38161a0d4f98afb8bc52457ac, type: 2}
   crateMilitary: {fileID: 11400000, guid: 523fb50bd7e94f14d875d91a43ef382f, type: 2}
   crateMilitaryGuaranteed: {fileID: 11400000, guid: 14938c3f62810db42b32b6976ceb7843, type: 2}
-  woodCrateCount: 50
-  metalCrateCount: 10
-  militaryCrateCount: 2
+  woodCrateCount: 100
+  metalCrateCount: 20
+  militaryCrateCount: 4
   crateZombiesMin: 2
   crateZombiesMax: 3
   buildingRules:
@@ -54,7 +54,7 @@ MonoBehaviour:
     chance: 1
     table: {fileID: 11400000, guid: 37ede6249627661458efbdbc54bd7443, type: 2}
   - nameContains: Girl
-    chance: 0.25
+    chance: 0.15
     table: {fileID: 11400000, guid: 641114d3c3d8b1a4c95740775007a267, type: 2}
   - nameContains: Fat
     chance: 0.6

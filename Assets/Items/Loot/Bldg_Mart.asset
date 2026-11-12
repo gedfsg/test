@@ -12,35 +12,39 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 232eea3291527f3409bc89f592f4628b, type: 3}
   m_Name: Bldg_Mart
   m_EditorClassIdentifier: Assembly-CSharp::LootTable
-  minRolls: 10
-  maxRolls: 14
+  minRolls: 6
+  maxRolls: 9
   entries:
   - item: {fileID: 11400000, guid: cc20aae19861272409bac6e711b38117, type: 2}
-    weight: 10
+    weight: 6
     minAmount: 1
     maxAmount: 1
   - item: {fileID: 11400000, guid: 25312cf130c5ae34fa9a52939aa41d1c, type: 2}
-    weight: 8
+    weight: 4.8
     minAmount: 1
     maxAmount: 1
   - item: {fileID: 11400000, guid: cd36bf374795f864faf8ea01469d4d4a, type: 2}
-    weight: 6
+    weight: 3.6000001
     minAmount: 1
     maxAmount: 1
   - item: {fileID: 11400000, guid: fe5c88d08eff31541abcdb79aa088125, type: 2}
-    weight: 5
+    weight: 3
     minAmount: 1
     maxAmount: 1
   - item: {fileID: 11400000, guid: 93e19276e79a99444b4946da43bc44a9, type: 2}
-    weight: 10
-    minAmount: 1
-    maxAmount: 1
-  - item: {fileID: 11400000, guid: b35b9595aba14364482e4d76fea4bc34, type: 2}
     weight: 6
     minAmount: 1
     maxAmount: 1
+  - item: {fileID: 11400000, guid: b35b9595aba14364482e4d76fea4bc34, type: 2}
+    weight: 3.6000001
+    minAmount: 1
+    maxAmount: 1
   - item: {fileID: 11400000, guid: 43d75a1a3ba5d8242a833bd547af1999, type: 2}
-    weight: 5
+    weight: 3
+    minAmount: 1
+    maxAmount: 1
+  - item: {fileID: 11400000, guid: c409828ef0832274abd3c9cf70c42056, type: 2}
+    weight: 2
     minAmount: 1
     maxAmount: 1
   - item: {fileID: 11400000, guid: 08a184e18447fba46bae8a45ee3dbb7c, type: 2}
@@ -56,6 +60,6 @@ MonoBehaviour:
     minAmount: 1
     maxAmount: 1
   - item: {fileID: 11400000, guid: b5d195c9fff6c404a9210a71ade6433b, type: 2}
-    weight: 1.5
-    minAmount: 4
-    maxAmount: 8
+    weight: 0.75
+    minAmount: 3
+    maxAmount: 5

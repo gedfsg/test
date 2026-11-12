@@ -25,9 +25,26 @@ public static class LootTableBuilder
         public E(string path, float w, int min = 1, int max = 1) { this.path = path; this.w = w; this.min = min; this.max = max; }
     }
 
+    // ── 2026-11-12 밸런스 (AR·샷건 탄약이 너무 흔함) ──
+    // 권총 탄약은 초반 무기라 그대로. AR·샷건(·저격) 탄약은 드랍 가중치 50% 감소 + 수량 하향
+    //  - 수량 비율은 스펙 기준: AR 5→3 / 10→6 / 20→12 (×0.6), 샷건 3→2 / 6→4 / 12→8 (×0.67)
+    //  - 실제 테이블 수량(예: 나무 상자 AR 15~30)에 같은 비율을 곱함 (스펙 숫자는 기존 값과 달라서 비율로 적용)
+    const float RifleAmmoWeightMul = 0.5f, ShotgunAmmoWeightMul = 0.5f;
+    const float RifleAmmoAmountMul = 0.6f, ShotgunAmmoAmountMul = 0.67f;
+    // 음식·음료 드랍 가중치 40% 감소 (소비 속도는 그대로 → 수급보다 소비가 빠르게)
+    const float FoodWeightMul = 0.6f;
+    // 가방 드랍 가중치 2배
+    const float BackpackWeightMul = 2f;
+
+    static int Scale(int n, float mul) => Mathf.Max(1, Mathf.RoundToInt(n * mul));
+
     static E PAmmo(float w, int min, int max) => new E("Assets/Items/Ammo/Pistol Ammo.asset", w, min, max);
-    static E ARAmmo(float w, int min, int max) => new E("Assets/Items/Ammo/AR Ammo.asset", w, min, max);
-    static E SGAmmo(float w, int min, int max) => new E("Assets/Items/Ammo/Shotgun Ammo.asset", w, min, max);
+    static E ARAmmo(float w, int min, int max) => new E("Assets/Items/Ammo/AR Ammo.asset", w * RifleAmmoWeightMul, Scale(min, RifleAmmoAmountMul), Scale(max, RifleAmmoAmountMul));
+    static E SGAmmo(float w, int min, int max) => new E("Assets/Items/Ammo/Shotgun Ammo.asset", w * ShotgunAmmoWeightMul, Scale(min, ShotgunAmmoAmountMul), Scale(max, ShotgunAmmoAmountMul));
+    // 음식 (가중치 ×0.6)
+    static E Food(string file, float w) => new E(C + file, w * FoodWeightMul);
+    // 가방 (가중치 ×2)
+    static E Bag(float w) => new E(B + "Backpack_Medium.asset", w * BackpackWeightMul);
 
     static readonly string[] CommonGuns = { "G17", "P9", "S12P8", "AK-556", "AR-15", "G36K", "FAMAS", "Skorpion", "UMP45", "MP7" };
     static readonly string[] RareGuns = { "Five-seveN", "RARAN_1130", "XMA-10", "SAIGA-12", "L85A2", "AUG", "Galil", "Groza", "Vector", "P90" };
@@ -49,31 +66,32 @@ public static class LootTableBuilder
 
         var foods = new List<E>
         {
-            new E(C + "Apple.asset", 10), new E(C + "Bread.asset", 8), new E(C + "CannedFood.asset", 6), new E(C + "Ramen.asset", 5),
-            new E(C + "Water.asset", 10), new E(C + "Cola.asset", 6), new E(C + "Coffee.asset", 5),
+            // (이전) Apple 10 / Bread 8 / CannedFood 6 / Ramen 5 / Water 10 / Cola 6 / Coffee 5 → Food()가 ×0.6
+            Food("Apple.asset", 10), Food("Bread.asset", 8), Food("CannedFood.asset", 6), Food("Ramen.asset", 5),
+            Food("Water.asset", 10), Food("Cola.asset", 6), Food("Coffee.asset", 5),
         };
 
         // ── 상자 ──
         var wood = new List<E>(foods) { new E(C + "Bandage.asset", 10), PAmmo(10, 10, 20), ARAmmo(8, 15, 30), SGAmmo(6, 4, 8) };
         AddGuns(wood, new[] { "G17", "P9" }, 3f); AddGuns(wood, new[] { "Skorpion", "S12P8" }, 1f);
         AddGuns(wood, CommonShotguns, 1.5f); AddGuns(wood, CommonSMGs, 1.5f); // 샷건/SMG 롤당 약 1% → 약 6%
-        wood.Add(new E(B + "Backpack_Medium.asset", 2)); // 가방 (1종)
+        wood.Add(Bag(2)); // 가방 (1종, Bag()이 가중치 ×2)
         var crateWood = Table("Crate_Wood", 2, 5, wood);
 
         var metal = new List<E>
         {
             new E(C + "Bandage.asset", 8), new E(C + "MedKit.asset", 6), new E(C + "Painkiller.asset", 4),
-            new E(C + "CannedFood.asset", 6), new E(C + "Ramen.asset", 6), new E(C + "Water.asset", 6),
+            Food("CannedFood.asset", 6), Food("Ramen.asset", 6), Food("Water.asset", 6),
             PAmmo(8, 15, 30), ARAmmo(10, 30, 60), SGAmmo(6, 6, 12),
         };
         AddGuns(metal, new[] { "G17", "S12P8", "AK-556", "AR-15", "UMP45" }, 2f); AddGuns(metal, RareGuns, 1.5f);
         AddGuns(metal, CommonSMGs, 1.5f); AddGuns(metal, CommonShotguns, 1.5f);
-        metal.Add(new E(B + "Backpack_Medium.asset", 3));
+        metal.Add(Bag(3));
         var crateMetal = Table("Crate_Metal", 2, 5, metal);
 
         var military = new List<E> { new E(C + "MedKit.asset", 6), new E(C + "Painkiller.asset", 4), PAmmo(8, 20, 30), ARAmmo(12, 30, 60), SGAmmo(8, 8, 16) };
         AddGuns(military, RareGuns, 2f);
-        military.Add(new E(B + "Backpack_Medium.asset", 3));
+        military.Add(Bag(3));
         var crateMilitary = Table("Crate_Military", 1, 4, military);   // + 보장 1개 = 2~5개
         var epic = new List<E>(); AddGuns(epic, EpicGuns, 1f);
         var crateMilitaryG = Table("Crate_Military_Guaranteed", 1, 1, epic);
@@ -82,27 +100,27 @@ public static class LootTableBuilder
         var house = new List<E>(foods) { new E(C + "Bandage.asset", 6), PAmmo(4, 8, 15) };
         AddGuns(house, new[] { "G17", "P9" }, 1.5f); // 권총 가끔 (~3%)
         AddGuns(house, new[] { "S12P8", "Skorpion" }, 0.75f); // 집에 있던 샷건/SMG 드물게 (~1.5%)
-        house.Add(new E(B + "Backpack_Medium.asset", 1));
+        house.Add(Bag(1));
         var police = new List<E> { ARAmmo(20, 30, 60), PAmmo(15, 20, 40), SGAmmo(12, 8, 16), new E(C + "Bandage.asset", 5), new E(C + "MedKit.asset", 3) };
         AddGuns(police, new[] { "AK-556", "AR-15", "G36K", "FAMAS", "S12P8" }, 4f); AddGuns(police, new[] { "L85A2", "AUG", "SAIGA-12", "XMA-10" }, 1.5f); AddGuns(police, new[] { "G17" }, 3f);
         // 경찰서: 진압용 샷건 + 기동대 SMG 추가 (총 중 샷건/SMG 비중 약 50%)
         AddGuns(police, CommonShotguns, 3f); AddGuns(police, CommonSMGs, 3f); AddGuns(police, RareShotguns, 1f); AddGuns(police, RareSMGs, 1f);
-        var mart = new List<E>(foods);
+        var mart = new List<E>(foods) { Bag(1) }; // 상점에서도 가방 가끔 (2026-11-12)
         // 마트: 음식 대량 + 계산대/창고에 숨겨둔 샷건·SMG 가끔 (마트 1곳당 총 1자루 나올 확률 약 40%)
         AddGuns(mart, new[] { "S12P8", "Skorpion", "UMP45" }, 0.7f); mart.Add(SGAmmo(1.5f, 4, 8));
-        var church = new List<E> { new E(C + "Bandage.asset", 10), new E(C + "MedKit.asset", 6), new E(C + "Painkiller.asset", 4), new E(C + "Water.asset", 3) };
+        var church = new List<E> { new E(C + "Bandage.asset", 10), new E(C + "MedKit.asset", 6), new E(C + "Painkiller.asset", 4), Food("Water.asset", 3) };
         // 병원: 의료 아이템만 (붕대/구급상자/진통제), 교회보다 많이
         var hospital = new List<E> { new E(C + "Bandage.asset", 10), new E(C + "MedKit.asset", 7), new E(C + "Painkiller.asset", 6) };
 
         var db = LoadOrCreate<LootDatabase>("Assets/Resources/LootDatabase.asset");
         db.crateWood = crateWood; db.crateMetal = crateMetal; db.crateMilitary = crateMilitary; db.crateMilitaryGuaranteed = crateMilitaryG;
-        db.woodCrateCount = 50; db.metalCrateCount = 10; db.militaryCrateCount = 2;
+        db.woodCrateCount = 100; db.metalCrateCount = 20; db.militaryCrateCount = 4; // 길거리 상자 2배 (이전 50/10/2, 등급 비율 유지)
         db.crateZombiesMin = 2; db.crateZombiesMax = 3;
         db.buildingRules = new List<LootDatabase.BuildingRule>
         {
             Rule(LootDatabase.BuildingKind.House, Table("Bldg_House", 1, 3, house), 0),
             Rule(LootDatabase.BuildingKind.Police, Table("Bldg_Police", 6, 9, police), 0),     // AR/샷건/탄약 대량
-            Rule(LootDatabase.BuildingKind.Mart, Table("Bldg_Mart", 10, 14, mart), 0),         // 음식/음료 대량
+            Rule(LootDatabase.BuildingKind.Mart, Table("Bldg_Mart", 6, 9, mart), 0),           // 음식/음료 (이전 10~14 → 40% 감소)
             Rule(LootDatabase.BuildingKind.Church, Table("Bldg_Church", 3, 5, church), 0),     // 의료
             Rule(LootDatabase.BuildingKind.Warehouse, Table("Bldg_Warehouse", 4, 6, metal), 4), // 랜덤 + 좀비 多
             Rule(LootDatabase.BuildingKind.Hospital, Table("Bldg_Hospital", 6, 9, hospital), 0), // 의료 대량
@@ -123,7 +141,7 @@ public static class LootTableBuilder
         {
             Drop("Normal", 0.20f, smallAmmo), Drop("Normal", 0.20f, ragT),           // 일반: 탄약 20%(플레이테스트로 2배), 넝마 20%
             Drop("Police", 0.30f, policePistol), Drop("Police", 1.00f, policeAmmo), // 경찰: 권총 30%, 탄약 100%(플레이테스트로 2배)
-            Drop("Girl", 0.25f, runnerFood),                                        // 러너(빠른 좀비): 음식 가끔
+            Drop("Girl", 0.15f, runnerFood),                                        // 러너(빠른 좀비): 음식 가끔 (이전 25% → 음식 40% 감소)
             Drop("Fat", 0.60f, tankT),                                              // 탱커(체력 400): 희귀 아이템
         };
         EditorUtility.SetDirty(db);

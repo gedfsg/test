@@ -10,8 +10,10 @@ public class SurvivalNeeds : MonoBehaviour
 {
     [Header("100% → 0%까지 걸리는 게임 내 일수")]
     // 7일 플레이 피드백: 4일/7일은 거의 안 먹어도 돼서 생존 압박이 없었음 → 2일/3일 (하루 300초 기준 실시간 10분/15분)
-    [Min(0.1f)] public float waterDaysToEmpty = 2f;
-    [Min(0.1f)] public float foodDaysToEmpty = 3f;
+    // (이전) 물 2일 / 음식 3일 (하루 300초 기준)
+    // 2026-11-12: 하루가 480초로 늘어도 실시간 소진 속도는 유지 (물 600초 / 음식 900초) → 일수로 1.25 / 1.875
+    [Min(0.1f)] public float waterDaysToEmpty = 1.25f;
+    [Min(0.1f)] public float foodDaysToEmpty = 1.875f;
 
     [Header("0%일 때 체력 감소 (수치 하나당, 초당)")]
     public float starvationDamagePerSecond = 1f;

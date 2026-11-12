@@ -16,6 +16,7 @@ using Unity.AI.Navigation;
 ///  1) 모든 BuildingWallCollider에 런타임과 같은 벽 콜라이더(문 구멍 뚫린 두께 있는 벽)를 임시로 생성
 ///  2) NavMeshSurface 굽기 → 벽 자리는 끊기고 문 구멍으로만 실내와 연결됨
 ///  3) 결과를 기존 NavMesh 에셋 경로에 저장, 임시 콜라이더 삭제 (씬엔 NavMesh 데이터 참조만 바뀜)
+///  1-1) 강·물속(바닥이 수면 아래)은 Not Walkable 볼륨으로 덮어서 NavMesh에서 뺌 (2026-11-12, 다리 아래 물속 좀비 스폰 방지)
 ///  4) 그래도 바깥과 끊긴 실내(문 폭이 좁아 에이전트 반경에 막히거나, 경찰서처럼 실내 바닥이 climb 0.75m보다 높은 곳)는
 ///     문 안팎을 잇는 NavMeshLink를 자동 생성 (씬의 "ZombieDoorLinks" 아래, 다시 실행하면 지우고 새로 만듦)
 ///     - 굽기만 했을 땐 실내 100곳 중 9곳(경찰서 포함)이 끊겨서 좀비가 실내 플레이어에게 못 왔음 (Play 실측)
@@ -40,6 +41,10 @@ public static class RebakeNavMeshWithWalls
             var mc = w.Build();
             if (mc != null) temp.Add(mc);
         }
+
+        // 1-1) 강·물속 제외 볼륨 (2026-11-12): 강 바닥(y≈0)에도 NavMesh가 깔려서 다리 아래 물속에 좀비가 생기고 물속으로 쫓아옴
+        //      → 바닥이 수면 아래인 2m 칸들을 Not Walkable 볼륨으로 덮고 굽기 (굽고 나면 삭제)
+        var waterRoot = BuildWaterVolumes(surface);
 
         try
         {
@@ -75,6 +80,7 @@ public static class RebakeNavMeshWithWalls
         }
         finally
         {
+            if (waterRoot != null) Object.DestroyImmediate(waterRoot);
             // 임시 콜라이더 삭제 (런타임엔 Awake에서 다시 만듦)
             foreach (var mc in temp)
             {
@@ -88,6 +94,51 @@ public static class RebakeNavMeshWithWalls
         var scene = surface.gameObject.scene;
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene);
+    }
+
+    /// <summary>
+    /// 물속 칸을 NavMeshModifierVolume(Not Walkable)로 덮는 임시 오브젝트 생성 (굽기 후 삭제).
+    /// 칸 = 2m 격자, 위에서 레이를 쏴서 처음 닿은 바닥이 수면(WaterZone) 아래면 물. 같은 줄(z)의 연속 칸은 하나로 합침.
+    /// 볼륨 높이는 강 바닥 아래 ~ 수면 + 1.6m (다리 상판 y≈15.6 이상은 건드리지 않음)
+    /// </summary>
+    static GameObject BuildWaterVolumes(NavMeshSurface surface)
+    {
+        if (!WaterZone.TryGetSurface(out float waterY)) return null;
+        var terrain = Terrain.activeTerrain;
+        if (terrain == null) return null;
+        int notWalkable = UnityEngine.AI.NavMesh.GetAreaFromName("Not Walkable");
+        Vector3 o = terrain.transform.position, size = terrain.terrainData.size;
+        const float cell = 2f;
+        float bottom = o.y - 5f, top = waterY + 1.6f;
+
+        var root = new GameObject("TempWaterNavVolumes");
+        root.transform.SetParent(surface.transform, false); // collectObjects가 Children이어도 잡히게
+        int volumes = 0;
+        for (float z = o.z + cell / 2f; z < o.z + size.z; z += cell)
+        {
+            float runStart = float.NaN;
+            for (float x = o.x + cell / 2f; x < o.x + size.x + cell; x += cell)
+            {
+                // 레이는 수면 + 3m에서 시작 → 다리 상판(y≈15.6+) 아래에서 쏘게 되어 다리 밑 강 바닥도 물로 잡힘
+                bool water = x < o.x + size.x && WaterZone.IsUnderwater(new Vector3(x, waterY, z), 3f);
+                if (water && float.IsNaN(runStart)) runStart = x;
+                if (!water && !float.IsNaN(runStart))
+                {
+                    float x0 = runStart - cell / 2f, x1 = x - cell / 2f;
+                    var go = new GameObject("WaterVol");
+                    go.transform.SetParent(root.transform, true);
+                    go.transform.position = new Vector3((x0 + x1) / 2f, (bottom + top) / 2f, z);
+                    var v = go.AddComponent<NavMeshModifierVolume>();
+                    v.center = Vector3.zero;
+                    v.size = new Vector3(x1 - x0, top - bottom, cell);
+                    v.area = notWalkable;
+                    volumes++;
+                    runStart = float.NaN;
+                }
+            }
+        }
+        Debug.Log($"[NavBake] 물속 제외 볼륨 {volumes}개 (수면 y={waterY:F1})");
+        return root;
     }
 
     /// <summary>

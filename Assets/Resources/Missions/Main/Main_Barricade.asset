@@ -14,6 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MainMissionData
   type: 10
   title: "\uBC14\uB9AC\uCF00\uC774\uB4DC \uC124\uCE58"
+  actionDescription: "\uC9C0\uC815 \uC704\uCE58\uC5D0\uC11C F\uD0A4 '4\uCD08 \uC720\uC9C0'"
   target: 1
   altTarget: 0
   holdSeconds: 4

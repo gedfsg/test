@@ -26,7 +26,8 @@ public static class MissionDefaults
             M(MainMissionType.FoodSupply, "긴급 식량 조달", 10, alt: 15),          // 통조림 10개 or 식량 15개
             M(MainMissionType.Recon, "정찰 완료", 4),                              // 4개 구역
             M(MainMissionType.RadioSignal, "무전 신호 수신", 30),                   // 라디오 타워 근처 30초
-            M(MainMissionType.Escape, "탈출 지점 도달", 1, lastDay: true),
+            // M(MainMissionType.Escape, "탈출 지점 도달", 1, lastDay: true), // (이전)
+            M(MainMissionType.Escape, "구조 헬기 탑승", 1, lastDay: true),
         };
     }
 
@@ -53,8 +54,32 @@ public static class MissionDefaults
         var d = ScriptableObject.CreateInstance<MainMissionData>();
         d.name = "Main_" + type;
         d.type = type; d.title = title; d.target = target; d.altTarget = alt; d.holdSeconds = hold; d.fixedLastDay = lastDay;
+        d.actionDescription = ActionFor(type);
         return d;
     }
+
+    /// <summary>
+    /// 메인 미션 HUD 2번째 줄 (뭘 해야 하는지). 2026-11-12 추가 - 미션 제목만으로는 할 일이 불명확하다는 피드백.
+    /// 숫자는 위 Main()의 target/altTarget/hold 값과 맞춰야 함.
+    /// 비상 무전기는 실제 배치가 경찰서 실내 or 라디오 타워 아래라서 (옥상은 못 올라감) 그렇게 적음.
+    /// </summary>
+    public static string ActionFor(MainMissionType type) => type switch
+    {
+        MainMissionType.MedicalSupplies => "붕대 10개 또는 진통제 5개를 '습득'",
+        MainMissionType.WaterSupply => "생수 5병을 '습득'",
+        MainMissionType.FoodSupply => "통조림 10개 또는 식량 15개를 '습득'",
+        MainMissionType.ZombieHorde => "지정 지역 좀비 20마리를 '처치'",
+        MainMissionType.EmergencyRadio => "경찰서·라디오 타워 무전기 앞에서 F키 '3초 유지'",
+        MainMissionType.PowerRestore => "발전소에서 F키 '4초 유지'",
+        MainMissionType.KeyCardA or MainMissionType.KeyCardB or MainMissionType.KeyCardC => "맵에서 열쇠 카드를 '습득'",
+        MainMissionType.Barricade => "지정 위치에서 F키 '4초 유지'",
+        MainMissionType.Recon => "4개 구역 '방문'",
+        MainMissionType.RadioSignal => "라디오 타워 근처에서 '30초 대기'",
+        MainMissionType.FuelCollect => "주유소 연료통 앞에서 F키 '1.5초 유지'",
+        MainMissionType.Armory => "경찰서 무기고 앞에서 F키 '2.5초 유지'",
+        MainMissionType.Escape => "헬리패드에서 구조 헬기에 '탑승'",
+        _ => "",
+    };
 
     static SubMissionData S(SubMissionType type, string title, int target, SubMissionTrigger trigger, float radius, string rewardItem, string rewardLabel, int rewardAmount)
     {

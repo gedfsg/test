@@ -19,7 +19,8 @@ using UnityEngine.UI;
 /// </summary>
 public class AudioManager : MonoBehaviour
 {
-    public enum Channel { SFX, Zombie, UI, Ambient }
+    // public enum Channel { SFX, Zombie, UI, Ambient }  // (이전)
+    public enum Channel { SFX, Zombie, UI, Ambient, BGM } // BGM: 메인 메뉴 음악·죽음 스팅어 (UIAudio). 새 값은 맨 뒤에
 
     /// <summary>
     /// 카테고리별 기본 볼륨 (DayZ / Project Zomboid / PUBG 참고).
@@ -54,7 +55,7 @@ public class AudioManager : MonoBehaviour
 
     // 믹서 노출 파라미터 이름 (Setup Sound System이 같은 이름으로 만듦)
     public const string MasterParam = "MasterVolume";
-    static readonly string[] ChannelParams = { "SFXVolume", "ZombieVolume", "UIVolume", "AmbientVolume" };
+    static readonly string[] ChannelParams = { "SFXVolume", "ZombieVolume", "UIVolume", "AmbientVolume", "BGMVolume" };
 
     [Tooltip("3D 효과음 동시 재생 최대 수 (꽉 차면 가장 오래된 소리를 끊고 재사용)")]
     public int poolSize = 32;
@@ -65,7 +66,7 @@ public class AudioManager : MonoBehaviour
     public static SoundLibrary Library { get; private set; }
     public static AudioMixer Mixer { get; private set; }
 
-    readonly AudioMixerGroup[] groups = new AudioMixerGroup[4];
+    readonly AudioMixerGroup[] groups = new AudioMixerGroup[System.Enum.GetValues(typeof(Channel)).Length];
     readonly List<AudioSource> pool = new List<AudioSource>();
     readonly Dictionary<AudioSource, float> startTimes = new Dictionary<AudioSource, float>();
     AudioSource uiSource;
@@ -171,6 +172,9 @@ public class AudioManager : MonoBehaviour
         EventSystem.current.RaycastAll(data, uiHits);
         if (uiHits.Count == 0) return;
         var sel = uiHits[0].gameObject.GetComponentInParent<Selectable>();
+        // 메뉴 UI(UIButton·스위치·드롭다운)는 UIAudio가 맞는 소리를 냄 → 여기서 또 내면 두 번 들림
+        if (sel != null && (sel.GetComponent<UIButton>() != null || sel.GetComponent<UIToggleSwitch>() != null)) return;
+        if (sel != null && sel.IsInteractable() && sel.GetComponentInParent<TMPro.TMP_Dropdown>() != null) { UIAudio.Play(UIAudio.Sound.Click); return; }
         if (sel != null && sel.IsInteractable() && (sel is Button || sel is Toggle))
             PlayUI(SoundLibrary.Pick(Library != null ? Library.click : null), Vol.UI);
     }

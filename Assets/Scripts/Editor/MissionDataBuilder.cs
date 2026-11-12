@@ -25,7 +25,14 @@ public static class MissionDataBuilder
 
     static int Save(ScriptableObject so, string path)
     {
-        if (AssetDatabase.LoadAssetAtPath<ScriptableObject>(path) != null) { Object.DestroyImmediate(so); return 0; }
+        var existing = AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
+        // 2026-11-12: 기존 메인 미션 에셋에 새 필드(actionDescription)가 비어 있으면 기본 문장만 채움 (다른 값은 그대로)
+        if (existing is MainMissionData em && so is MainMissionData dm && string.IsNullOrEmpty(em.actionDescription))
+        {
+            em.actionDescription = dm.actionDescription;
+            EditorUtility.SetDirty(em);
+        }
+        if (existing != null) { Object.DestroyImmediate(so); return 0; }
         AssetDatabase.CreateAsset(so, path);
         return 1;
     }

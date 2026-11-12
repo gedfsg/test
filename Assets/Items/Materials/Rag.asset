@@ -16,6 +16,7 @@ MonoBehaviour:
   icon: {fileID: 21300000, guid: 0ada6a00815b4b147894786bb821504d, type: 3}
   itemType: 3
   rarity: 0
+  worldModel: {fileID: 0}
   isStackable: 1
   maxStackSize: 20
   description: "\uB0A1\uC740 \uCC9C \uC870\uAC01"

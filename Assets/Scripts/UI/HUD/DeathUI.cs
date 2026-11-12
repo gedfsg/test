@@ -38,6 +38,9 @@ public class DeathUI : MonoBehaviour
         var player = GameObject.FindWithTag("Player");
         if (player == null || player.GetComponent<Health>() == null) return;
         if (FindFirstObjectByType<DeathUI>() != null) return;
+        // 새 생존 종료 화면(DeathScreen.prefab, MenuUI가 배치)이 있으면 이 예전 GAME OVER 화면은 안 만듦
+        var menu = MenuUIPrefabs.Load();
+        if (menu != null && menu.deathScreen != null) return;
         new GameObject("DeathUI").AddComponent<DeathUI>();
     }
 

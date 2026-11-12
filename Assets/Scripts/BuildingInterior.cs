@@ -13,6 +13,13 @@ public class BuildingInterior : MonoBehaviour
     /// <summary>플레이어가 건물에 들어갈 때마다 (미션: 건물 방문 판정용)</summary>
     public static event System.Action<BuildingInterior> PlayerEntered;
 
+    [Tooltip("입구 제외 반경 (m): 바깥 좀비는 이 안을 목적지로 삼지 않고, 이 안에서 서성이면 5m 밖으로 물러남 (ZombieRules)")]
+    public float exclusionRadius = 3f;
+
+    [Header("루팅 (LootWorldSpawner)")]
+    [Tooltip("게임 시작 시 이 건물 실내에 상자 1개를 반드시 놓음 (등급 일반 70% / 희귀 25% / 전설 5%)")]
+    public bool mustHaveCrate = true;
+
     [Header("1층 높이 (건물 바닥에서 이 높이 위는 전부 잘라내서 1층만 보이게 함)")]
     public float groundFloorHeight = 5f;
 
@@ -289,9 +296,147 @@ public class BuildingInterior : MonoBehaviour
         return b.min.y + groundFloorHeight;
     }
 
+    // ── 입구 통과 판정 ──
+    // 트리거 상자가 벽 밖으로 삐져나온 곳(ㄱ자 건물 파인 곳, 벽을 못 잰 면, 지붕 처마 아래)에 측면·후면에서 닿기만 해도
+    // 실내 뷰(지붕 잘림·검정 마스크·X-Ray)가 켜졌음 → "트리거 안 + 문 구멍을 안쪽으로 지나는 중"일 때만 실내로 들어간 것으로 침.
+    // 문 정보가 없는 건물은 예전처럼 트리거만으로, 8방향이 전부 이 건물 벽이면(실내에서 시작·순간이동) 바로 실내
+    const float DoorSideMargin = 0.5f;   // 문 폭 양옆 여유 (m)
+    const float DoorDepthIn = 3f;        // 문에서 안쪽으로 이 거리까지 지나는 중이면 통과로 침 (m)
+    const float DoorDepthOut = 0.3f;     // 문턱 바로 바깥까지 허용 (m)
+
+    bool playerInTrigger;      // 트리거 상자 안 (아직 실내가 아닐 수 있음)
+    bool playerInside;         // 입구로 들어와서 실내 뷰가 켜진 상태
+    struct DoorGate { public Vector3 center, outDir, lat; public float halfWidth, reach; }
+    bool doorPassed;           // 문 구멍을 안쪽으로 지났고 아직 문 앞으로 다시 나가지 않음
+    Transform gatePlayer;
+    System.Collections.Generic.List<DoorGate> doorGates;
+    Transform wallRoot; // 문 있는 벽을 찾은 곳 (보통 이 건물, 벽이 형제에 있으면 부모)
+
+    /// <summary>플레이어가 입구를 지나 이 건물 안에 있음 (실내 뷰가 켜진 상태)</summary>
+    public bool IsPlayerInside => playerInside;
+
     void OnTriggerEnter(Collider other)
     {
         if (!other.CompareTag(playerTag)) return;
+        playerInTrigger = true;
+        if (EnteredThroughDoor(other.transform.position)) EnterBuilding(other);
+    }
+
+    void OnTriggerStay(Collider other)
+    {
+        if (playerInside || !playerInTrigger || !other.CompareTag(playerTag)) return;
+        if (EnteredThroughDoor(other.transform.position)) EnterBuilding(other);
+    }
+
+    bool EnteredThroughDoor(Vector3 pos)
+    {
+        if (doorGates == null) BuildDoorGates();
+        if (doorGates.Count == 0) return true; // 문 정보가 없는 건물: 예전 방식
+        if (doorPassed || InDoorZone(pos, out _)) return true;
+        return FullyEnclosed(pos + Vector3.up * WallProbeHeight);
+    }
+
+    // 문 구멍 통로: 문 폭(+여유) 안 + 문턱 바로 바깥 ~ 안쪽 reach(문에서 실내 트리거까지 + 1m, 최소 3m)
+    // behindFront = 통로 폭 안에서 문 앞(바깥)으로 나가 있음
+    bool InDoorZone(Vector3 pos, out bool behindFront)
+    {
+        behindFront = false;
+        foreach (var g in doorGates)
+        {
+            Vector3 rel = pos - g.center;
+            float along = Vector3.Dot(rel, g.lat);
+            float depth = -Vector3.Dot(rel, g.outDir); // + = 문 안쪽
+            if (Mathf.Abs(along) > g.halfWidth + DoorSideMargin) continue;
+            if (depth >= -DoorDepthOut && depth <= g.reach) return true;
+            if (depth < -DoorDepthOut) behindFront = true;
+        }
+        return false;
+    }
+
+    // 넓은 현관·로비가 있는 건물은 실내 트리거가 문에서 3.5~9m 안쪽부터 시작함 (교회·경찰서 등 6곳, 실제 걷기 점검)
+    // → 문을 지나면 표시를 남겨 두고, 표시가 있는 채로 트리거에 들어가면 실내. 문 앞으로 다시 나가면 표시 지움
+    void Update()
+    {
+        if (playerInside || doorGates == null && !NearAnyDoorCheap()) return;
+        if (doorGates == null) BuildDoorGates();
+        if (doorGates.Count == 0) return;
+        if (gatePlayer == null) { var p = GameObject.FindWithTag(playerTag); if (p == null) return; gatePlayer = p.transform; }
+        Vector3 pos = gatePlayer.position;
+        bool inZone = InDoorZone(pos, out bool outsideFront);
+        if (inZone) doorPassed = true;
+        else if (outsideFront) doorPassed = false;
+    }
+
+    // 문 정보를 아직 안 만든 건물: 플레이어가 트리거 근처(30m)에 오기 전엔 아무것도 안 함
+    bool NearAnyDoorCheap()
+    {
+        if (gatePlayer == null) { var p = GameObject.FindWithTag(playerTag); if (p == null) return false; gatePlayer = p.transform; }
+        var t = FindTriggerCollider();
+        if (t == null) return false;
+        Vector3 c = t.bounds.ClosestPoint(gatePlayer.position);
+        return (c - gatePlayer.position).sqrMagnitude < 30f * 30f;
+    }
+
+    // 문을 안 지났어도 실내로 칠 곳: 8방향 전부 가까이(30m)에 이 건물 벽이 있음 (실내에서 시작·순간이동).
+    // 4방향(CountWallsAround)만 보면 ㄷ자 건물 마당·큰 농장 앞마당도 사방이 건물이라 실내가 됐음 (전수 점검 654곳)
+    bool FullyEnclosed(Vector3 p)
+    {
+        for (int k = 0; k < 8; k++)
+        {
+            float a = k * 45f * Mathf.Deg2Rad;
+            Vector3 d = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+            bool wall = false;
+            foreach (var h in Physics.RaycastAll(p, d, 30f, ~0, QueryTriggerInteraction.Ignore))
+                if (h.collider.transform.IsChildOf(wallRoot)) { wall = true; break; }
+            if (!wall) return false;
+        }
+        return true;
+    }
+
+    // 이 건물 벽 콜라이더의 문 구멍(doorSlot)마다 중심·바깥 방향·폭 (EntranceMarkers.TryGetDoor와 같은 벽 찾기)
+    void BuildDoorGates()
+    {
+        doorGates = new System.Collections.Generic.List<DoorGate>();
+        wallRoot = transform;
+        var walls = GetComponentsInChildren<BuildingWallCollider>(true);
+        if (System.Array.Find(walls, w => w.hasDoor) == null && transform.parent != null)
+        {
+            walls = transform.parent.GetComponentsInChildren<BuildingWallCollider>(true);
+            wallRoot = transform.parent;
+        }
+        Collider trig = FindTriggerCollider();
+        if (trig == null) return;
+        bool fixedOut = TryGetDoor(out _, out Vector3 buildingOut) && LootDatabase.Classify(this) == LootDatabase.BuildingKind.Hospital;
+        foreach (var w in walls)
+        {
+            if (!w.hasDoor) continue;
+            Vector3 c = w.transform.TransformPoint(w.doorSlotCenter);
+            // 병원은 트리거가 현관 마당까지 덮어서 중심→문 방향이 틀어짐 → 건물 문 방향(+X) 사용 (EntranceMarkers와 같음)
+            Vector3 outDir = fixedOut ? buildingOut : EntranceMarkers.SnapToAxis(c - trig.bounds.center, transform);
+            if (outDir.sqrMagnitude < 0.01f) continue;
+            Vector3 lat = Vector3.Cross(Vector3.up, outDir).normalized;
+            float half = 0f;
+            Vector3 e = w.doorSlotSize * 0.5f;
+            for (int i = 0; i < 8; i++)
+            {
+                Vector3 corner = w.doorSlotCenter + new Vector3((i & 1) == 0 ? -e.x : e.x, (i & 2) == 0 ? -e.y : e.y, (i & 4) == 0 ? -e.z : e.z);
+                half = Mathf.Max(half, Mathf.Abs(Vector3.Dot(w.transform.TransformPoint(corner) - c, lat)));
+            }
+            // 문에서 안쪽으로 실내 트리거가 시작되는 거리 (+1m). 못 찾으면 3m
+            float reach = DoorDepthIn;
+            for (float d = 0f; d <= 20f; d += 0.5f)
+            {
+                Vector3 p = c - outDir * d; p.y = trig.bounds.min.y + 0.6f;
+                if (trig.ClosestPoint(p) == p) { reach = Mathf.Max(DoorDepthIn, d + 1f); break; }
+            }
+            doorGates.Add(new DoorGate { center = c, outDir = outDir, lat = lat, halfWidth = half, reach = reach });
+        }
+    }
+
+    void EnterBuilding(Collider other)
+    {
+        if (playerInside) return;
+        playerInside = true;
         SetCut(true);
         occupied.Remove(this);
         occupied.Add(this);
@@ -305,6 +450,10 @@ public class BuildingInterior : MonoBehaviour
     void OnTriggerExit(Collider other)
     {
         if (!other.CompareTag(playerTag)) return;
+        playerInTrigger = false;
+        if (!playerInside) return;
+        doorPassed = false; // 나갈 때 문을 지나며 다시 켜질 수 있음 → 문 앞으로 나가면 Update가 지움 // 측면·후면에서 트리거만 스치고 지나감 → 실내 뷰를 켠 적 없음
+        playerInside = false;
         SetCut(false);
         occupied.Remove(this);
         if (occupied.Count == 0 && TryGetDoor(out Vector3 door, out _))

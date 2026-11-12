@@ -161,6 +161,34 @@ public class PlayerController : MonoBehaviour
         inputActions.Player.Interact.performed += OnInteractPerformed;
     }
 
+    /// <summary>
+    /// 일시정지·사망 화면 동안 입력만 끄고 켬 (MenuUI). 컴포넌트를 껐다 켜면 OnEnable의 람다 구독이 중복되므로 이걸 씀
+    /// (액션을 끄면 누르고 있던 사격은 canceled로 풀림)
+    /// </summary>
+    public void SetInputEnabled(bool on)
+    {
+        inputBlocked = !on; // 마우스 조준 회전도 멈춤 (인벤토리 위에서 커서를 움직여도 캐릭터가 돌지 않게)
+        if (inputActions == null) return;
+        if (on) { if (isActiveAndEnabled) inputActions.Enable(); }
+        else inputActions.Disable();
+    }
+    bool inputBlocked;
+
+    /// <summary>
+    /// 인벤토리가 열린 동안 (2026-11-12): 이동(WASD·달리기·구르기)은 그대로 두고,
+    /// 사격(좌클릭)·마우스 조준 회전·재장전(R)만 막음 → 마우스는 인벤토리 UI 조작용. 좀비·시간은 그대로 흐름.
+    /// (이전) 인벤토리를 열면 SetInputEnabled(false)로 이동까지 전부 막았음
+    /// MenuUI.RefreshGameplayInput이 SetInputEnabled 다음에 부름 (SetInputEnabled(true)가 액션 전부를 다시 켜기 때문)
+    /// </summary>
+    public void SetCombatInputEnabled(bool on)
+    {
+        combatBlocked = !on;
+        if (inputActions == null) return;
+        if (on && !inputBlocked && isActiveAndEnabled) { inputActions.Player.Fire.Enable(); inputActions.Player.Reload.Enable(); }
+        else { inputActions.Player.Fire.Disable(); inputActions.Player.Reload.Disable(); } // 누르고 있던 사격은 canceled로 풀림
+    }
+    bool combatBlocked;
+
     void OnDisable()
     {
         inputActions.Disable();
@@ -245,6 +273,7 @@ public class PlayerController : MonoBehaviour
         {
             // 구르기 돌진: 매 물리 프레임 같은 수평 속도 (Rigidbody라 벽에 막히면 멈춤, 중력은 그대로)
             rb.linearVelocity = new Vector3(rollVelocity.x, rb.linearVelocity.y, rollVelocity.z);
+            rb.linearVelocity = WaterZone.BlockVelocity(rb.position, rb.linearVelocity); // 구르기로도 강·물속 진입 금지 (2026-11-12)
             return;
         }
         locomotion.Move(moveInput);
@@ -741,6 +770,16 @@ public class PlayerController : MonoBehaviour
         }
         if (weaponHandAttacher == null) weaponHandAttacher = FindAnyObjectByType<WeaponHandAttacher>();
         if (weaponHandAttacher != null) weaponHandAttacher.aimAtTarget = !(meleeHeld || isDead || reloading || isRolling);
+        // 권총 양손 그립 (가슴 중앙): 권총을 들고 있을 때만. IK가 꺼지는 상황(재장전/전환/사망/구르기)은 Rig weight 0으로 같이 꺼짐
+        if (weaponHandAttacher != null)
+        {
+            weaponHandAttacher.pistolHeld = !meleeHeld && currentMode == WeaponMode.Ranged && rangedWeapon != null && rangedWeapon.weaponData != null && rangedWeapon.weaponData.type == WeaponType.Pistol;
+            // 2026-11-12: 모든 총 양손 그립 (권총 가슴 중앙 / AR·샷건 어깨 견착) + 달릴 때 Low Ready
+            bool gunHeld = !meleeHeld && currentMode == WeaponMode.Ranged && rangedWeapon != null && rangedWeapon.weaponData != null;
+            weaponHandAttacher.gripWeapon = gunHeld ? rangedWeapon.weaponData : null;
+            float planarSpeed = rb != null ? new Vector2(rb.linearVelocity.x, rb.linearVelocity.z).magnitude : 0f;
+            weaponHandAttacher.gripLowReady = gunHeld && locomotion != null && locomotion.IsSprinting && planarSpeed > 2f && !isFireButtonPressed;
+        }
     }
 
     void OnReloadStarted(float reloadTime)
@@ -879,6 +918,7 @@ public class PlayerController : MonoBehaviour
     void AimAtMouse()
     {
         if (Mouse.current == null || mainCamera == null) return;
+        if (inputBlocked || combatBlocked) return; // 일시정지·사망 (MenuUI) / 인벤토리 열림 (조준 회전만 막고 이동은 됨)
 
         // 기준 높이는 캐릭터 루트 + 고정 오프셋(총구 높이 정도). firePoint.position.y처럼
         // 애니메이션 때문에 흔들리는 값을 쓰면 마우스가 가만히 있어도 조준 지점이 미세하게

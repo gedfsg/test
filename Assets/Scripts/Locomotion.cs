@@ -47,6 +47,7 @@ public class Locomotion : MonoBehaviour
         float targetSpeed = (isSprinting && direction.magnitude > 0.1f && currentStamina > 0) ? sprintSpeed : walkSpeed;
         float yVel = rb.linearVelocity.y; // 중력(Y속도) 보존
         rb.linearVelocity = direction.normalized * targetSpeed + Vector3.up * yVel;
+        rb.linearVelocity = WaterZone.BlockVelocity(rb.position, rb.linearVelocity); // 강·물속 진입 금지 (2026-11-12)
 
         // 2. [핵심] 애니메이션 파라미터 업데이트
         if (anim != null)
@@ -153,7 +154,7 @@ public class Locomotion : MonoBehaviour
 
         while (Time.time < startTime + rollDuration)
         {
-            rb.linearVelocity = rollDir * speed;
+            rb.linearVelocity = WaterZone.BlockVelocity(rb.position, rollDir * speed); // 구르기로도 물속 진입 금지
             yield return null;
         }
 
