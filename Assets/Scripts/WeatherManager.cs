@@ -87,6 +87,11 @@ public class WeatherManager : MonoBehaviour
     public Vector3 rainArea = new Vector3(45f, 1f, 45f);
     // public float rainHeight = 14f; // (이전)
     public float rainHeight = 10f;     // 플레이어 머리 위 10m
+    // 2026-11-12: "비가 안 내리고 소리만 들림" - 빗줄기 굵기 0.025m 고정이라 카메라(약 40m)에서 1픽셀도 안 됐음
+    // → 카메라 거리에 비례한 굵기 (40m에서 0.032m. 0.064는 막대처럼 너무 굵었음, 줌인 15m에선 최소 0.015m)
+    [Tooltip("빗줄기 굵기 = 카메라 거리(m) × 이 값 (아래 최소/최대로 제한)")]
+    public float rainWidthPerMeter = 0.0008f;
+    public float rainWidthMin = 0.015f, rainWidthMax = 0.06f;
     // [Range(0f, 1f)] public float rainVolume = 0.35f; // (이전)
     [Range(0f, 1f)] public float rainVolume = AudioManager.Vol.Rain; // 0.4 (사운드 볼륨 표)
     [Tooltip("실내에선 빗소리를 이만큼 줄임 (지붕 너머로 들리는 느낌)")]
@@ -217,6 +222,7 @@ public class WeatherManager : MonoBehaviour
             // if (player != null) rain.transform.position = player.position + Vector3.up * rainHeight; // (이전)
             if (anchor != null) rain.transform.position = anchor.Value + Vector3.up * rainHeight;
             var em = rain.emission; em.rateOverTime = rainPerSecond * rainAmount;
+            var rm = rain.main; rm.startSize = Mathf.Clamp(camDist * rainWidthPerMeter, rainWidthMin, rainWidthMax); // 카메라 거리에 맞춘 굵기
             if (raining && !rain.isPlaying) rain.Play();
             else if (!raining && rain.isPlaying) rain.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         }
@@ -390,7 +396,9 @@ public class WeatherManager : MonoBehaviour
         main.startLifetime = 0.8f; // 10m 높이 / 28m/s ≈ 0.36초면 땅에 닿음 + 비스듬히 보이는 여유
         main.startSpeed = 28f;
         main.startSize = 0.025f; // 카메라 가까이 지나가도 막대처럼 안 보이게 가늘게
-        main.startColor = new Color(0.8f, 0.85f, 0.95f, 0.35f);
+        // main.startColor = new Color(0.8f, 0.85f, 0.95f, 0.35f); // (이전) 너무 옅어서 안 보였음
+        main.startColor = new Color(0.82f, 0.87f, 0.97f, 0.5f);
+        main.cullingMode = ParticleSystemCullingMode.AlwaysSimulate; // 화면 밖 판정으로 멈췄다 재개될 때 빈 구간 없게
         main.simulationSpace = ParticleSystemSimulationSpace.World;
         main.maxParticles = 4000;
 
@@ -401,7 +409,8 @@ public class WeatherManager : MonoBehaviour
 
         var r = go.GetComponent<ParticleSystemRenderer>();
         r.renderMode = ParticleSystemRenderMode.Stretch;
-        r.lengthScale = 1f; r.velocityScale = 0.04f;
+        // r.lengthScale = 1f; r.velocityScale = 0.04f; // (이전) 위에서 내려다보면 짧은 점으로 보였음
+        r.lengthScale = 1f; r.velocityScale = 0.055f; // 빗줄기 길이 약 1.5m (28m/s × 0.055)
         r.sharedMaterial = new Material(Shader.Find("Sprites/Default")) { name = "Rain(Runtime)" };
         r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         return ps;
