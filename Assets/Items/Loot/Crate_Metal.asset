@@ -40,17 +40,17 @@ MonoBehaviour:
     minAmount: 1
     maxAmount: 1
   - item: {fileID: 11400000, guid: 0b1b7f57d9fbd0d4f89465ac7e6370f5, type: 2}
-    weight: 8
-    minAmount: 15
-    maxAmount: 30
+    weight: 24
+    minAmount: 22
+    maxAmount: 45
   - item: {fileID: 11400000, guid: d7d64191447ce2049a3bbb05cb355656, type: 2}
-    weight: 5
-    minAmount: 18
-    maxAmount: 36
+    weight: 30
+    minAmount: 45
+    maxAmount: 90
   - item: {fileID: 11400000, guid: b5d195c9fff6c404a9210a71ade6433b, type: 2}
-    weight: 3
-    minAmount: 4
-    maxAmount: 8
+    weight: 18
+    minAmount: 9
+    maxAmount: 18
   - item: {fileID: 11400000, guid: 272cef92113e53846ba3841e9dd2e926, type: 2}
     weight: 2
     minAmount: 1

@@ -42,7 +42,7 @@ MonoBehaviour:
     extraZombies: 0
   zombieDrops:
   - nameContains: Normal
-    chance: 0.2
+    chance: 0.5
     table: {fileID: 11400000, guid: 06b1a4751503311448bf1d92cd01f39f, type: 2}
   - nameContains: Normal
     chance: 0.2
@@ -56,6 +56,12 @@ MonoBehaviour:
   - nameContains: Girl
     chance: 0.15
     table: {fileID: 11400000, guid: 641114d3c3d8b1a4c95740775007a267, type: 2}
+  - nameContains: Girl
+    chance: 0.35
+    table: {fileID: 11400000, guid: 06b1a4751503311448bf1d92cd01f39f, type: 2}
   - nameContains: Fat
     chance: 0.6
     table: {fileID: 11400000, guid: 0edca4ecc8e430e40a0a8a20a40bab64, type: 2}
+  - nameContains: Fat
+    chance: 1
+    table: {fileID: 11400000, guid: 06b1a4751503311448bf1d92cd01f39f, type: 2}

@@ -16,14 +16,14 @@ MonoBehaviour:
   maxRolls: 1
   entries:
   - item: {fileID: 11400000, guid: 0b1b7f57d9fbd0d4f89465ac7e6370f5, type: 2}
-    weight: 1
-    minAmount: 5
-    maxAmount: 10
+    weight: 3
+    minAmount: 8
+    maxAmount: 15
   - item: {fileID: 11400000, guid: d7d64191447ce2049a3bbb05cb355656, type: 2}
-    weight: 0.5
-    minAmount: 3
-    maxAmount: 9
+    weight: 3
+    minAmount: 8
+    maxAmount: 22
   - item: {fileID: 11400000, guid: b5d195c9fff6c404a9210a71ade6433b, type: 2}
-    weight: 0.5
-    minAmount: 1
-    maxAmount: 3
+    weight: 3
+    minAmount: 3
+    maxAmount: 6

@@ -16,6 +16,6 @@ MonoBehaviour:
   maxRolls: 1
   entries:
   - item: {fileID: 11400000, guid: 0b1b7f57d9fbd0d4f89465ac7e6370f5, type: 2}
-    weight: 1
-    minAmount: 8
-    maxAmount: 15
+    weight: 3
+    minAmount: 12
+    maxAmount: 22

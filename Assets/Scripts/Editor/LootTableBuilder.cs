@@ -29,8 +29,15 @@ public static class LootTableBuilder
     // 권총 탄약은 초반 무기라 그대로. AR·샷건(·저격) 탄약은 드랍 가중치 50% 감소 + 수량 하향
     //  - 수량 비율은 스펙 기준: AR 5→3 / 10→6 / 20→12 (×0.6), 샷건 3→2 / 6→4 / 12→8 (×0.67)
     //  - 실제 테이블 수량(예: 나무 상자 AR 15~30)에 같은 비율을 곱함 (스펙 숫자는 기존 값과 달라서 비율로 적용)
-    const float RifleAmmoWeightMul = 0.5f, ShotgunAmmoWeightMul = 0.5f;
-    const float RifleAmmoAmountMul = 0.6f, ShotgunAmmoAmountMul = 0.67f;
+    // const float RifleAmmoWeightMul = 0.5f, ShotgunAmmoWeightMul = 0.5f;   // (이전 11-12 오전) 50% 감소
+    // const float RifleAmmoAmountMul = 0.6f, ShotgunAmmoAmountMul = 0.67f;
+    // ── 2026-11-12 오후 피드백: "상자·좀비에서 총알이 너무 안 나옴, 더 많이" → 위 감소를 되돌리고 오히려 크게 늘림 ──
+    // 모든 탄약(권총 포함) 드랍 가중치 ×3 (나무 상자 기준 롤당 탄약 확률 약 22% → 55%, 상자 1개에 탄약 평균 약 2묶음)
+    // 수량 ×1.5 (예: 나무 상자 AR 15~30 → 23~45발)
+    const float AmmoWeightMul = 3f;
+    const float AmmoAmountMul = 1.5f;
+    const float RifleAmmoWeightMul = AmmoWeightMul, ShotgunAmmoWeightMul = AmmoWeightMul;
+    const float RifleAmmoAmountMul = AmmoAmountMul, ShotgunAmmoAmountMul = AmmoAmountMul;
     // 음식·음료 드랍 가중치 40% 감소 (소비 속도는 그대로 → 수급보다 소비가 빠르게)
     const float FoodWeightMul = 0.6f;
     // 가방 드랍 가중치 2배
@@ -38,7 +45,8 @@ public static class LootTableBuilder
 
     static int Scale(int n, float mul) => Mathf.Max(1, Mathf.RoundToInt(n * mul));
 
-    static E PAmmo(float w, int min, int max) => new E("Assets/Items/Ammo/Pistol Ammo.asset", w, min, max);
+    // static E PAmmo(float w, int min, int max) => new E("Assets/Items/Ammo/Pistol Ammo.asset", w, min, max); // (이전) 권총 탄약은 배율 없음
+    static E PAmmo(float w, int min, int max) => new E("Assets/Items/Ammo/Pistol Ammo.asset", w * AmmoWeightMul, Scale(min, AmmoAmountMul), Scale(max, AmmoAmountMul));
     static E ARAmmo(float w, int min, int max) => new E("Assets/Items/Ammo/AR Ammo.asset", w * RifleAmmoWeightMul, Scale(min, RifleAmmoAmountMul), Scale(max, RifleAmmoAmountMul));
     static E SGAmmo(float w, int min, int max) => new E("Assets/Items/Ammo/Shotgun Ammo.asset", w * ShotgunAmmoWeightMul, Scale(min, ShotgunAmmoAmountMul), Scale(max, ShotgunAmmoAmountMul));
     // 음식 (가중치 ×0.6)
@@ -139,10 +147,11 @@ public static class LootTableBuilder
         var tankT = Table("Zombie_TankRare", 1, 1, tankRare);
         db.zombieDrops = new List<LootDatabase.ZombieDropRule>
         {
-            Drop("Normal", 0.20f, smallAmmo), Drop("Normal", 0.20f, ragT),           // 일반: 탄약 20%(플레이테스트로 2배), 넝마 20%
-            Drop("Police", 0.30f, policePistol), Drop("Police", 1.00f, policeAmmo), // 경찰: 권총 30%, 탄약 100%(플레이테스트로 2배)
-            Drop("Girl", 0.15f, runnerFood),                                        // 러너(빠른 좀비): 음식 가끔 (이전 25% → 음식 40% 감소)
-            Drop("Fat", 0.60f, tankT),                                              // 탱커(체력 400): 희귀 아이템
+            // 2026-11-12 오후: 총알 더 많이 → 일반 탄약 20% → 50%, 러너·탱커도 탄약 드랍 (수량은 AmmoAmountMul로 ×1.5)
+            Drop("Normal", 0.50f, smallAmmo), Drop("Normal", 0.20f, ragT),           // 일반: 탄약 50%(이전 20%), 넝마 20%
+            Drop("Police", 0.30f, policePistol), Drop("Police", 1.00f, policeAmmo), // 경찰: 권총 30%, 탄약 100%
+            Drop("Girl", 0.15f, runnerFood), Drop("Girl", 0.35f, smallAmmo),        // 러너: 음식 15%, 탄약 35%(신규)
+            Drop("Fat", 0.60f, tankT), Drop("Fat", 1.00f, smallAmmo),               // 탱커(체력 400): 희귀 아이템 60%, 탄약 100%(신규)
         };
         EditorUtility.SetDirty(db);
         AssetDatabase.SaveAssets();
