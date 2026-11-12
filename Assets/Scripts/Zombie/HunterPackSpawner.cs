@@ -268,7 +268,13 @@ public class HunterPackSpawner : MonoBehaviour
         Debug.Log("[사냥꾼] Resources/HunterPackSpawner 프리팹으로 사냥꾼 스포너를 자동 생성했습니다.");
     }
 
-    void OnEnable()  { LootCrate.AnyOpened += OnCrateOpened; }
+    void OnEnable()
+    {
+        LootCrate.AnyOpened += OnCrateOpened;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        ZombieShowcase.EnsureExists();   // 촬영 모드도 같이 (게임 씬 구성이 달라도 확실히 생기게)
+#endif
+    }
     void OnDisable() { LootCrate.AnyOpened -= OnCrateOpened; }
 
     /// <summary>상자가 열렸다 → 등급별 확률로 사냥꾼 무리가 몰려온다</summary>

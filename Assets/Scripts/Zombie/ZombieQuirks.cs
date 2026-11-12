@@ -366,6 +366,21 @@ public class ZombieQuirks : MonoBehaviour
             gameObject.AddComponent<ZombieBodyMotion>();
     }
 
+    // ── 촬영 모드(ZombieShowcase)용: 무작위로 정해진 성격을 원하는 것 하나로 덮어쓴다 ──
+    public enum ShowcaseTrait { Plain, Dull, Hesitant, Lunger, Herd }
+
+    public void ForceTraitForShowcase(ShowcaseTrait t)
+    {
+        IsDull     = t == ShowcaseTrait.Dull;
+        MyReaction = IsDull ? Range(dullReactionDelay) : Range(reactionDelay);
+        IsHesitant = t == ShowcaseTrait.Hesitant;
+        Herds      = t == ShowcaseTrait.Herd;
+        IsLunger   = t == ShowcaseTrait.Lunger;
+        if (IsLunger && lungeAgent == null && !disabledForTraining && !trainingMode)
+            lungeAgent = ZombieLungeAgent.AttachForGame(gameObject);   // 노리는 좀비 모델 (설정이 없으면 규칙 돌진)
+        if (IsLunger) IsHesitant = false;
+    }
+
     private void EndLunge(float now, bool cooldown)
     {
         if (lungePhase != 0 && cooldown)
