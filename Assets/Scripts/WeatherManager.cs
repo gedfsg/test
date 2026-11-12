@@ -35,6 +35,9 @@ public class WeatherManager : MonoBehaviour
     public float clearWeight = 50f;
     public float rainWeight = 30f;
     public float fogWeight = 20f;
+    [Header("⚠ 임시 (2026-11-12)")]
+    [Tooltip("켜면 1일차를 비로 시작 (원래는 맑음). 테스트가 끝나면 끄거나 이 필드를 지우면 됨. 2일차부터는 그대로 랜덤")]
+    public bool tempDay1Rain = true;
     [Tooltip("날씨 바뀔 때 안개/파티클/소리/배수가 넘어가는 시간 (초)")]
     public float transitionTime = 1.5f;
 
@@ -152,7 +155,8 @@ public class WeatherManager : MonoBehaviour
         var volume = FindFirstObjectByType<PostProcessVolume>();
         if (volume != null && volume.profile != null && volume.profile.TryGetSettings(out vignette))
             baseVignette = vignette.intensity.value;
-        SetWeather(Weather.Clear); // 1일차 맑음
+        // SetWeather(Weather.Clear); // 1일차 맑음 (원래)
+        SetWeather(tempDay1Rain ? Weather.Rain : Weather.Clear); // ⚠ 임시 (2026-11-12): 1일차 비 - 끝나면 tempDay1Rain 끄기
     }
 
     // void OnNewDay(int day)   // (이전)
