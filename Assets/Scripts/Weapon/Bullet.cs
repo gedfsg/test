@@ -130,6 +130,7 @@ public class Bullet : MonoBehaviour
         var deadZombie = other.GetComponentInParent<ZombieController>();
         if (deadZombie != null && deadZombie.IsDead) return false;
         if (other.GetComponent<PickupItem>() != null) return false;
+        if (other.GetComponent<InvisibleWall>() != null) return false; // 다리 가장자리 투명 벽은 총알 통과 (2026-11-12)
 
         bool hitSomething = false;
         bool isCritical = UnityEngine.Random.value < criticalChance;

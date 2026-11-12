@@ -93,6 +93,8 @@ public class PlayerController : MonoBehaviour
     {
         inputActions = new PlayerInputActions();
         locomotion = GetComponent<Locomotion>();
+        // 낙하 복구 (2026-11-12): 맵 아래/강바닥에 빠지면 마지막 안전 지점으로
+        if (GetComponent<FallSafetyNet>() == null) gameObject.AddComponent<FallSafetyNet>();
     }
 
     void Start()
