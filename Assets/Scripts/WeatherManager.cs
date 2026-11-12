@@ -3,7 +3,8 @@ using UnityEngine.Rendering.PostProcessing;
 using UnityEngine.SceneManagement;
 
 /// <summary>
-/// 날씨 3종 (논문 4.2절): 맑음 / 비 / 안개. 새 사이클(DayNightCycle 새벽→낮) 시작마다 가중치 랜덤 (50 / 30 / 20). 1일차는 맑음.
+/// 날씨 3종 (논문 4.2절): 맑음 / 비 / 안개. 게임 시작과 새 사이클(DayNightCycle 새벽→낮)마다 가중치 랜덤 (34 / 36 / 30, 2026-11-13).
+///  - 비가 오면 가끔 천둥 번개 (번개 = 별도 방향광 깜빡임, 천둥 = 코드 생성 소리, 거리에 따라 늦게·작게)
 ///  - 비: 빗방울 파티클(플레이어 머리 위 10m, 따라다님) + 땅에 튀는 물방울(옵션) + 빗소리 루프(코드 생성) + 조명 60%
 ///        소음 반경 ×0.5 (NoiseMultiplier → NoiseSystem), 구르기 거리 ×1.3 (RollDistanceMultiplier → Locomotion)
 ///  - 안개: 낮 회색(140,140,140) / 밤 보라(80,80,110) ExponentialSquared 안개(기본 줌에서 밀도 0.02, far 80m) + 손전등 range 70%
@@ -12,7 +13,7 @@ using UnityEngine.SceneManagement;
 ///          탑뷰 카메라가 플레이어에서 40~80m 떨어져 있어서 밀도/가시거리는 "플레이어 기준"이 되게 카메라 거리로 보정
 ///  - 전환: transitionTime(1.5초) 동안 안개 밀도/파티클 양/소리 크기/배수들을 같이 Lerp
 ///  - 실내: 비 파티클 끔(소리는 작게), 안개는 BuildingInterior(실내 안개)가 우선 → 나오면 여기서 다시 날씨 안개 적용
-///  - 디버그: Ctrl+Shift+W = 맑음→비→안개 강제 전환 (에디터/개발 빌드만. Shift+W는 달리기(Shift)+앞(W)과 겹쳐서 Ctrl 추가)
+///  - 디버그: Ctrl+Shift+L = 번개 한 번 / Ctrl+Shift+W = 맑음→비→안개 강제 전환 (에디터/개발 빌드만. Shift+W는 달리기(Shift)+앞(W)과 겹쳐서 Ctrl 추가)
 /// 씬에 따로 둘 필요 없음 - 씬이 로드될 때마다 자동 생성. HUD 아이콘은 SurvivalDayHUD가 Current를 읽어서 표시.
 /// </summary>
 public class WeatherManager : MonoBehaviour
@@ -32,12 +33,12 @@ public class WeatherManager : MonoBehaviour
     public static float RollDistanceMultiplier => Instance != null ? Mathf.Lerp(1f, Instance.rainRollMultiplier, Instance.rainAmount) : 1f;
 
     [Header("가중치 (사이클 시작마다 랜덤)")]
-    public float clearWeight = 50f;
-    public float rainWeight = 30f;
-    public float fogWeight = 20f;
-    [Header("⚠ 임시 (2026-11-12)")]
-    [Tooltip("켜면 1일차를 비로 시작 (원래는 맑음). 테스트가 끝나면 끄거나 이 필드를 지우면 됨. 2일차부터는 그대로 랜덤")]
-    public bool tempDay1Rain = true;
+    // public float clearWeight = 50f; public float rainWeight = 30f; public float fogWeight = 20f; // (이전)
+    // 2026-11-13 피드백: 비·안개가 더 자주 나오게 → 맑음 34 / 비 36 / 안개 30
+    public float clearWeight = 34f;
+    public float rainWeight = 36f;
+    public float fogWeight = 30f;
+    // [Header("⚠ 임시 (2026-11-12)")] public bool tempDay1Rain = true; // (삭제) 1일차 비 임시 → 1일차도 랜덤으로
     [Tooltip("날씨 바뀔 때 안개/파티클/소리/배수가 넘어가는 시간 (초)")]
     public float transitionTime = 1.5f;
 
@@ -88,10 +89,25 @@ public class WeatherManager : MonoBehaviour
     // public float rainHeight = 14f; // (이전)
     public float rainHeight = 10f;     // 플레이어 머리 위 10m
     // 2026-11-12: "비가 안 내리고 소리만 들림" - 빗줄기 굵기 0.025m 고정이라 카메라(약 40m)에서 1픽셀도 안 됐음
-    // → 카메라 거리에 비례한 굵기 (40m에서 0.032m. 0.064는 막대처럼 너무 굵었음, 줌인 15m에선 최소 0.015m)
+    // → 카메라 거리에 비례한 굵기. 2026-11-13 "너무 굵음" → 0.0008 → 0.0005 (기본 줌 80m에서 0.04m, 40m에서 0.02m)
     [Tooltip("빗줄기 굵기 = 카메라 거리(m) × 이 값 (아래 최소/최대로 제한)")]
-    public float rainWidthPerMeter = 0.0008f;
-    public float rainWidthMin = 0.015f, rainWidthMax = 0.06f;
+    public float rainWidthPerMeter = 0.0005f;
+    public float rainWidthMin = 0.01f, rainWidthMax = 0.045f;
+    [Tooltip("빗줄기 불투명도 (낮을수록 투명)")]
+    [Range(0f, 1f)] public float rainAlpha = 0.28f;
+
+    [Header("천둥 번개 (비 올 때, 2026-11-13)")]
+    public bool thunderstorm = true;
+    [Tooltip("번개 간격 (초, 최소~최대 랜덤)")]
+    public Vector2 thunderInterval = new Vector2(15f, 40f);
+    [Tooltip("번개 빛 세기 (별도 방향광 최대 밝기). 실내에선 indoorLightningScale만큼")]
+    // public float lightningIntensity = 2.2f; // (이전) 화면이 하얗게 날아감
+    public float lightningIntensity = 1.1f;
+    public Color lightningColor = new Color(0.78f, 0.84f, 1f);
+    [Range(0f, 1f)] public float indoorLightningScale = 0.3f;
+    [Range(0f, 1f)] public float thunderVolume = 0.75f;
+    [Tooltip("비워두면 코드로 만든 천둥소리 사용")]
+    public AudioClip[] thunderClips;
     // [Range(0f, 1f)] public float rainVolume = 0.35f; // (이전)
     [Range(0f, 1f)] public float rainVolume = AudioManager.Vol.Rain; // 0.4 (사운드 볼륨 표)
     [Tooltip("실내에선 빗소리를 이만큼 줄임 (지붕 너머로 들리는 느낌)")]
@@ -161,7 +177,9 @@ public class WeatherManager : MonoBehaviour
         if (volume != null && volume.profile != null && volume.profile.TryGetSettings(out vignette))
             baseVignette = vignette.intensity.value;
         // SetWeather(Weather.Clear); // 1일차 맑음 (원래)
-        SetWeather(tempDay1Rain ? Weather.Rain : Weather.Clear); // ⚠ 임시 (2026-11-12): 1일차 비 - 끝나면 tempDay1Rain 끄기
+        // SetWeather(tempDay1Rain ? Weather.Rain : Weather.Clear); // (이전 임시) 1일차 비
+        RollWeather(); // 2026-11-13: 1일차도 가중치 랜덤
+        BuildLightning();
     }
 
     // void OnNewDay(int day)   // (이전)
@@ -170,7 +188,7 @@ public class WeatherManager : MonoBehaviour
     //     SetWeather((Weather)Random.Range(0, 4)); // 2일차부터 4종 랜덤
     // }
 
-    /// <summary>가중치 랜덤 (맑음 50 / 비 30 / 안개 20). DayNightCycle이 새벽→낮 전환 때 호출</summary>
+    /// <summary>가중치 랜덤 (맑음 34 / 비 36 / 안개 30). 게임 시작(1일차)과 DayNightCycle 새벽→낮 전환 때 호출</summary>
     public void RollWeather()
     {
         float total = clearWeight + rainWeight + fogWeight;
@@ -192,6 +210,10 @@ public class WeatherManager : MonoBehaviour
         if (debugKey && (Application.isEditor || Debug.isDebugBuild) && kb != null && kb.wKey.wasPressedThisFrame
             && kb.shiftKey.isPressed && kb.ctrlKey.isPressed)
             SetWeather(current == Weather.Clear ? Weather.Rain : current == Weather.Rain ? Weather.Fog : Weather.Clear);
+        // 디버그: Ctrl+Shift+L → 번개 한 번 (가까이). T는 손전등이라 L(Lightning)
+        if (debugKey && (Application.isEditor || Debug.isDebugBuild) && kb != null && kb.lKey.wasPressedThisFrame
+            && kb.shiftKey.isPressed && kb.ctrlKey.isPressed)
+            Strike(Random.Range(0f, 0.4f));
 
         // 전환: 목표 쪽으로 서서히
         float step = Time.deltaTime / Mathf.Max(0.01f, transitionTime);
@@ -200,6 +222,164 @@ public class WeatherManager : MonoBehaviour
 
         var dnc = DayNightCycle.Instance;
         if (dnc != null) dnc.weatherLightMultiplier = Mathf.Lerp(1f, overcastLight, rainAmount); // 비: 흐린 조명
+
+        UpdateThunder();
+    }
+
+    // ── 천둥 번개 (2026-11-13) ─────────────────────────
+    // 비가 다 내린 상태(rainAmount ≥ 0.95)에서 thunderInterval 간격으로 랜덤.
+    // 번개: DayNightCycle이 해 밝기를 매 프레임 덮어쓰므로 해 대신 "번개 전용 방향광"을 잠깐 켬 (2~3번 깜빡, 약 0.5초)
+    // 천둥: 번개가 멀수록(0~1) 소리가 늦고(0.3~2.8초) 작고, 가까우면 '쾅' 하는 앞부분이 있는 소리
+    Light lightning;
+    AudioSource thunderAudio;
+    AudioClip[] generatedThunder;
+    float nextThunderAt = -1f;
+    Coroutine strikeRoutine;
+
+    /// <summary>번개 횟수 (테스트용)</summary>
+    public int StrikeCount { get; private set; }
+
+    void BuildLightning()
+    {
+        var go = new GameObject("Lightning");
+        go.transform.SetParent(transform, false);
+        go.transform.rotation = Quaternion.Euler(65f, 140f, 0f);
+        lightning = go.AddComponent<Light>();
+        lightning.type = LightType.Directional;
+        lightning.color = lightningColor;
+        lightning.intensity = 0f;
+        lightning.shadows = LightShadows.None;
+        lightning.enabled = false;
+
+        thunderAudio = gameObject.AddComponent<AudioSource>();
+        thunderAudio.outputAudioMixerGroup = AudioManager.GetGroup(AudioManager.Channel.Ambient);
+        thunderAudio.playOnAwake = false;
+        thunderAudio.spatialBlend = 0f; // 하늘 전체에서 울림
+    }
+
+    void UpdateThunder()
+    {
+        if (!thunderstorm || lightning == null) return;
+        if (rainAmount < 0.95f) { nextThunderAt = -1f; return; }
+        // 비가 막 시작되면 첫 번개는 조금 기다렸다가
+        if (nextThunderAt < 0f) { nextThunderAt = Time.time + Random.Range(6f, thunderInterval.y * 0.6f); return; }
+        if (Time.time < nextThunderAt) return;
+        nextThunderAt = Time.time + Random.Range(thunderInterval.x, thunderInterval.y);
+        Strike(Random.value);
+    }
+
+    /// <summary>번개 + 천둥 (distance01 0 = 바로 근처, 1 = 멀리). 디버그·테스트에서도 호출 가능</summary>
+    public void Strike(float distance01)
+    {
+        if (lightning == null) BuildLightning();
+        if (strikeRoutine != null) StopCoroutine(strikeRoutine);
+        strikeRoutine = StartCoroutine(StrikeRoutine(Mathf.Clamp01(distance01)));
+        StrikeCount++;
+    }
+
+    System.Collections.IEnumerator StrikeRoutine(float dist)
+    {
+        bool indoors = BuildingInterior.IsAnyoneIndoors;
+        float peak = lightningIntensity * Mathf.Lerp(1f, 0.45f, dist) * (indoors ? indoorLightningScale : 1f);
+        lightning.color = lightningColor;
+        lightning.enabled = true;
+
+        // 소리는 빛보다 늦게 (거리만큼)
+        float soundAt = Time.time + Mathf.Lerp(0.3f, 2.8f, dist);
+
+        // 깜빡임 2~3번: (켜지는 세기 비율, 유지 시간, 꺼진 틈)
+        int flashes = Random.value < 0.6f ? 3 : 2;
+        for (int i = 0; i < flashes; i++)
+        {
+            float k = i == 0 ? 1f : Random.Range(0.45f, 0.9f);
+            float on = Random.Range(0.04f, 0.09f);
+            for (float t = 0f; t < on; t += Time.deltaTime) { lightning.intensity = peak * k; yield return null; }
+            // 잔광이 빠르게 사라짐
+            float fade = Random.Range(0.06f, 0.14f);
+            for (float t = 0f; t < fade; t += Time.deltaTime) { lightning.intensity = peak * k * (1f - t / fade); yield return null; }
+            lightning.intensity = 0f;
+            float gap = Random.Range(0.04f, 0.12f);
+            for (float t = 0f; t < gap; t += Time.deltaTime) yield return null;
+        }
+        lightning.enabled = false;
+
+        while (Time.time < soundAt) yield return null;
+        if (thunderAudio != null)
+        {
+            var clip = PickThunderClip(dist);
+            thunderAudio.pitch = Random.Range(0.9f, 1.08f);
+            float vol = thunderVolume * Mathf.Lerp(1f, 0.55f, dist) * (indoors ? 0.6f : 1f);
+            if (clip != null) thunderAudio.PlayOneShot(clip, vol);
+        }
+        strikeRoutine = null;
+    }
+
+    AudioClip PickThunderClip(float dist)
+    {
+        if (thunderClips != null && thunderClips.Length > 0)
+        {
+            var c = thunderClips[Random.Range(0, thunderClips.Length)];
+            if (c != null) return c;
+        }
+        if (generatedThunder == null)
+            generatedThunder = new[] { GenerateThunderClip(11, true), GenerateThunderClip(23, true), GenerateThunderClip(37, false), GenerateThunderClip(41, false) };
+        // 가까우면 '쾅'이 있는 소리, 멀면 우르릉만
+        int baseIdx = dist < 0.45f ? 0 : 2;
+        return generatedThunder[baseIdx + Random.Range(0, 2)];
+    }
+
+    /// <summary>
+    /// 천둥소리 생성 (5.5초, 44.1kHz). 우르릉 = 저역 통과한 잡음을 두 번 거른 낮은 소리에 느린 굴곡(여러 번 굴러가는 느낌),
+    /// crack = 앞 0.3초에 짧고 날카로운 잡음 터짐 (가까운 번개)
+    /// </summary>
+    static AudioClip GenerateThunderClip(int seed, bool crack)
+    {
+        const int rate = 44100;
+        const float seconds = 5.5f;
+        int n = (int)(rate * seconds);
+        var data = new float[n];
+        var rng = new System.Random(seed);
+        float lp1 = 0f, lp2 = 0f, lp3 = 0f, cr = 0f;
+        // 느린 굴곡: 0.15~0.6초마다 바뀌는 랜덤 세기 사이를 부드럽게
+        float rollA = 1f, rollB = (float)rng.NextDouble(), rollT = 0f, rollLen = 0.3f;
+        float peak = 0f;
+        for (int i = 0; i < n; i++)
+        {
+            float t = i / (float)rate;
+            float white = (float)(rng.NextDouble() * 2.0 - 1.0);
+            lp1 += 0.06f * (white - lp1);
+            lp2 += 0.03f * (lp1 - lp2);
+            lp3 += 0.012f * (lp2 - lp3);
+            float rumble = lp2 * 1.6f + lp3 * 3.2f;
+
+            rollT += 1f / rate;
+            if (rollT >= rollLen) { rollT = 0f; rollA = rollB; rollB = 0.35f + (float)rng.NextDouble() * 0.65f; rollLen = 0.15f + (float)rng.NextDouble() * 0.45f; }
+            float roll = Mathf.Lerp(rollA, rollB, Mathf.SmoothStep(0f, 1f, rollT / rollLen));
+
+            float attack = Mathf.Clamp01(t / (crack ? 0.03f : 0.35f));
+            float env = attack * Mathf.Exp(-t / (crack ? 1.5f : 1.9f)) * roll;
+            float s = rumble * env;
+
+            if (crack && t < 0.35f)
+            {
+                cr += 0.45f * (white - cr); // 밝은 잡음
+                float ce = Mathf.Exp(-t / 0.07f) + 0.5f * Mathf.Exp(-Mathf.Abs(t - 0.12f) / 0.03f);
+                s += cr * ce * 0.9f;
+            }
+            data[i] = s;
+            peak = Mathf.Max(peak, Mathf.Abs(s));
+        }
+        // 끝 0.4초 부드럽게 0으로 + 최대 0.9로 정규화
+        int tail = (int)(rate * 0.4f);
+        float norm = peak > 0f ? 0.9f / peak : 1f;
+        for (int i = 0; i < n; i++)
+        {
+            float f = i > n - tail ? (n - i) / (float)tail : 1f;
+            data[i] *= norm * f;
+        }
+        var clip = AudioClip.Create(crack ? "Thunder_Near" : "Thunder_Far", n, 1, rate, false);
+        clip.SetData(data, 0);
+        return clip;
     }
 
     void LateUpdate()
@@ -397,7 +577,8 @@ public class WeatherManager : MonoBehaviour
         main.startSpeed = 28f;
         main.startSize = 0.025f; // 카메라 가까이 지나가도 막대처럼 안 보이게 가늘게
         // main.startColor = new Color(0.8f, 0.85f, 0.95f, 0.35f); // (이전) 너무 옅어서 안 보였음
-        main.startColor = new Color(0.82f, 0.87f, 0.97f, 0.5f);
+        // main.startColor = new Color(0.82f, 0.87f, 0.97f, 0.5f); // (이전) 너무 진했음
+        main.startColor = new Color(0.85f, 0.9f, 1f, rainAlpha);
         main.cullingMode = ParticleSystemCullingMode.AlwaysSimulate; // 화면 밖 판정으로 멈췄다 재개될 때 빈 구간 없게
         main.simulationSpace = ParticleSystemSimulationSpace.World;
         main.maxParticles = 4000;
@@ -410,7 +591,8 @@ public class WeatherManager : MonoBehaviour
         var r = go.GetComponent<ParticleSystemRenderer>();
         r.renderMode = ParticleSystemRenderMode.Stretch;
         // r.lengthScale = 1f; r.velocityScale = 0.04f; // (이전) 위에서 내려다보면 짧은 점으로 보였음
-        r.lengthScale = 1f; r.velocityScale = 0.055f; // 빗줄기 길이 약 1.5m (28m/s × 0.055)
+        // r.lengthScale = 1f; r.velocityScale = 0.055f; // (이전) 길이 1.5m
+        r.lengthScale = 1f; r.velocityScale = 0.07f; // 가늘고 긴 빗줄기 (약 2m)
         r.sharedMaterial = new Material(Shader.Find("Sprites/Default")) { name = "Rain(Runtime)" };
         r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         return ps;
