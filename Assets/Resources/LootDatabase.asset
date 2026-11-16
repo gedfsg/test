@@ -65,3 +65,18 @@ MonoBehaviour:
   - nameContains: Fat
     chance: 1
     table: {fileID: 11400000, guid: 06b1a4751503311448bf1d92cd01f39f, type: 2}
+  - nameContains: Normal
+    chance: 0.015
+    table: {fileID: 11400000, guid: ed43fbb3b7d9b5d4db43ed536ec86a45, type: 2}
+  - nameContains: Girl
+    chance: 0.015
+    table: {fileID: 11400000, guid: ed43fbb3b7d9b5d4db43ed536ec86a45, type: 2}
+  - nameContains: Fat
+    chance: 0.015
+    table: {fileID: 11400000, guid: ed43fbb3b7d9b5d4db43ed536ec86a45, type: 2}
+  - nameContains: Police
+    chance: 0.015
+    table: {fileID: 11400000, guid: ed43fbb3b7d9b5d4db43ed536ec86a45, type: 2}
+  - nameContains: "\uC0AC\uB0E5\uAFBC"
+    chance: 0.035
+    table: {fileID: 11400000, guid: ed43fbb3b7d9b5d4db43ed536ec86a45, type: 2}

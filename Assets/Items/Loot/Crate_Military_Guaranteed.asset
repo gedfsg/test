@@ -51,3 +51,7 @@ MonoBehaviour:
     weight: 1
     minAmount: 1
     maxAmount: 1
+  - item: {fileID: 11400000, guid: f4020fbf6c2e7464092140b462025395, type: 2}
+    weight: 1
+    minAmount: 1
+    maxAmount: 1

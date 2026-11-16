@@ -15,10 +15,6 @@ MonoBehaviour:
   minRolls: 1
   maxRolls: 4
   entries:
-  - item: {fileID: 11400000, guid: e1c82f8efba17cb4fb4699a22f7fcbb2, type: 2}
-    weight: 6
-    minAmount: 1
-    maxAmount: 1
   - item: {fileID: 11400000, guid: 5c7d2dec6fdd4704c81a5c71cf771204, type: 2}
     weight: 4
     minAmount: 1
@@ -77,5 +73,13 @@ MonoBehaviour:
     maxAmount: 1
   - item: {fileID: 11400000, guid: c409828ef0832274abd3c9cf70c42056, type: 2}
     weight: 6
+    minAmount: 1
+    maxAmount: 1
+  - item: {fileID: 11400000, guid: c31dad83561cd3745a67523afe78d671, type: 2}
+    weight: 4
+    minAmount: 5
+    maxAmount: 10
+  - item: {fileID: 11400000, guid: e1c82f8efba17cb4fb4699a22f7fcbb2, type: 2}
+    weight: 20.82353
     minAmount: 1
     maxAmount: 1
