@@ -107,9 +107,14 @@ public class WeaponHotbarUI : MonoBehaviour
         if (!(items[index] is ConsumableData consumable)) return; // 빈 슬롯이면 무시
         if (playerController == null) return;
 
-        playerController.UseConsumable(consumable);
-        Debug.Log($"[핫바] 슬롯 {index + 1} '{consumable.itemName}' 사용 (남은 개수 {ammos[index] - 1})");
-        ConsumeItem(index);
+        // playerController.UseConsumable(consumable);   // (이전) 즉시 사용
+        // ConsumeItem(index);
+        // 2026-11-16: 사용 시간(진행 바) 뒤에 효과 + 차감. 맞으면 취소되고 아이템은 그대로
+        playerController.BeginConsumable(consumable, () =>
+        {
+            ConsumeItem(index, consumable);
+            Debug.Log($"[핫바] 슬롯 {index + 1} '{consumable.itemName}' 사용 (남은 개수 {ammos[index]})");
+        });
     }
 
     /// <summary>item이 들어갈 슬롯 번호. 총 = 현재 선택된 총 슬롯, 소비 = 같은 아이템 칸 → 빈 소비 칸. 없으면 -1</summary>
@@ -241,6 +246,20 @@ public class WeaponHotbarUI : MonoBehaviour
         ammos[index]--;
         if (ammos[index] <= 0) { items[index] = null; ammos[index] = 0; }
         RefreshAllSlots();
+    }
+
+    /// <summary>
+    /// 사용이 끝난 시점에 차감 (2026-11-16). 사용 중 슬롯을 옮겼을 수 있어서 index 칸이 그 아이템이 아니면 같은 아이템 칸을 찾아 차감
+    /// </summary>
+    public void ConsumeItem(int index, ItemData expected)
+    {
+        if (index < 0 || index >= SLOT_COUNT || items[index] != expected)
+        {
+            index = -1;
+            for (int i = 0; i < SLOT_COUNT; i++) if (items[i] == expected) { index = i; break; }
+            if (index < 0) return; // 버렸거나 옮겨서 핫바에 없음 → 효과만 적용됨
+        }
+        ConsumeItem(index);
     }
 
     public void ConsumeItem(int index)

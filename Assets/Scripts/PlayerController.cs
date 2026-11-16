@@ -38,6 +38,10 @@ public class PlayerController : MonoBehaviour
     public Transform axeBackPoint;
 
     public bool IsRolling => isRolling;
+    /// <summary>사망 상태 (UpperBodyAimIK가 조준 IK를 끌 때)</summary>
+    public bool IsDead => isDead;
+    /// <summary>도끼 휘두르는 중 (내려찍기 몸통 비틀기 = 공격 동작이라 상체 조준 IK를 끔)</summary>
+    public bool IsMeleeSwinging => meleeHeld && Time.time < meleeSwingUntil;
     private bool isRolling;
     private float rollEndTime = -99f;
     private Vector3 rollVelocity;
@@ -95,7 +99,15 @@ public class PlayerController : MonoBehaviour
         locomotion = GetComponent<Locomotion>();
         // 낙하 복구 (2026-11-12): 맵 아래/강바닥에 빠지면 마지막 안전 지점으로
         if (GetComponent<FallSafetyNet>() == null) gameObject.AddComponent<FallSafetyNet>();
+        // 회복템 사용 딜레이 (2026-11-16): 진행 바 + 맞으면 취소
+        consumableUser = GetComponent<ConsumableUseController>();
+        if (consumableUser == null) consumableUser = gameObject.AddComponent<ConsumableUseController>();
+        consumableUser.Cancelled += OnConsumableCancelled;
+        // 상체 조준 IK (2026-11-16): 척추·가슴·머리가 마우스를 봄
+        if (GetComponent<UpperBodyAimIK>() == null) gameObject.AddComponent<UpperBodyAimIK>();
     }
+
+    private ConsumableUseController consumableUser;
 
     void Start()
     {
@@ -579,6 +591,9 @@ public class PlayerController : MonoBehaviour
             return;
         }
 
+        // 회복템 사용 중엔 공격 불가 (이동은 됨) - 2026-11-16
+        if (consumableUser != null && consumableUser.IsUsing) { firePressed = false; return; }
+
         // 일반 무기
         if (currentMode == WeaponMode.Ranged && rangedWeapon != null)
         {
@@ -639,18 +654,45 @@ public class PlayerController : MonoBehaviour
         ConsumableData consumable = hotbar.GetActiveItem() as ConsumableData;
         if (consumable == null) return;
 
-        UseConsumable(consumable);
-
-        hotbar.ConsumeItem(hotbar.GetActiveSlot());
+        // UseConsumable(consumable);                 // (이전) 즉시 사용
+        // hotbar.ConsumeItem(hotbar.GetActiveSlot());
+        int slot = hotbar.GetActiveSlot();
+        BeginConsumable(consumable, () => hotbar.ConsumeItem(slot, consumable));
     }
+
+    /// <summary>
+    /// 회복템 사용 시작 (2026-11-16): useTime 동안 진행 바 → 끝까지 버티면 효과 적용 + consumeOne(개수 차감).
+    /// 맞으면 취소(아이템 그대로). 핫바·인벤토리 모두 이걸 부름. 시작했으면 true
+    /// </summary>
+    public bool BeginConsumable(ConsumableData consumable, System.Action consumeOne)
+    {
+        if (consumable == null || isDead) return false;
+        if (consumableUser == null) consumableUser = gameObject.AddComponent<ConsumableUseController>();
+        bool started = consumableUser.Begin(consumable, () => { UseConsumable(consumable); consumeOne?.Invoke(); });
+        if (started && consumable.useTime > 0f)
+        {
+            // 사용 동작은 시작할 때 (마시기, 상체만 → 걸으면서 가능). 그동안 왼손 IK 끔
+            if (EnsureAnimRefs()) animator.SetTrigger(UseItemHash);
+            ikBlockUntil = Time.time + consumable.useTime;
+            UpperAction(consumable.useTime);
+        }
+        return started;
+    }
+
+    // 맞아서 취소 → 왼손 IK 바로 복구 (상체는 피격 동작이 이어받음)
+    void OnConsumableCancelled() => ikBlockUntil = Time.time;
 
     /// <summary>소비 아이템 효과 적용 (핫바 3~5 키에서도 호출). 개수 차감은 호출하는 쪽에서</summary>
     public void UseConsumable(ConsumableData consumable)
     {
         // 아이템 사용 동작 (마시기, 상체만 → 걸으면서 가능) - 그동안 왼손 IK 끔
-        if (EnsureAnimRefs()) animator.SetTrigger(UseItemHash);
-        ikBlockUntil = Time.time + 3.0f;
-        UpperAction(3.0f);
+        // 2026-11-16: 사용 시간이 있는 아이템은 BeginConsumable이 시작할 때 동작을 틀어서, 여기선 즉시 사용(useTime 0)일 때만
+        if (consumable.useTime <= 0f)
+        {
+            if (EnsureAnimRefs()) animator.SetTrigger(UseItemHash);
+            ikBlockUntil = Time.time + 3.0f;
+            UpperAction(3.0f);
+        }
 
         PlayerBuffManager buffMgr = GetComponent<PlayerBuffManager>();
         // 씬 플레이어에 PlayerBuffManager가 안 붙어 있으면 수분/포만감/지속 회복이 전부 무시됐음 → 없으면 붙임
