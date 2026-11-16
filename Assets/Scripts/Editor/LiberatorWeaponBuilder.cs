@@ -200,7 +200,10 @@ public static class LiberatorWeaponBuilder
     static string Safe(string s) => s.Replace("&", "and").Replace(".", "").Replace(" ", "_").Replace("/", "_");
 
     // ── 아이콘 (옆에서 본 정사영, 투명 배경, 총구가 오른쪽) ──
-    static Sprite BuildIcon(GameObject prefab, Entry e)
+    static Sprite BuildIcon(GameObject prefab, Entry e) => RenderIcon(prefab, $"{IconDir}/icon_{Safe(e.display)}.png");
+
+    /// <summary>무기 프리팹 → 옆모습 아이콘 PNG(투명 배경) + Sprite 임포트. SpecialWeaponBuilder도 같이 씀 (2026-11-16 분리)</summary>
+    internal static Sprite RenderIcon(GameObject prefab, string path)
     {
         const int W = 256, H = 128;
         var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
@@ -228,7 +231,7 @@ public static class LiberatorWeaponBuilder
         var px = tex.GetPixels32();
         for (int i = 0; i < px.Length; i++) if (px[i].a > 0) px[i].a = 255; // 불투명 셰이더가 알파를 덜 쓰는 경우 보정
         tex.SetPixels32(px); tex.Apply();
-        string path = $"{IconDir}/icon_{Safe(e.display)}.png";
+        // string path = $"{IconDir}/icon_{Safe(e.display)}.png"; // (이전) 경로를 여기서 만듦 → 이제 인자로 받음
         File.WriteAllBytes(path, tex.EncodeToPNG());
         Object.DestroyImmediate(tex); rt.Release(); Object.DestroyImmediate(rt);
         Object.DestroyImmediate(camGo); Object.DestroyImmediate(lightGo); Object.DestroyImmediate(go);

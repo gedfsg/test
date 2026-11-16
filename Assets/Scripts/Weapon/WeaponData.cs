@@ -30,6 +30,35 @@ public class WeaponData : ItemData
     [Header("Sniper Only")]
     public bool penetrating = false;
 
+    [Header("관통 (2026-11-16) - 스나이퍼·레이저")]
+    [Tooltip("총알이 뚫고 지나갈 수 있는 좀비 수 (0 = 관통 없음). 통과해도 풀 데미지 유지. " +
+             "예: Mosin 2 / L118a1 3 / 레이저 5. 0이고 penetrating이 켜져 있으면 예전처럼 무제한 관통")]
+    public int penetrationCount = 0;
+
+    [Header("특수 무기 (2026-11-16) - 상점 교환 전용 5종")]
+    public SpecialWeaponKind specialKind = SpecialWeaponKind.None;
+    [Tooltip("RPG: 맞은 곳 반경 안 좀비에게 주는 광역 데미지 (직격 데미지는 damage)")]
+    public float splashDamage = 0f;
+    public float splashRadius = 0f;
+    [Tooltip("RPG: 광역 피해 때 밀어내는 힘 (ZombieHitEffect 넉백 배수)")]
+    public float knockback = 0f;
+    [Tooltip("화염방사기: 맞은 좀비에 붙는 점화 DoT (초당 데미지 / 지속 초)")]
+    public float burnDps = 0f;
+    public float burnDuration = 0f;
+    [Tooltip("미니건: 방아쇠를 누르고 이 시간(초)이 지나야 발사 시작 (예열)")]
+    public float spinUpTime = 0f;
+    [Tooltip("전기톱: 연료 용량 / 초당 소모 (공격할 때만 소모. 0이면 연료 없음)")]
+    public float fuelCapacity = 0f;
+    public float fuelPerSecond = 0f;
+
+    [Header("총구 불빛 (2026-11-16) - MuzzleLight")]
+    [Tooltip("총구 상시 불빛 색 (일반 총 #FFD070, 화염 #FF5500, RPG #FF8800, 레이저 #00EEFF)")]
+    public Color lightColor = new Color32(0xFF, 0xD0, 0x70, 0xFF);
+    [Tooltip("상시 밝기 (발사 순간 ×3)")]
+    public float lightIntensity = 0.8f;
+    [Tooltip("상시 범위 m (발사 순간 ×1.5, 우클릭 조준 시 aimLightRange)")]
+    public float lightRange = 2.5f;
+
     [Header("소음")]
     [Tooltip("발사 시 좀비가 듣는 반경(m). 0으로 두면 무기 종류별 기본값을 쓴다.")]
     public float noiseRadius = 0f;
@@ -84,3 +113,6 @@ public enum WeaponType
             //   중간에 끼워넣으면 enum 정수값이 밀려서
             //   기존 .asset 8개의 type이 전부 엉뚱한 무기로 바뀐다.
 }
+
+/// <summary>상점 교환 전용 특수 무기 종류 (2026-11-16). 새 값은 맨 뒤에 추가 (에셋에 int로 저장됨)</summary>
+public enum SpecialWeaponKind { None, Flamethrower, Chainsaw, RPG, Minigun, Laser }

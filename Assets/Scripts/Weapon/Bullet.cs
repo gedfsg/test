@@ -9,6 +9,26 @@ public class Bullet : MonoBehaviour
 
     public bool penetrating = false;
 
+    [Header("관통 횟수 (2026-11-16)")]
+    [Tooltip("뚫고 지나갈 수 있는 좀비 수. 0이면 penetrating 값대로(켜져 있으면 무제한). 통과해도 데미지 그대로")]
+    public int penetrationCount = 0;
+    private int penetratedSoFar;
+    // 같은 좀비를 여러 콜라이더(몸통·머리 등)로 두 번 맞히지 않게
+    private readonly System.Collections.Generic.HashSet<GameObject> alreadyHit = new System.Collections.Generic.HashSet<GameObject>();
+
+    [Header("특수 탄 (2026-11-16) - Weapon.SpawnBullet이 WeaponData 값으로 채움")]
+    [Tooltip("RPG: 처음 맞은 곳에서 폭발 (반경 안 좀비 광역 데미지 + 넉백)")]
+    public float splashDamage;
+    public float splashRadius;
+    public float knockback;
+    [Tooltip("화염방사기: 맞은 좀비에 점화 DoT")]
+    public float burnDps;
+    public float burnDuration;
+    [Tooltip("궤적 색 (기본 노랑). 화염 = 주황, 레이저 = 청록")]
+    public Color trailColor = Color.yellow;
+    [Tooltip("궤적 굵기 (기본 0.05)")]
+    public float trailWidth = 0.05f;
+
     [Header("크리티컬")]
     public float criticalChance = 0.15f;
     public float criticalMultiplier = 2f;
@@ -33,7 +53,7 @@ public class Bullet : MonoBehaviour
     {
         trail = gameObject.AddComponent<TrailRenderer>();
         trail.time = 0.08f;
-        trail.startWidth = 0.05f;
+        trail.startWidth = trailWidth; // (이전) 0.05f 고정
         trail.endWidth = 0f;
         trail.minVertexDistance = 0.01f;
         trail.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -44,8 +64,8 @@ public class Bullet : MonoBehaviour
         gradient.SetKeys(
             new GradientColorKey[]
             {
-                new GradientColorKey(Color.yellow, 0f),
-                new GradientColorKey(Color.yellow, 1f)
+                new GradientColorKey(trailColor, 0f),   // (이전) Color.yellow 고정
+                new GradientColorKey(trailColor, 1f)
             },
             new GradientAlphaKey[]
             {
@@ -110,6 +130,7 @@ public class Bullet : MonoBehaviour
         // 누적 거리가 유효 사거리를 초과했을 경우 투사체 객체를 파괴함.
         if (distanceTraveled > effectiveRange)
         {
+            if (splashRadius > 0f && !destroyed) Explode(transform.position); // RPG: 사거리 끝에서도 터짐
             Destroy(gameObject);
         }
     }
@@ -129,6 +150,8 @@ public class Bullet : MonoBehaviour
         // 죽은 좀비(래그돌 시체)는 총알이 그냥 지나간다 —— 예전처럼 시체가 뒤의 좀비를 막아 주지 않게
         var deadZombie = other.GetComponentInParent<ZombieController>();
         if (deadZombie != null && deadZombie.IsDead) return false;
+        // 관통 중 이미 맞힌 좀비의 다른 콜라이더는 건너뜀 (한 좀비 = 관통 1회)
+        if (deadZombie != null && alreadyHit.Contains(deadZombie.gameObject)) return false;
         if (other.GetComponent<PickupItem>() != null) return false;
         if (other.GetComponent<InvisibleWall>() != null) return false; // 다리 가장자리 투명 벽은 총알 통과 (2026-11-12)
 
@@ -157,7 +180,11 @@ public class Bullet : MonoBehaviour
 
         // 좀비 피격 이펙트 (피 파티클 / 빨간 플래시 / 넉백 / 사운드)
         if (zombie != null && hitSomething)
+        {
             ZombieHitEffect.Play(zombie.gameObject, hitPoint, moveDirection);
+            alreadyHit.Add(zombie.gameObject);
+            if (burnDps > 0f && burnDuration > 0f) BurnDoT.Apply(zombie.gameObject, burnDps, burnDuration); // 화염방사기 점화
+        }
 
         DestructibleObstacle obstacle = other.GetComponent<DestructibleObstacle>();
         if (obstacle == null) obstacle = other.GetComponentInParent<DestructibleObstacle>();
@@ -171,9 +198,83 @@ public class Bullet : MonoBehaviour
         // 이게 없으면 바깥에서 문 안으로 쏜 총알이 진입 트리거 경계에서 그냥 사라졌음.
         if (!hitSomething && other.isTrigger) return false;
 
+        // RPG: 처음 맞은 곳(좀비든 벽이든)에서 폭발하고 탄은 사라짐
+        if (splashRadius > 0f) { Explode(hitPoint); Destroy(gameObject); destroyed = true; return true; }
+
         if (!hitSomething) { Destroy(gameObject); destroyed = true; return true; }
 
+        // (이전) if (!penetrating) { Destroy(gameObject); destroyed = true; }
+        // 관통 횟수 (2026-11-16): penetrationCount > 0이면 좀비를 그 수만큼 뚫고 (데미지 그대로) 다음 좀비에서 멈춤
+        //  - Mosin 2 = 좀비 2마리까지 맞히고 사라짐 (1마리 관통 후 2번째에서 멈춤이 아니라 "2마리까지")
+        //  - 장애물(DestructibleObstacle)은 관통하지 않음
+        bool hitZombie = zombie != null;
+        if (penetrationCount > 0)
+        {
+            if (hitZombie) penetratedSoFar++;
+            if (!hitZombie || penetratedSoFar >= penetrationCount) { Destroy(gameObject); destroyed = true; }
+            return true;
+        }
         if (!penetrating) { Destroy(gameObject); destroyed = true; }
         return true;
+    }
+
+    // ── RPG 폭발 (2026-11-16) ──
+    // 반경 안 모든 Health(쏜 쪽 태그 제외)에 광역 데미지 + 좀비 넉백. 직격 대상도 광역을 같이 받음 (300 + 150)
+    void Explode(Vector3 center)
+    {
+        var done = new System.Collections.Generic.HashSet<Health>();
+        foreach (var c in Physics.OverlapSphere(center, splashRadius, ~0, QueryTriggerInteraction.Ignore))
+        {
+            if (!string.IsNullOrEmpty(shooterTag) && c.CompareTag(shooterTag)) continue;
+            Health h = c.GetComponentInParent<Health>();
+            if (h == null || !done.Add(h)) continue;
+            if (!string.IsNullOrEmpty(shooterTag) && h.CompareTag(shooterTag)) continue;
+            var z = h.GetComponent<ZombieController>();
+            if (z != null && z.IsDead) continue;
+            h.TakeDamage(splashDamage);
+            if (z != null)
+            {
+                Vector3 dir = h.transform.position - center; dir.y = 0f;
+                var fx = z.GetComponent<ZombieHitEffect>();
+                if (fx == null) fx = z.gameObject.AddComponent<ZombieHitEffect>(); // Unity 오브젝트라 ?? 대신 == null
+                float keep = fx.knockbackDistance;
+                fx.knockbackDistance = keep * Mathf.Max(1f, knockback); // 넉백 배수만큼 멀리
+                fx.PlayHit(h.transform.position + Vector3.up, dir.sqrMagnitude > 1e-4f ? dir.normalized : moveDirection);
+                fx.knockbackDistance = keep;
+            }
+        }
+        WorldFX_Explosion(center);
+        NoiseSystem.Emit(center, splashRadius * 6f); // 폭발음은 크게 들림
+    }
+
+    static Material explosionMat;
+
+    // 간단한 폭발 표시: 주황 점광 0.25초 + 파티클 (전용 이펙트 에셋 없음)
+    void WorldFX_Explosion(Vector3 p)
+    {
+        var go = new GameObject("RPG_Explosion");
+        go.transform.position = p + Vector3.up * 0.5f;
+        var li = go.AddComponent<Light>();
+        li.type = LightType.Point; li.color = new Color(1f, 0.55f, 0.15f); li.range = splashRadius * 1.5f; li.intensity = 6f;
+        var ps = go.AddComponent<ParticleSystem>();
+        ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        var main = ps.main; main.duration = 0.3f; main.loop = false;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(0.3f, 0.7f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(3f, splashRadius * 1.2f);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.4f, 1.2f);
+        main.startColor = new ParticleSystem.MinMaxGradient(new Color(1f, 0.6f, 0.1f), new Color(0.3f, 0.3f, 0.3f));
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        var em = ps.emission; em.rateOverTime = 0f; em.SetBursts(new[] { new ParticleSystem.Burst(0f, (short)40) });
+        var sh = ps.shape; sh.shapeType = ParticleSystemShapeType.Sphere; sh.radius = 0.3f;
+        var r = go.GetComponent<ParticleSystemRenderer>();
+        if (explosionMat == null) explosionMat = new Material(Shader.Find("Sprites/Default")) { name = "RPGExplosion(Runtime)" };
+        r.sharedMaterial = explosionMat;
+        r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        ps.Play();
+        Destroy(go, 1f);
+        Destroy(li, 0.25f);
+        if (AudioManager.Library != null)
+            AudioManager.PlaySFX(SoundLibrary.Pick(AudioManager.Library.FireFor(WeaponType.Shotgun)), p, AudioManager.Vol.GunshotShotgun,
+                                 AudioManager.Channel.SFX, 80f, 0.6f); // 산탄 소리를 낮게 → 폭발음 대용
     }
 }

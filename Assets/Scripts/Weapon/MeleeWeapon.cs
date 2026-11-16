@@ -31,8 +31,15 @@ public class MeleeWeapon : MonoBehaviour
 
     private float lastAttackTime;
 
+    // 전기톱 연료 (2026-11-16): WeaponData.fuelCapacity > 0인 근접 무기만. 휘두를 때마다 fuelPerSecond × 공격 주기만큼 소모
+    // (3회/초 × 0.333초 × 초당 2 → 연료 120이면 60초 사용). 무기를 다시 장착하면 가득 참 (보충은 상점 시스템 담당)
+    private float fuel;
+    public float Fuel => fuel;
+    bool UsesFuel => weaponData != null && weaponData.fuelCapacity > 0f;
+
     /// <summary>쿨타임이 지나서 지금 휘두를 수 있는지 (스테미나를 쓰기 전에 확인용)</summary>
-    public bool IsReady => Time.time >= lastAttackTime + ((weaponData != null) ? weaponData.attackRate : 0.5f);
+    public bool IsReady => Time.time >= lastAttackTime + ((weaponData != null) ? weaponData.attackRate : 0.5f)
+                           && (!UsesFuel || fuel > 0f); // 연료 다 떨어진 전기톱은 못 씀
 
     /// <summary>쿨타임이 지났으면 공격하고 true (PlayerController가 휘두르기 애니메이션 트리거)</summary>
     public bool TryAttack()
@@ -42,6 +49,11 @@ public class MeleeWeapon : MonoBehaviour
 
         if (Time.time >= lastAttackTime + currentAttackRate)
         {
+            if (UsesFuel)
+            {
+                if (fuel <= 0f) { PickupFeedbackUI.Instance?.ShowWarning("연료 없음!"); return false; }
+                fuel = Mathf.Max(0f, fuel - weaponData.fuelPerSecond * currentAttackRate);
+            }
             // Attack();   // (이전) 클릭 즉시 판정 → 도끼가 아직 머리 위인데 맞아서 타격감 없음
             if (hitDelay > 0f && isActiveAndEnabled) StartCoroutine(AttackAfterDelay(hitDelay));
             else Attack();
@@ -206,6 +218,7 @@ public class MeleeWeapon : MonoBehaviour
     {
         weaponData = newData;
         if (newData.effectiveRange > 0f) attackRange = newData.effectiveRange; // 근접 사거리 (도끼 2m)
+        fuel = newData.fuelCapacity; // 전기톱 연료 가득 (연료 없는 무기는 0)
         Debug.Log("근접 무기가 [" + newData.itemName + "]으로 교체됨!");
     }
 }

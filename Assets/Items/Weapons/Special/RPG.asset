@@ -1,0 +1,59 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3eb99a6aa2adbac41a16f2ce1a62f261, type: 3}
+  m_Name: RPG
+  m_EditorClassIdentifier: Assembly-CSharp::WeaponData
+  itemName: RPG-7
+  icon: {fileID: 21300000, guid: 570a9308ff6ec244eadeac40ec3eed9e, type: 3}
+  itemType: 0
+  rarity: 3
+  worldModel: {fileID: 0}
+  isStackable: 0
+  maxStackSize: 1
+  weaponPrefab: {fileID: 3574720678643871998, guid: 2643dc7be2bfa3445b76eeb1dbd2dd63, type: 3}
+  type: 5
+  damage: 300
+  attackRate: 1
+  maxAmmo: 1
+  reloadTime: 3
+  bulletSpeed: 45
+  recoil: 0
+  effectiveRange: 70
+  handGripOffset: {x: 0, y: 0, z: 0}
+  pelletCount: 8
+  spreadAngle: 15
+  penetrating: 0
+  penetrationCount: 0
+  specialKind: 3
+  splashDamage: 150
+  splashRadius: 8
+  knockback: 6
+  burnDps: 0
+  burnDuration: 0
+  spinUpTime: 0
+  fuelCapacity: 0
+  fuelPerSecond: 0
+  lightColor: {r: 1, g: 0.53333336, b: 0, a: 1}
+  lightIntensity: 0.8
+  lightRange: 2.5
+  noiseRadius: 90
+  autoFire: 0
+  fireSound: {fileID: 0}
+  reloadSound: {fileID: 0}
+  positionOffset: {x: 0.01, y: 0.06, z: -0.2}
+  rotationOffset: {x: 30, y: 170, z: 0}
+  carryRotationOffset: {x: 0, y: 0, z: 0}
+  carryMoveRotationOffset: {x: 0, y: 0, z: 0}
+  swingPositionOffset: {x: 0, y: 0, z: 0}
+  staminaCost: 0
+  rigidGrip: 0
+  holsterRotation: {x: 306.8699, y: 270, z: 90}
