@@ -253,12 +253,59 @@ public static class SpecialWeaponBuilder
         Debug.Log($"[SpecialWeaponBuilder] WeaponDatabase: 무기 {db.weapons.Count}개 (상점 전용 {shop.Count}개)");
     }
 
+    // ── 발사 섬광 재질 (2026-11-17): Resources/FX/MuzzleFlash.mat (가산 합성 파티클 셰이더) + 코드로 그린 섬광 텍스처 ──
+    //  텍스처: 가운데 밝은 원 + 4갈래 빛줄기 (흰색, 알파 = 밝기). 색은 MuzzleLight가 _TintColor로 (#FFE090 / 무기 색)
+    const string FlashTexPath = "Assets/Resources/FX/muzzle_flash.png";
+    const string FlashMatPath = "Assets/Resources/FX/MuzzleFlash.mat";
+
+    public static Material EnsureMuzzleFlashMaterial()
+    {
+        Directory.CreateDirectory("Assets/Resources/FX");
+        if (!File.Exists(FlashTexPath))
+        {
+            const int N = 128;
+            var tex = new Texture2D(N, N, TextureFormat.RGBA32, false);
+            for (int y = 0; y < N; y++)
+                for (int x = 0; x < N; x++)
+                {
+                    float u = (x + 0.5f) / N * 2f - 1f, v = (y + 0.5f) / N * 2f - 1f;
+                    float r = Mathf.Sqrt(u * u + v * v);
+                    float core = Mathf.Clamp01(1f - r / 0.45f); core *= core;                       // 가운데 원
+                    float ang = Mathf.Atan2(v, u);
+                    float rays = Mathf.Pow(Mathf.Abs(Mathf.Cos(ang * 2f)), 24f) * Mathf.Clamp01(1f - r); // 4갈래 빛줄기
+                    float a = Mathf.Clamp01(core + rays * 0.8f);
+                    tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+                }
+            tex.Apply();
+            File.WriteAllBytes(FlashTexPath, tex.EncodeToPNG());
+            Object.DestroyImmediate(tex);
+            AssetDatabase.ImportAsset(FlashTexPath);
+            var imp = (TextureImporter)AssetImporter.GetAtPath(FlashTexPath);
+            imp.alphaIsTransparency = true; imp.mipmapEnabled = false; imp.wrapMode = TextureWrapMode.Clamp;
+            imp.SaveAndReimport();
+        }
+        var mat = AssetDatabase.LoadAssetAtPath<Material>(FlashMatPath);
+        if (mat == null)
+        {
+            var sh = Shader.Find("Legacy Shaders/Particles/Additive");
+            if (sh == null) sh = Shader.Find("Sprites/Default");
+            mat = new Material(sh) { name = "MuzzleFlash" };
+            AssetDatabase.CreateAsset(mat, FlashMatPath);
+        }
+        mat.mainTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(FlashTexPath);
+        if (mat.HasProperty("_TintColor")) mat.SetColor("_TintColor", new Color32(0xFF, 0xE0, 0x90, 0xFF));
+        EditorUtility.SetDirty(mat);
+        AssetDatabase.SaveAssets();
+        return mat;
+    }
+
     // ── 총구 불빛 일괄 부착 ──
     static readonly string[] MuzzleNames = { "MuzzlePoint", "Muzzle", "FirePoint" };
 
     [MenuItem("Tools/Weapons/Add Muzzle Light to All")]
     public static void AddMuzzleLightToAll()
     {
+        EnsureMuzzleFlashMaterial(); // 2026-11-17 발사 섬광 Quad 재질
         int added = 0, kept = 0, noMuzzle = 0;
         var skipped = new System.Text.StringBuilder();
         var done = new HashSet<GameObject>();
@@ -280,7 +327,8 @@ public static class SpecialWeaponBuilder
                 go.transform.SetParent(muzzle, false);
                 go.transform.localPosition = new Vector3(0f, 0f, 0.05f); // 총구 바로 앞
                 var li = go.AddComponent<Light>();
-                li.type = LightType.Point; li.color = Yellow; li.intensity = 0.8f; li.range = 2.5f;
+                // li.type = LightType.Point; li.color = Yellow; li.intensity = 0.8f; li.range = 2.5f; // (이전) 바닥에 원이 생김
+                li.type = LightType.Spot; li.color = Yellow; li.intensity = 1.75f; li.range = 6f; li.spotAngle = 25f; // 2026-11-17 조준등
                 li.shadows = LightShadows.None; li.enabled = false; // 손에 들 때 Weapon이 켬
                 go.AddComponent<MuzzleLight>();
                 PrefabUtility.SaveAsPrefabAsset(root, path);

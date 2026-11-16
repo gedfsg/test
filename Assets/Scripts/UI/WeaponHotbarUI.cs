@@ -599,7 +599,12 @@ public class WeaponHotbarUI : MonoBehaviour
 
     // 무기 등급 테두리: 칸 안쪽(4px 안)에 등급 색 테두리. 바깥 테두리는 선택 표시(노랑)/무기 칸(빨강)이 쓰고 있어서
     // 같은 자리에 칠하면 선택된 무기의 등급이 가려짐 → 안쪽에 따로 그려 둘 다 보이게
-    const float RarityFrameInset = 4f;
+    // 2026-11-17 피드백 "슬롯 테두리와 등급 테두리가 겹침":
+    //  - 무기가 들어 있는 칸: 기본 테두리(Frame, 회색/무기 칸 빨강)는 숨기고 등급 테두리만 그 자리(바깥)에 굵게
+    //  - 선택된 칸: 노란 선택 테두리(ActiveBar)가 바깥을 쓰므로 등급 테두리는 안쪽(5px)에 얇게 → 색·굵기가 겹치지 않음
+    //  - 빈 칸 / 무기 아닌 칸: 기존 테두리 그대로
+    const float RarityFrameInset = 4f;     // (이전) 항상 이 안쪽 위치
+    const float RarityInsetActive = 5f;
     private readonly UnityEngine.UI.Image[] rarityFrames = new UnityEngine.UI.Image[SLOT_COUNT];
 
     private void UpdateRarityFrame(int i)
@@ -623,6 +628,18 @@ public class WeaponHotbarUI : MonoBehaviour
         }
         rarityFrames[i].enabled = wd != null;
         if (wd != null) rarityFrames[i].color = RarityColors.Get(wd.rarity);
+
+        // 기본 테두리 숨김 + 선택 여부에 따라 등급 테두리 위치/굵기
+        var baseFrame = slots[i].transform.Find("Frame")?.GetComponent<UnityEngine.UI.Image>();
+        if (baseFrame != null) baseFrame.enabled = wd == null;
+        if (wd != null)
+        {
+            bool active = i == activeSlot;
+            var rt = rarityFrames[i].rectTransform;
+            float inset = active ? RarityInsetActive : 0f;
+            rt.offsetMin = Vector2.one * inset; rt.offsetMax = -Vector2.one * inset;
+            rarityFrames[i].sprite = active ? HudStyle.RoundedFrame : (HudStyle.RoundedFrameThick != null ? HudStyle.RoundedFrameThick : HudStyle.RoundedFrame);
+        }
     }
 
     private void RefreshAllSlots() { for (int i = 0; i < SLOT_COUNT; i++) RefreshSlot(i); }

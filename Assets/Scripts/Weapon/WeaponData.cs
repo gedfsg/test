@@ -54,9 +54,9 @@ public class WeaponData : ItemData
     [Header("총구 불빛 (2026-11-16) - MuzzleLight")]
     [Tooltip("총구 상시 불빛 색 (일반 총 #FFD070, 화염 #FF5500, RPG #FF8800, 레이저 #00EEFF)")]
     public Color lightColor = new Color32(0xFF, 0xD0, 0x70, 0xFF);
-    [Tooltip("상시 밝기 (발사 순간 ×3)")]
+    [Tooltip("조준등 밝기. 2026-11-17부터 MuzzleLight 기본 1.75보다 클 때만 씀 (화염방사기 2.0)")]
     public float lightIntensity = 0.8f;
-    [Tooltip("상시 범위 m (발사 순간 ×1.5, 우클릭 조준 시 aimLightRange)")]
+    [Tooltip("(2026-11-17부터 안 씀) 예전 Point Light 범위. 조준등은 MuzzleLight.spotRange 6m 고정 - 바닥에 빛 원이 안 생기게")]
     public float lightRange = 2.5f;
 
     [Header("소음")]

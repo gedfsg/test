@@ -27,6 +27,10 @@ public class PickupItem : MonoBehaviour
         if (addGlow && GetComponent<ItemOutlineGlow>() == null)
             gameObject.AddComponent<ItemOutlineGlow>();
 
+        // 등급 외곽선 (2026-11-17): 희미한 등급 색 테두리, 플레이어 20m 안에서만
+        if (itemData != null && GetComponent<DropRarityOutline>() == null)
+            gameObject.AddComponent<DropRarityOutline>().Setup(itemData.rarity);
+
         CreatePrompt();
     }
 
