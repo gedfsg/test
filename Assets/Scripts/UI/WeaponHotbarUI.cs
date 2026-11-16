@@ -3,8 +3,12 @@ using UnityEngine.InputSystem;
 
 /// <summary>
 /// 5슬롯 핫바 (PUBG 스타일). G키로 현재 슬롯 버리기, 슬롯 우클릭으로도 버릴 수 있다.
-///  - 슬롯 1,2 (index 0,1): 무기(WeaponData: 총 또는 근접)만. 1/2 키로 선택해서 들고 다님
-///  - 슬롯 3,4,5 (index 2~4): 소비 아이템(ConsumableData: 음식/음료/의료)만. 3~5 키를 누르면 바로 사용
+/// (이전) 슬롯 1,2 = 무기(총·근접) / 3,4,5 = 소비 아이템 (키 누르면 바로 사용)
+/// 2026-11-16 재구성:
+///  - 슬롯 1 (index 0): 주력 원거리 무기 (소총·샷건·스나이퍼 등) / 슬롯 2 (index 1): 권총·보조 원거리 무기
+///  - 슬롯 3 (index 2): 투척 무기 전용 (수류탄·화염병). 선택하면 손에 쥐고 클릭으로 던짐 (ThrowableController)
+///  - 슬롯 4,5 (index 3,4): 자유 — 근접 무기(선택하면 듦, 시작 도끼 = 4번) 또는 소비 아이템(키 누르면 바로 사용)
+///  - 마우스 휠: 1·2·3만 순환 (아래 = 다음 1→2→3→1, 위 = 이전). 4·5는 숫자 키로만. 카메라 줌은 Ctrl+휠로 옮김
 ///  - 타입이 안 맞는 아이템은 거부 (SlotTypeFilter.CanPlace)
 /// UI 시각 요소는 SlotView 프리팹을 사용하며, 이 스크립트는 데이터/로직만 담당한다.
 ///
@@ -17,20 +21,31 @@ public class WeaponHotbarUI : MonoBehaviour
 
     private const int SLOT_COUNT = 5;
 
-    /// <summary>슬롯별 허용 타입. 0,1 = 총 / 2,3,4 = 소비 아이템</summary>
+    /// <summary>슬롯별 허용 타입. 0,1 = 원거리 무기 / 2 = 투척물 / 3,4 = 근접 무기·소비 아이템 (2026-11-16)</summary>
     public static class SlotTypeFilter
     {
         public const int WeaponSlotCount = 2; // 앞 2칸이 총 슬롯
+        public const int ThrowSlot = 2;       // 3번 칸 = 투척 전용
+        public const int WheelSlotCount = 3;  // 휠로 순환하는 칸 (1·2·3)
 
         public static bool IsWeaponSlot(int index) => index >= 0 && index < WeaponSlotCount;
+        public static bool IsThrowSlot(int index) => index == ThrowSlot;
+        public static bool IsFreeSlot(int index) => index > ThrowSlot && index < SLOT_COUNT;
 
         /// <summary>index 슬롯에 item을 넣을 수 있는지 (null = 비우기라 항상 허용)</summary>
         public static bool CanPlace(int index, ItemData item)
         {
             if (index < 0 || index >= SLOT_COUNT) return false;
             if (item == null) return true;
-            return IsWeaponSlot(index) ? item is WeaponData : item is ConsumableData;
+            // return IsWeaponSlot(index) ? item is WeaponData : item is ConsumableData; // (이전)
+            if (IsWeaponSlot(index)) return item is WeaponData w && w.type != WeaponType.Melee;
+            if (IsThrowSlot(index)) return item is ThrowableData;
+            return (item is WeaponData) || (item is ConsumableData);
         }
+
+        /// <summary>못 넣을 때 토스트 문구</summary>
+        public static string RejectMessage(int index) =>
+            IsWeaponSlot(index) ? "1, 2번은 원거리 무기 전용" : IsThrowSlot(index) ? "투척물만 장착 가능" : "4, 5번은 근접 무기·소비 아이템 전용";
     }
 
     [Header("Prefab 참조")]
@@ -48,6 +63,7 @@ public class WeaponHotbarUI : MonoBehaviour
     [SerializeField] private bool showWeaponHint = false;
 
     private PlayerController playerController;
+    private int lastGunSlot = 0; // 마지막으로 든 총 칸 (투척물 다 쓰면 여기로 돌아감)
 
     void Awake() => Instance = this;
 
@@ -71,6 +87,21 @@ public class WeaponHotbarUI : MonoBehaviour
         else if (kb.digit4Key.wasPressedThisFrame) SelectSlot(3);
         else if (kb.digit5Key.wasPressedThisFrame) SelectSlot(4);
 
+        // 마우스 휠 (2026-11-16): 1·2·3만 순환. Ctrl+휠은 카메라 줌(CameraZoom)이라 무시
+        var mouse = Mouse.current;
+        if (mouse != null && !kb.ctrlKey.isPressed)
+        {
+            float wheel = mouse.scroll.ReadValue().y;
+            if (wheel != 0f && !(playerController != null && playerController.IsThrowAiming))
+            {
+                int n = SlotTypeFilter.WheelSlotCount;
+                // 4·5번을 들고 있을 때: 아래 = 1번부터, 위 = 3번부터
+                int cur = activeSlot < n ? activeSlot : (wheel < 0f ? -1 : n);
+                int next = wheel < 0f ? (cur + 1) % n : (cur - 1 + n) % n; // 아래 = 다음, 위 = 이전
+                SelectSlot(next);
+            }
+        }
+
         if (kb.gKey.wasPressedThisFrame) DropSlot(activeSlot);
     }
 
@@ -81,7 +112,13 @@ public class WeaponHotbarUI : MonoBehaviour
     public void SelectSlot(int index)
     {
         if (index < 0 || index >= SLOT_COUNT) return;
-        if (!SlotTypeFilter.IsWeaponSlot(index)) { UseConsumableSlot(index); return; }
+        // if (!SlotTypeFilter.IsWeaponSlot(index)) { UseConsumableSlot(index); return; } // (이전) 3~5 = 바로 사용
+        // 4·5번: 소비 아이템이면 바로 사용 (들고 있는 것 유지), 근접 무기면 아래에서 듦, 비어 있으면 무시
+        if (SlotTypeFilter.IsFreeSlot(index) && !(items[index] is WeaponData))
+        {
+            if (items[index] is ConsumableData) UseConsumableSlot(index);
+            return;
+        }
 
         // 들고 있던 총의 남은 탄수 저장 (근접 무기는 탄수 없음)
         if (activeSlot >= 0 && items[activeSlot] is WeaponData cur && cur.type != WeaponType.Melee && playerController != null)
@@ -94,9 +131,41 @@ public class WeaponHotbarUI : MonoBehaviour
         {
             playerController?.SwapWeaponData(wd, ammos[index]);
             if (prevSlot != index) playerController?.PlayWeaponSwitch(); // 1↔2 전환 모션
+            if (SlotTypeFilter.IsWeaponSlot(index)) lastGunSlot = index;
+        }
+        else if (SlotTypeFilter.IsThrowSlot(index))
+        {
+            // 투척물 쥐기: 총/도끼 모델 숨김 (손에 쥔 투척물은 ThrowableController가 붙임)
+            playerController?.HideCurrentWeapon();
+            if (prevSlot != index && items[index] != null) playerController?.PlayWeaponSwitch();
+        }
+
+        if (prevSlot != index)
+        {
+            // 전환 피드백: 선택 칸 튀는 애니메이션 + 장비 교체 소리
+            if (slots[index] != null) StartCoroutine(PopSlot(slots[index].transform));
+            if (AudioManager.Library != null) AudioManager.PlayUI(SoundLibrary.Pick(AudioManager.Library.pickup), AudioManager.Vol.UI);
         }
 
         RefreshAllSlots();
+    }
+
+    System.Collections.IEnumerator PopSlot(Transform t)
+    {
+        const float dur = 0.15f;
+        for (float e = 0f; e < dur; e += Time.unscaledDeltaTime)
+        {
+            t.localScale = Vector3.one * (1f + 0.15f * Mathf.Sin(e / dur * Mathf.PI)); // 1 → 1.15 → 1
+            yield return null;
+        }
+        t.localScale = Vector3.one;
+    }
+
+    /// <summary>이 아이템이 들어 있는 칸 (없으면 -1)</summary>
+    public int IndexOf(ItemData item)
+    {
+        for (int i = 0; i < SLOT_COUNT; i++) if (items[i] == item) return i;
+        return -1;
     }
 
     public void EquipSlot(int index) => SelectSlot(index); // 기존 코드 호환용
@@ -120,10 +189,13 @@ public class WeaponHotbarUI : MonoBehaviour
     /// <summary>item이 들어갈 슬롯 번호. 총 = 현재 선택된 총 슬롯, 소비 = 같은 아이템 칸 → 빈 소비 칸. 없으면 -1</summary>
     public int FindTargetSlot(ItemData item)
     {
-        if (item is WeaponData) return SlotTypeFilter.IsWeaponSlot(activeSlot) ? activeSlot : 0;
-        if (!(item is ConsumableData)) return -1;
-        for (int i = SlotTypeFilter.WeaponSlotCount; i < SLOT_COUNT; i++) if (items[i] == item) return i;
-        for (int i = SlotTypeFilter.WeaponSlotCount; i < SLOT_COUNT; i++) if (items[i] == null) return i;
+        // (이전) 무기 = 선택된 총 칸 또는 0 / 소비 = 3~5번
+        if (item == null) return -1;
+        if (item is ThrowableData) return SlotTypeFilter.ThrowSlot;
+        if (item is WeaponData w && w.type != WeaponType.Melee)
+            return SlotTypeFilter.IsWeaponSlot(activeSlot) ? activeSlot : (items[0] == null ? 0 : items[1] == null ? 1 : 0);
+        for (int i = 0; i < SLOT_COUNT; i++) if (items[i] == item && SlotTypeFilter.CanPlace(i, item)) return i;
+        for (int i = SlotTypeFilter.ThrowSlot + 1; i < SLOT_COUNT; i++) if (items[i] == null && SlotTypeFilter.CanPlace(i, item)) return i;
         return -1;
     }
 
@@ -193,6 +265,17 @@ public class WeaponHotbarUI : MonoBehaviour
     public bool AddWeapon(WeaponData weapon, int ammo = -1)
         => AddItemToSlot(weapon, ammo >= 0 ? ammo : weapon.maxAmmo);
 
+    /// <summary>투척물 줍기 (2026-11-16): 3번 칸이 같은 것이면 개수 합침, 비어 있으면 넣음. 다른 투척물이 있으면 false (가방으로)</summary>
+    public bool TryAddThrowable(ThrowableData throwable, int count)
+    {
+        int t = SlotTypeFilter.ThrowSlot;
+        if (items[t] == throwable) { ammos[t] += count; RefreshSlot(t); return true; }
+        if (items[t] != null) return false;
+        items[t] = throwable; ammos[t] = count;
+        RefreshAllSlots();
+        return true;
+    }
+
     public bool AddThrowable(ThrowableData throwable, int count)
     {
         for (int i = 0; i < SLOT_COUNT; i++)
@@ -244,7 +327,12 @@ public class WeaponHotbarUI : MonoBehaviour
         if (!(items[index] is ThrowableData)) return;
 
         ammos[index]--;
-        if (ammos[index] <= 0) { items[index] = null; ammos[index] = 0; }
+        if (ammos[index] <= 0)
+        {
+            items[index] = null; ammos[index] = 0;
+            // 다 던졌으면 마지막 총 칸(1 또는 2)으로 자동 전환 (2026-11-16)
+            if (index == activeSlot) { RefreshAllSlots(); SelectSlot(lastGunSlot); return; }
+        }
         RefreshAllSlots();
     }
 
@@ -370,7 +458,8 @@ public class WeaponHotbarUI : MonoBehaviour
 
     private static void LogReject(int index, ItemData item)
     {
-        string where = index < 0 ? "빈 슬롯 없음" : $"슬롯 {index + 1}은 {(SlotTypeFilter.IsWeaponSlot(index) ? "무기" : "소비 아이템")} 전용";
+        // string where = index < 0 ? "빈 슬롯 없음" : $"슬롯 {index + 1}은 {(SlotTypeFilter.IsWeaponSlot(index) ? "무기" : "소비 아이템")} 전용"; // (이전)
+        string where = index < 0 ? "빈 슬롯 없음" : SlotTypeFilter.RejectMessage(index);
         Debug.Log($"[핫바] '{item?.itemName}' 거부 - {where}");
     }
 
@@ -388,7 +477,61 @@ public class WeaponHotbarUI : MonoBehaviour
             slot.Owner = SlotView.SlotOwner.Hotbar; slot.Index = i; // 드래그 앤 드롭용
             slots[i] = slot;
             if (SlotTypeFilter.IsWeaponSlot(i)) DecorateWeaponSlot(slot, i);
+            else if (SlotTypeFilter.IsThrowSlot(i)) DecorateThrowSlot(slot);
         }
+    }
+
+    // ── 3번 투척 칸 (2026-11-16): 주황 테두리 + "투척" 라벨 + 빈 칸 흐린 투척물 아이콘 + 아래 "수류탄 x3" / "비어 있음" ──
+    static readonly Color ThrowFrameColor = new Color(0.72f, 0.42f, 0.10f, 1f);
+    static readonly Color ThrowLabelColor = new Color(1f, 0.70f, 0.30f, 1f);
+    UnityEngine.UI.Image throwPlaceholder;
+    TMPro.TextMeshProUGUI throwInfo;
+    bool throwHover;
+
+    private void DecorateThrowSlot(SlotView slot)
+    {
+        var frame = slot.transform.Find("Frame")?.GetComponent<UnityEngine.UI.Image>();
+        if (frame != null)
+        {
+            if (HudStyle.RoundedFrameThick != null) frame.sprite = HudStyle.RoundedFrameThick;
+            frame.color = ThrowFrameColor;
+        }
+        var label = HudStyle.NewText(slot.transform, "ThrowLabel", "투척", HudStyle.SemiBold, 13f, ThrowLabelColor,
+                                     TMPro.TextAlignmentOptions.Center, Vector2.zero, new Vector2(80f, 18f));
+        var lr = label.rectTransform;
+        lr.anchorMin = lr.anchorMax = new Vector2(0.5f, 1f); lr.pivot = new Vector2(0.5f, 0f);
+        lr.anchoredPosition = new Vector2(0f, 4f);
+        label.raycastTarget = false;
+
+        // 빈 칸 자리 표시: 수류탄 아이콘 흐리게 (Resources/Throwables/icon_Grenade - ThrowableBuilder가 만듦)
+        var ph = new GameObject("ThrowPlaceholder", typeof(RectTransform), typeof(UnityEngine.UI.Image));
+        var pr = (RectTransform)ph.transform;
+        pr.SetParent(slot.transform, false); pr.SetSiblingIndex(0);
+        pr.anchorMin = new Vector2(0.15f, 0.15f); pr.anchorMax = new Vector2(0.85f, 0.85f); pr.offsetMin = pr.offsetMax = Vector2.zero;
+        throwPlaceholder = ph.GetComponent<UnityEngine.UI.Image>();
+        throwPlaceholder.sprite = Resources.Load<Sprite>("Throwables/icon_Grenade");
+        throwPlaceholder.preserveAspect = true; throwPlaceholder.raycastTarget = false;
+        throwPlaceholder.color = new Color(1f, 1f, 1f, 0.18f);
+        if (throwPlaceholder.sprite == null) throwPlaceholder.enabled = false;
+
+        // 칸 아래: 이름 x 개수 / 비어 있음 / (마우스 올리면) 투척 무기 전용
+        throwInfo = HudStyle.NewText(slot.transform, "ThrowInfo", "비어 있음", HudStyle.SemiBold, 12f, HudStyle.TextDim,
+                                     TMPro.TextAlignmentOptions.Center, Vector2.zero, new Vector2(120f, 16f));
+        var ir = throwInfo.rectTransform;
+        ir.anchorMin = ir.anchorMax = new Vector2(0.5f, 0f); ir.pivot = new Vector2(0.5f, 1f);
+        ir.anchoredPosition = new Vector2(0f, -3f);
+        throwInfo.raycastTarget = false;
+
+        var hover = slot.gameObject.AddComponent<HoverRelay>();
+        hover.onChange = on => { throwHover = on; RefreshSlot(SlotTypeFilter.ThrowSlot); };
+    }
+
+    /// <summary>마우스 올림/내림 알림 (3번 칸 "투척 무기 전용" 안내)</summary>
+    class HoverRelay : MonoBehaviour, UnityEngine.EventSystems.IPointerEnterHandler, UnityEngine.EventSystems.IPointerExitHandler
+    {
+        public System.Action<bool> onChange;
+        public void OnPointerEnter(UnityEngine.EventSystems.PointerEventData e) => onChange?.Invoke(true);
+        public void OnPointerExit(UnityEngine.EventSystems.PointerEventData e) => onChange?.Invoke(false);
     }
 
     // 1,2번 무기 전용 칸 표시: 두꺼운 어두운 빨강 테두리 + 위에 "무기" 라벨 + 빈 칸엔 흐린 총 아이콘
@@ -442,6 +585,16 @@ public class WeaponHotbarUI : MonoBehaviour
 
         slots[i].SetNumber(i + 1, isActive, theme);
         UpdateRarityFrame(i);
+
+        if (SlotTypeFilter.IsThrowSlot(i))
+        {
+            if (throwPlaceholder != null && throwPlaceholder.sprite != null) throwPlaceholder.enabled = !has;
+            if (throwInfo != null)
+            {
+                throwInfo.text = throwHover ? "투척 무기 전용" : has ? $"{items[i].itemName} x{ammos[i]}" : "비어 있음";
+                throwInfo.color = throwHover ? ThrowLabelColor : has ? HudStyle.Text : HudStyle.Inactive;
+            }
+        }
     }
 
     // 무기 등급 테두리: 칸 안쪽(4px 안)에 등급 색 테두리. 바깥 테두리는 선택 표시(노랑)/무기 칸(빨강)이 쓰고 있어서

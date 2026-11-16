@@ -307,7 +307,31 @@ public static class LiberatorWeaponBuilder
                 d.rigidGrip = true;
                 break;
         }
+        PistolOverride(d); // 2026-11-16 권총 정리 (Five-seveN / Deagle만 남김)
         if (isNew) AssetDatabase.CreateAsset(d, path); else EditorUtility.SetDirty(d);
         return d;
+    }
+
+    // ── 권총 밸런스 (2026-11-16): 드롭되는 권총은 희귀 1 + 영웅 1자루만 (나머지는 LootTableBuilder.RetiredPistols로 드롭 0) ──
+    //  희귀 Five-seveN: 데미지 30, 탄창 12, 재장전 1.8초 / 영웅 Deagle: 데미지 45, 탄창 15, 재장전 1.5초
+    static void PistolOverride(WeaponData d)
+    {
+        if (d == null) return;
+        if (d.itemName == "Five-seveN") { d.damage = 30f; d.maxAmmo = 12; d.reloadTime = 1.8f; }
+        else if (d.itemName == "Deagle") { d.damage = 45f; d.maxAmmo = 15; d.reloadTime = 1.5f; }
+    }
+
+    /// <summary>프리팹을 다시 만들지 않고 권총 2자루 스탯만 적용 (Build Loot Tables가 같이 부름)</summary>
+    [MenuItem("Tools/Weapons/Apply Pistol Balance")]
+    public static void ApplyPistolBalance()
+    {
+        foreach (var n in new[] { "Five-seveN", "Deagle" })
+        {
+            var d = AssetDatabase.LoadAssetAtPath<WeaponData>($"{DataDir}/{n}.asset");
+            if (d == null) { Debug.LogWarning("[권총 밸런스] 없음: " + n); continue; }
+            PistolOverride(d);
+            EditorUtility.SetDirty(d);
+        }
+        AssetDatabase.SaveAssets();
     }
 }

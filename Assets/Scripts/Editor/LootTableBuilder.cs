@@ -57,6 +57,9 @@ public static class LootTableBuilder
     // ── 2026-11-16: 스나이퍼 2종 + MedKit 드롭 비율 ──
     const string SW = "Assets/Items/Weapons/Sniper/";  // Tools/Weapons/Build Sniper + Special Weapons
     const string MedKitPath = C + "MedKit.asset";
+    // 2026-11-16 투척물 (Tools/Items/Build Throwables)
+    const string GrenadePath = "Assets/Items/Throwables/Grenade.asset";
+    const string MolotovPath = "Assets/Items/Throwables/Molotov.asset";
     // 저격 탄약 (이전엔 어느 테이블에도 없었음 → 스나이퍼가 5발/8발 쏘면 끝이라 금속·군용 상자·경찰서에 조금 추가)
     static E SRAmmo(float w, int min, int max) => new E("Assets/Items/Ammo/Sniper Ammo.asset", w, min, max);
 
@@ -72,7 +75,7 @@ public static class LootTableBuilder
     {
         float total = 0f;
         foreach (var it in items) { list.RemoveAll(e => e.path == it.path); total += it.share; }
-        float others = 0f; foreach (var e in list) others += e.w;
+        float others = 0f; foreach (var e in list) if (!IsRetired(e.path)) others += e.w; // 드롭 0인 권총은 빼고 계산
         foreach (var it in items) list.Add(new E(it.path, others * it.share / (1f - total)));
     }
 
@@ -128,7 +131,8 @@ public static class LootTableBuilder
         AddGuns(military, RareGuns, 2f);
         military.Add(Bag(3));
         military.Add(SRAmmo(4, 5, 10));
-        AddShare(military, MedKitPath, 0.15f); // 군용 상자 MedKit 15%
+        // AddShare(military, MedKitPath, 0.15f); // 군용 상자 MedKit 15%
+        AddShares(military, (MedKitPath, 0.15f), (GrenadePath, 0.15f)); // 군용 상자 MedKit 15% + 수류탄 15%
         var crateMilitary = Table("Crate_Military", 1, 4, military);   // + 보장 1개 = 2~5개
         var epic = new List<E>(); AddGuns(epic, EpicGuns, 1f);
         AddShare(epic, SW + "L118a1.asset", 0.10f); // 영웅 상자(군용 보장 Epic) 가중치의 10% = L118a1
@@ -139,23 +143,27 @@ public static class LootTableBuilder
         AddGuns(house, new[] { "G17", "P9" }, 1.5f); // 권총 가끔 (~3%)
         AddGuns(house, new[] { "S12P8", "Skorpion" }, 0.75f); // 집에 있던 샷건/SMG 드물게 (~1.5%)
         house.Add(Bag(1));
-        AddShare(house, MedKitPath, 0.04f); // 민가 MedKit 4%
+        // AddShare(house, MedKitPath, 0.04f); // 민가 MedKit 4%
+        AddShares(house, (MedKitPath, 0.04f), (GrenadePath, 0.02f), (MolotovPath, 0.05f)); // 민가 MedKit 4% + 수류탄 2% + 화염병 5%
         var police = new List<E> { ARAmmo(20, 30, 60), PAmmo(15, 20, 40), SGAmmo(12, 8, 16), new E(C + "Bandage.asset", 5), new E(C + "MedKit.asset", 3) };
         AddGuns(police, new[] { "AK-556", "AR-15", "G36K", "FAMAS", "S12P8" }, 4f); AddGuns(police, new[] { "L85A2", "AUG", "SAIGA-12", "XMA-10" }, 1.5f); AddGuns(police, new[] { "G17" }, 3f);
         // 경찰서: 진압용 샷건 + 기동대 SMG 추가 (총 중 샷건/SMG 비중 약 50%)
         AddGuns(police, CommonShotguns, 3f); AddGuns(police, CommonSMGs, 3f); AddGuns(police, RareShotguns, 1f); AddGuns(police, RareSMGs, 1f);
         police.Add(SRAmmo(3, 5, 10));
-        AddShare(police, MedKitPath, 0.08f); // 경찰서 MedKit 8% (이전 가중치 3 ≈ 2%)
+        // AddShare(police, MedKitPath, 0.08f); // 경찰서 MedKit 8% (이전 가중치 3 ≈ 2%)
+        AddShares(police, (MedKitPath, 0.08f), (GrenadePath, 0.08f)); // 경찰서 MedKit 8% + 수류탄 8%
         var mart = new List<E>(foods) { Bag(1) }; // 상점에서도 가방 가끔 (2026-11-12)
         // 마트: 음식 대량 + 계산대/창고에 숨겨둔 샷건·SMG 가끔 (마트 1곳당 총 1자루 나올 확률 약 40%)
         AddGuns(mart, new[] { "S12P8", "Skorpion", "UMP45" }, 0.7f); mart.Add(SGAmmo(1.5f, 4, 8));
-        AddShare(mart, MedKitPath, 0.04f); // 마트 MedKit 4%
+        // AddShare(mart, MedKitPath, 0.04f); // 마트 MedKit 4%
+        AddShares(mart, (MedKitPath, 0.04f), (MolotovPath, 0.03f)); // 마트 MedKit 4% + 화염병 3%
         var church = new List<E> { new E(C + "Bandage.asset", 10), new E(C + "MedKit.asset", 6), new E(C + "Painkiller.asset", 4), Food("Water.asset", 3) };
         AddShare(church, MedKitPath, 0.02f); // 교회 MedKit 2% (이전 가중치 6 ≈ 27%)
         // 병원: 의료 아이템만 (붕대/구급상자/진통제), 교회보다 많이
         var hospital = new List<E> { new E(C + "Bandage.asset", 10), new E(C + "MedKit.asset", 7), new E(C + "Painkiller.asset", 6) };
         AddShare(hospital, MedKitPath, 0.15f); // 병원 MedKit 15% (이전 가중치 7 ≈ 30%)
-        AddShare(warehouse, MedKitPath, 0.05f); // 창고 MedKit 5%
+        // AddShare(warehouse, MedKitPath, 0.05f); // 창고 MedKit 5%
+        AddShares(warehouse, (MedKitPath, 0.05f), (MolotovPath, 0.04f)); // 창고 MedKit 5% + 화염병 4%
 
         var db = LoadOrCreate<LootDatabase>("Assets/Resources/LootDatabase.asset");
         db.crateWood = crateWood; db.crateMetal = crateMetal; db.crateMilitary = crateMilitary; db.crateMilitaryGuaranteed = crateMilitaryG;
@@ -196,11 +204,18 @@ public static class LootTableBuilder
             Drop("사냥꾼", 0.035f, medkitT),
         };
         EditorUtility.SetDirty(db);
+        LiberatorWeaponBuilder.ApplyPistolBalance(); // 남은 권총 2자루 스탯 (2026-11-16)
         AssetDatabase.SaveAssets();
         Debug.Log("[LootTableBuilder] 완료 - 테이블 " + System.IO.Directory.GetFiles(LootDir, "*.asset").Length + "개 + Resources/LootDatabase");
     }
 
     static void AddGuns(List<E> list, string[] names, float w) { foreach (var n in names) list.Add(new E(W + n + ".asset", w)); }
+
+    // 2026-11-16 권총 정리: 희귀 Five-seveN + 영웅 Deagle 두 자루만 드롭. 나머지 권총(일반 G17·P9, 희귀 RARAN, 영웅 B&J)은 가중치 0
+    //  → 모든 테이블에서 빠짐 (이 목록만 고치면 다시 살릴 수 있음)
+    static readonly HashSet<string> RetiredPistols = new HashSet<string> { "G17", "P9", "RARAN_1130", "BandJ_357" };
+
+    static bool IsRetired(string path) => path.StartsWith(W) && RetiredPistols.Contains(System.IO.Path.GetFileNameWithoutExtension(path));
 
     static LootTable Table(string name, int minRolls, int maxRolls, List<E> entries)
     {
@@ -209,6 +224,7 @@ public static class LootTableBuilder
         t.entries = new List<LootEntry>();
         foreach (var e in entries)
         {
+            if (IsRetired(e.path)) continue; // 드롭 0
             var item = AssetDatabase.LoadAssetAtPath<ItemData>(e.path);
             if (item == null) { Debug.LogWarning("[LootTableBuilder] 아이템 없음: " + e.path); continue; }
             t.entries.Add(new LootEntry { item = item, weight = e.w, minAmount = e.min, maxAmount = e.max });

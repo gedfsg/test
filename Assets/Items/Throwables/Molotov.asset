@@ -1,0 +1,40 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bbbbee7550d3f744ca2cf93abfd90360, type: 3}
+  m_Name: Molotov
+  m_EditorClassIdentifier: Assembly-CSharp::ThrowableData
+  itemName: "\uD654\uC5FC\uBCD1"
+  icon: {fileID: 21300000, guid: ced08ea936ec5184ba46a4ffe4c49a5c, type: 3}
+  itemType: 0
+  rarity: 1
+  worldModel: {fileID: 6752657463465996408, guid: 7aa0dace662ac2b41bbb57a146c839df, type: 3}
+  isStackable: 1
+  maxStackSize: 10
+  throwableType: 1
+  throwablePrefab: {fileID: 4855169964583810933, guid: 8c656a676e509ad49a164fc8153faede, type: 3}
+  radius: 5
+  damage: 30
+  fuseTime: 2.5
+  fireDuration: 8
+  stunDuration: 3
+  flashRadius: 8
+  innerRadius: 3
+  noiseRadius: 40
+  igniteDps: 10
+  igniteDuration: 3
+  rangeColor: {r: 1, g: 0.55, b: 0.1, a: 1}
+  pinSound: {fileID: 0}
+  throwSound: {fileID: 8300000, guid: 5ff363d92a555e3489e90dfa6f3d4d6c, type: 3}
+  explodeSound: {fileID: 0}
+  breakSound: {fileID: 8300000, guid: f74ef492124eb0d4b86efa6264a55977, type: 3}
+  igniteSound: {fileID: 8300000, guid: c52af4a2ff85d3142b451825a8feaf70, type: 3}
+  loopSound: {fileID: 8300000, guid: eae8f84028c74c24cbdb26680e40f752, type: 3}

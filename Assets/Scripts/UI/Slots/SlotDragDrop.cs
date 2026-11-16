@@ -64,8 +64,11 @@ public static class SlotDragDrop
         if (!ok)
         {
             if (AudioManager.Library != null) AudioManager.PlayUI(SoundLibrary.Pick(AudioManager.Library.error), AudioManager.Vol.UI); // 못 넣는 슬롯
-            PickupFeedbackUI.Instance?.ShowWarning(target.Index < WeaponHotbarUI.SlotTypeFilter.WeaponSlotCount && target.Owner == SlotView.SlotOwner.Hotbar
-                ? "1, 2번은 무기 전용" : "3~5번은 소비 아이템 전용");
+            // (이전) "1, 2번은 무기 전용" / "3~5번은 소비 아이템 전용"
+            // 2026-11-16 핫바 재구성: 3번 = "투척물만 장착 가능". 핫바→핫바로 옮길 때 거꾸로 걸린 쪽(원래 칸)일 수도 있어서 대상 칸 기준 문구
+            PickupFeedbackUI.Instance?.ShowWarning(target.Owner == SlotView.SlotOwner.Hotbar
+                ? WeaponHotbarUI.SlotTypeFilter.RejectMessage(target.Index)
+                : WeaponHotbarUI.SlotTypeFilter.RejectMessage(src.Index));
             return;
         }
         Execute(src, target);

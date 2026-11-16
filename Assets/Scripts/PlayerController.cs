@@ -105,7 +105,18 @@ public class PlayerController : MonoBehaviour
         consumableUser.Cancelled += OnConsumableCancelled;
         // 상체 조준 IK (2026-11-16): 척추·가슴·머리가 마우스를 봄
         if (GetComponent<UpperBodyAimIK>() == null) gameObject.AddComponent<UpperBodyAimIK>();
+        // 투척 (2026-11-16): 핫바 3번 수류탄·화염병 - 짧게/길게 클릭, 궤적, 우클릭 거리 전환
+        throwCtrl = GetComponent<ThrowableController>();
+        if (throwCtrl == null) throwCtrl = gameObject.AddComponent<ThrowableController>();
     }
+
+    private ThrowableController throwCtrl;
+
+    /// <summary>투척 궤적 조준 중 (핫바 휠 전환 막음)</summary>
+    public bool IsThrowAiming => throwCtrl != null && throwCtrl.IsAiming;
+
+    /// <summary>핫바에서 투척물(3번 칸)을 들고 있는지</summary>
+    bool HoldingThrowable => WeaponHotbarUI.Instance != null && WeaponHotbarUI.Instance.GetActiveItem() is ThrowableData;
 
     private ConsumableUseController consumableUser;
 
@@ -133,7 +144,13 @@ public class PlayerController : MonoBehaviour
             hotbar?.AddWeapon(rangedWeapon.weaponData, rangedWeapon.GetCurrentAmmo());
 
         EquipWeapon(WeaponMode.Ranged);
-        if (hotbar != null && startingMeleeWeapon != null) hotbar.SelectSlot(0); // 도끼 들고 시작
+        // if (hotbar != null && startingMeleeWeapon != null) hotbar.SelectSlot(0); // (이전) 도끼 = 1번 칸
+        // 2026-11-16 핫바 재구성: 1 주력 총 / 2 권총·보조 / 3 투척 / 4·5 자유 → 도끼는 4번 칸에 지급되고 그걸 들고 시작
+        if (hotbar != null && startingMeleeWeapon != null)
+        {
+            int axeSlot = hotbar.IndexOf(startingMeleeWeapon);
+            hotbar.SelectSlot(axeSlot >= 0 ? axeSlot : 3);
+        }
 
         // 애니메이션 연결: 피격 / 사망 / 재장전
         var health = GetComponent<Health>();
@@ -577,12 +594,14 @@ public class PlayerController : MonoBehaviour
         // 빈 슬롯이면 아무것도 안 함
         if (activeItem == null) { firePressed = false; return; }
 
-        if (activeItem is ThrowableData)
+        if (activeItem is ThrowableData throwable)
         {
-            if (firePressed) ThrowActiveItem();
+            // if (firePressed) ThrowActiveItem();   // (이전) 클릭하면 바로 정면으로 던짐
+            throwCtrl.Tick(throwable, isFireButtonPressed); // 짧게 = 즉시, 길게 = 궤적 조준 후 뗄 때
             firePressed = false;
             return;
         }
+        throwCtrl.Cancel(); // 투척물을 내려놓음 → 궤적·손 모델 정리
 
         if (activeItem is ConsumableData)
         {
@@ -622,6 +641,7 @@ public class PlayerController : MonoBehaviour
 
     // ── 투척 ─────────────────────────────────────
 
+    // (이전) 정면으로 바로 던지기. 2026-11-16부터 ThrowableController가 담당 (호출 안 함, 참고용으로 남김)
     private void ThrowActiveItem()
     {
         var hotbar = WeaponHotbarUI.Instance;
@@ -776,7 +796,8 @@ public class PlayerController : MonoBehaviour
     {
         EnsureAnimRefs();
         bool reloading = Time.time < reloadUntil;
-        bool ikOff = meleeHeld || isDead || reloading || isRolling || Time.time < ikBlockUntil;
+        bool throwableHeld = HoldingThrowable; // 투척물을 쥐고 있으면 총 그립 IK/조준 끔 (총은 숨김)
+        bool ikOff = meleeHeld || isDead || reloading || isRolling || throwableHeld || Time.time < ikBlockUntil;
         if (handIKRig != null) handIKRig.weight = ikOff ? 0f : 1f;
 
         // 상체 레이어: 총 = 항상 켬(권총/소총 자세), 도끼 = 평소 끔(맨손처럼 자연스럽게) + 상체 동작 중에만 켬, 사망 = 끔
@@ -813,13 +834,13 @@ public class PlayerController : MonoBehaviour
             }
         }
         if (weaponHandAttacher == null) weaponHandAttacher = FindAnyObjectByType<WeaponHandAttacher>();
-        if (weaponHandAttacher != null) weaponHandAttacher.aimAtTarget = !(meleeHeld || isDead || reloading || isRolling);
+        if (weaponHandAttacher != null) weaponHandAttacher.aimAtTarget = !(meleeHeld || isDead || reloading || isRolling || throwableHeld);
         // 권총 양손 그립 (가슴 중앙): 권총을 들고 있을 때만. IK가 꺼지는 상황(재장전/전환/사망/구르기)은 Rig weight 0으로 같이 꺼짐
         if (weaponHandAttacher != null)
         {
-            weaponHandAttacher.pistolHeld = !meleeHeld && currentMode == WeaponMode.Ranged && rangedWeapon != null && rangedWeapon.weaponData != null && rangedWeapon.weaponData.type == WeaponType.Pistol;
+            weaponHandAttacher.pistolHeld = !meleeHeld && !throwableHeld && currentMode == WeaponMode.Ranged && rangedWeapon != null && rangedWeapon.weaponData != null && rangedWeapon.weaponData.type == WeaponType.Pistol;
             // 2026-11-12: 모든 총 양손 그립 (권총 가슴 중앙 / AR·샷건 어깨 견착) + 달릴 때 Low Ready
-            bool gunHeld = !meleeHeld && currentMode == WeaponMode.Ranged && rangedWeapon != null && rangedWeapon.weaponData != null;
+            bool gunHeld = !meleeHeld && !throwableHeld && currentMode == WeaponMode.Ranged && rangedWeapon != null && rangedWeapon.weaponData != null;
             weaponHandAttacher.gripWeapon = gunHeld ? rangedWeapon.weaponData : null;
             float planarSpeed = rb != null ? new Vector2(rb.linearVelocity.x, rb.linearVelocity.z).magnitude : 0f;
             weaponHandAttacher.gripLowReady = gunHeld && locomotion != null && locomotion.IsSprinting && planarSpeed > 2f && !isFireButtonPressed;

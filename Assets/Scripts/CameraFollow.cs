@@ -24,5 +24,23 @@ public class CameraFollow : MonoBehaviour
 
         // 항상 플레이어를 바라봄 → 줌/회전해도 캐릭터가 화면 중앙 유지
         transform.LookAt(target.position + Vector3.up * 1f);
+
+        // 화면 흔들림 (2026-11-16, 수류탄 폭발). 설정에서 끄면 안 흔들림
+        if (Time.time < shakeUntil && SettingsManager.ScreenShake)
+        {
+            float k = (shakeUntil - Time.time) / Mathf.Max(0.01f, shakeDuration); // 끝으로 갈수록 약하게
+            transform.position += Random.insideUnitSphere * shakeMagnitude * k;
+        }
+    }
+
+    static float shakeUntil, shakeDuration, shakeMagnitude;
+
+    /// <summary>카메라 흔들기 (초, 세기 m). 겹치면 더 센 쪽</summary>
+    public static void Shake(float duration, float magnitude)
+    {
+        if (Time.time >= shakeUntil) shakeMagnitude = 0f;
+        shakeMagnitude = Mathf.Max(shakeMagnitude, magnitude);
+        shakeDuration = duration;
+        shakeUntil = Mathf.Max(shakeUntil, Time.time + duration);
     }
 }

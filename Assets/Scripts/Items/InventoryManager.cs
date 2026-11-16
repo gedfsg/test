@@ -58,6 +58,15 @@ public class InventoryManager : MonoBehaviour
             return true;
         }
 
+        // 투척물 (2026-11-16): 핫바 3번(투척 칸)이 비었거나 같은 투척물이면 거기로
+        if (itemToAdd is ThrowableData th && WeaponHotbarUI.Instance != null
+            && WeaponHotbarUI.Instance.TryAddThrowable(th, amountToAdd))
+        {
+            Debug.Log($"{itemToAdd.itemName} {amountToAdd}개 획득 → 핫바 3번(투척)");
+            RefreshUI();
+            return true;
+        }
+
         if (itemToAdd.isStackable)
         {
             foreach (InventorySlot slot in inventory)

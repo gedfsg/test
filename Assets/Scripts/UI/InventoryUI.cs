@@ -178,16 +178,21 @@ public class InventoryUI : MonoBehaviour
         var hotbar = WeaponHotbarUI.Instance;
         if (hotbar == null) return;
 
-        int targetSlot = hotbar.GetActiveSlot();
+        // int targetSlot = hotbar.GetActiveSlot(); // (이전) 지금 선택된 칸에 무조건 → 2026-11-16 핫바 재구성 후엔
+        //   선택된 칸이 투척(3번)·소비 칸이면 못 넣는데 인벤토리에서 먼저 빼서 무기가 사라질 수 있었음 → 넣을 수 있는 칸을 먼저 찾음
+        int targetSlot = hotbar.FindTargetSlot(newWeapon);
+        if (targetSlot < 0) { PickupFeedbackUI.Instance?.ShowWarning("핫바에 넣을 칸이 없음"); return; }
 
         InventorySlot invSlot = inventoryManager.GetSlotById(slotId);
         int savedAmmo = invSlot?.currentAmmo ?? -1;
         int insertIndex = inventoryManager.GetSlotIndex(slotId);
 
-        ItemData currentItem = hotbar.GetActiveItem();
+        // ItemData currentItem = hotbar.GetActiveItem(); // (이전)
+        ItemData currentItem = hotbar.GetItem(targetSlot);
         if (currentItem is WeaponData currentWeapon)
         {
-            int currentAmmo = playerController.GetCurrentAmmo();
+            // int currentAmmo = playerController.GetCurrentAmmo(); // (이전) 항상 손에 든 총 기준
+            int currentAmmo = targetSlot == hotbar.GetActiveSlot() ? playerController.GetCurrentAmmo() : hotbar.GetAmmo(targetSlot);
             inventoryManager.InsertItemAt(insertIndex, currentWeapon, 1, currentAmmo);
         }
 
@@ -195,7 +200,8 @@ public class InventoryUI : MonoBehaviour
 
         int finalAmmo = savedAmmo >= 0 ? savedAmmo : newWeapon.maxAmmo;
         hotbar.SetSlotOnly(targetSlot, newWeapon, finalAmmo);
-        playerController.SwapWeaponData(newWeapon, finalAmmo);
+        // playerController.SwapWeaponData(newWeapon, finalAmmo); // (이전) 선택 칸이 아니어도 손에 듦 → 칸과 손이 어긋남
+        hotbar.SelectSlot(targetSlot);
 
         Debug.Log($"[인벤토리] '{newWeapon.itemName}' → 핫바 슬롯 {targetSlot + 1}에 장착! (탄수: {finalAmmo})");
         ToggleInventory();
@@ -210,7 +216,8 @@ public class InventoryUI : MonoBehaviour
         int targetSlot = hotbar.FindTargetSlot(slot.item);
         if (targetSlot < 0)
         {
-            Debug.Log($"[인벤토리] '{slot.item.itemName}' 핫바 등록 불가 (총은 1,2번 / 소비 아이템은 3~5번 빈 칸만)");
+            Debug.Log($"[인벤토리] '{slot.item.itemName}' 핫바 등록 불가 (총 1·2번 / 투척물 3번 / 근접·소비 4·5번 빈 칸만)");
+            PickupFeedbackUI.Instance?.ShowWarning("핫바에 넣을 칸이 없음");
             return; // 인벤토리에서 빼기 전에 막아서 아이템 손실 없음
         }
 
@@ -246,8 +253,12 @@ public class InventoryUI : MonoBehaviour
 
         hotbar.SetSlotOnly(targetSlot, slot.item, finalCount);
 
-        if (slot.item is WeaponData wd2)
-            playerController.SwapWeaponData(wd2, finalCount);
+        // if (slot.item is WeaponData wd2) playerController.SwapWeaponData(wd2, finalCount); // (이전)
+        if (slot.item is WeaponData)
+        {
+            if (targetSlot == hotbar.GetActiveSlot()) playerController.SwapWeaponData((WeaponData)slot.item, finalCount);
+            else hotbar.SelectSlot(targetSlot); // 다른 칸에 넣었으면 그 칸을 선택해서 듦
+        }
 
         Debug.Log($"[인벤토리] '{slot.item.itemName}' 핫바 슬롯 {targetSlot + 1}에 등록! (탄수/개수: {finalCount})");
     }
