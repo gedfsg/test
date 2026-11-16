@@ -78,9 +78,9 @@ public class CameraZoom : MonoBehaviour
     void Update()
     {
         float scrollY = inputActions.Player.Zoom.ReadValue<float>();
-        // 2026-11-16: 휠만 굴리면 핫바 1·2·3 전환(WeaponHotbarUI) → 줌은 Ctrl+휠
+        // 2026-11-17: Ctrl+휠 = 핫바 1·2·3 전환(WeaponHotbarUI) → Ctrl을 누르고 있으면 줌 안 함. 휠만 = 줌 (원래대로)
         var kb = UnityEngine.InputSystem.Keyboard.current;
-        if (kb == null || !kb.ctrlKey.isPressed) scrollY = 0f;
+        if (kb != null && kb.ctrlKey.isPressed) scrollY = 0f;
         if (scrollY != 0f)
         {
             // 위로 스크롤 → 줌인(거리 감소), 아래로 → 줌아웃(거리 증가)

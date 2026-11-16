@@ -8,7 +8,7 @@ using UnityEngine.InputSystem;
 ///  - 슬롯 1 (index 0): 주력 원거리 무기 (소총·샷건·스나이퍼 등) / 슬롯 2 (index 1): 권총·보조 원거리 무기
 ///  - 슬롯 3 (index 2): 투척 무기 전용 (수류탄·화염병). 선택하면 손에 쥐고 클릭으로 던짐 (ThrowableController)
 ///  - 슬롯 4,5 (index 3,4): 자유 — 근접 무기(선택하면 듦, 시작 도끼 = 4번) 또는 소비 아이템(키 누르면 바로 사용)
-///  - 마우스 휠: 1·2·3만 순환 (아래 = 다음 1→2→3→1, 위 = 이전). 4·5는 숫자 키로만. 카메라 줌은 Ctrl+휠로 옮김
+///  - Ctrl+마우스 휠: 1·2·3만 순환 (아래 = 다음 1→2→3→1, 위 = 이전). 4·5는 숫자 키로만. 휠만 굴리면 카메라 줌 (2026-11-17 피드백: 휠 하나에 겹쳐서 무기 교체를 Ctrl+휠로)
 ///  - 타입이 안 맞는 아이템은 거부 (SlotTypeFilter.CanPlace)
 /// UI 시각 요소는 SlotView 프리팹을 사용하며, 이 스크립트는 데이터/로직만 담당한다.
 ///
@@ -87,9 +87,9 @@ public class WeaponHotbarUI : MonoBehaviour
         else if (kb.digit4Key.wasPressedThisFrame) SelectSlot(3);
         else if (kb.digit5Key.wasPressedThisFrame) SelectSlot(4);
 
-        // 마우스 휠 (2026-11-16): 1·2·3만 순환. Ctrl+휠은 카메라 줌(CameraZoom)이라 무시
+        // Ctrl+마우스 휠: 1·2·3만 순환. (2026-11-16엔 휠만 = 교체, Ctrl+휠 = 줌 → 11-17 피드백으로 반대로) 휠만 굴리면 CameraZoom이 줌
         var mouse = Mouse.current;
-        if (mouse != null && !kb.ctrlKey.isPressed)
+        if (mouse != null && kb.ctrlKey.isPressed)
         {
             float wheel = mouse.scroll.ReadValue().y;
             if (wheel != 0f && !(playerController != null && playerController.IsThrowAiming))

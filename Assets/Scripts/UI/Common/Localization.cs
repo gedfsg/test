@@ -127,7 +127,7 @@ public static class Localization
         { "마우스 휠 스크롤", "Mouse Wheel" },
         { "카메라 줌 인·아웃", "Camera Zoom In / Out" },
         { "마우스 휠", "Mouse Wheel" },
-        { "슬롯 1·2·3 전환 (Ctrl+휠: 줌)", "Switch Slots 1·2·3 (Ctrl+Wheel: Zoom)" },
+        { "카메라 줌 (Ctrl+휠: 슬롯 1·2·3 전환)", "Camera Zoom (Ctrl+Wheel: Switch Slots 1·2·3)" },
         { "투척", "Throw" },
         { "투척 무기 전용", "Throwables Only" },
         { "비어 있음", "Empty" },
