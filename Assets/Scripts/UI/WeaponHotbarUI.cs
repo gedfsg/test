@@ -476,9 +476,78 @@ public class WeaponHotbarUI : MonoBehaviour
             slot.RightClicked += _ => DropSlot(capturedIndex);
             slot.Owner = SlotView.SlotOwner.Hotbar; slot.Index = i; // 드래그 앤 드롭용
             slots[i] = slot;
-            if (SlotTypeFilter.IsWeaponSlot(i)) DecorateWeaponSlot(slot, i);
-            else if (SlotTypeFilter.IsThrowSlot(i)) DecorateThrowSlot(slot);
+            // (이전) 1·2번 "무기" 라벨 + 빨강 테두리 / 3번 "투척" 라벨 + 주황 테두리 + 수류탄 자리 표시 + "비어 있음"
+            // if (SlotTypeFilter.IsWeaponSlot(i)) DecorateWeaponSlot(slot, i);
+            // else if (SlotTypeFilter.IsThrowSlot(i)) DecorateThrowSlot(slot);
+            ApplyMinimalStyle(slot, i); // 2026-11-17 핫바 재작업: 모든 칸 같은 모양, 테두리·라벨 없음
         }
+    }
+
+    // ── 2026-11-17 핫바 재작업 ──
+    //  - 5칸 모두 가로로 긴 직사각형 110x70, 배경 반투명 검정(0,0,0,0.55) 둥근 모서리 약 6px
+    //  - 테두리 없음 (기본 Frame·선택 ActiveBar·등급 테두리 전부 안 그림. 등급은 인벤토리·바닥 아이템에서만)
+    //  - 라벨 없음, 숫자 1~5만 좌상단 작게 (흰, 알파 0.6)
+    //  - 선택 칸: 배경을 흰 반투명(1,1,1,0.18)으로 밝게 + 아래 2px 흰 밑줄
+    static readonly Vector2 SlotSize = new Vector2(110f, 70f);
+    static readonly Color SlotBg = new Color(0f, 0f, 0f, 0.55f);
+    static readonly Color SlotBgActive = new Color(1f, 1f, 1f, 0.18f);
+    static readonly Color SlotNumberColor = new Color(1f, 1f, 1f, 0.6f);
+    private readonly UnityEngine.UI.Image[] underlines = new UnityEngine.UI.Image[SLOT_COUNT];
+
+    private void ApplyMinimalStyle(SlotView slot, int i)
+    {
+        var rt = (RectTransform)slot.transform;
+        rt.sizeDelta = SlotSize;
+        var bg = slot.GetComponent<UnityEngine.UI.Image>();
+        if (bg != null) { bg.pixelsPerUnitMultiplier = 2.7f; bg.color = SlotBg; } // RoundedRect 모서리(16px) / 2.7 ≈ 6px
+        var frame = slot.transform.Find("Frame");
+        if (frame != null) frame.gameObject.SetActive(false);
+        var bar = slot.transform.Find("ActiveBar");
+        if (bar != null) bar.gameObject.SetActive(false);
+
+        // 숫자: 좌상단 작게
+        var num = slot.transform.Find("NumberLabel") as RectTransform;
+        if (num != null)
+        {
+            num.anchorMin = num.anchorMax = new Vector2(0f, 1f); num.pivot = new Vector2(0f, 1f);
+            num.anchoredPosition = new Vector2(6f, -3f); num.sizeDelta = new Vector2(20f, 16f);
+            var t = num.GetComponent<TMPro.TextMeshProUGUI>();
+            if (t != null) { t.fontSize = 13f; t.alignment = TMPro.TextAlignmentOptions.TopLeft; t.raycastTarget = false; }
+        }
+        // 아이콘: 직사각형 칸 안에 여백 두고 (가로로 긴 총이 꽉 차게)
+        var icon = slot.transform.Find("Icon") as RectTransform;
+        if (icon != null) { icon.offsetMin = new Vector2(12f, 8f); icon.offsetMax = new Vector2(-12f, -10f); }
+        // 개수(x3): 우하단
+        var count = slot.transform.Find("CountLabel") as RectTransform;
+        if (count != null)
+        {
+            count.anchorMin = count.anchorMax = new Vector2(1f, 0f); count.pivot = new Vector2(1f, 0f);
+            count.anchoredPosition = new Vector2(-6f, 4f);
+        }
+
+        // 선택 밑줄 (아래 2px 흰색)
+        var ul = new GameObject("ActiveUnderline", typeof(RectTransform), typeof(UnityEngine.UI.Image));
+        var ur = (RectTransform)ul.transform;
+        ur.SetParent(slot.transform, false);
+        ur.anchorMin = new Vector2(0f, 0f); ur.anchorMax = new Vector2(1f, 0f); ur.pivot = new Vector2(0.5f, 0f);
+        ur.offsetMin = new Vector2(6f, 0f); ur.offsetMax = new Vector2(-6f, 2f);
+        underlines[i] = ul.GetComponent<UnityEngine.UI.Image>();
+        underlines[i].color = Color.white;
+        underlines[i].raycastTarget = false;
+        underlines[i].enabled = false;
+    }
+
+    // SlotView.SetItem/SetEmpty/SetNumber가 테마 색으로 덮어쓰므로 매번 마지막에 다시 칠함
+    private void RestyleSlot(int i, bool isActive)
+    {
+        var slot = slots[i];
+        var bg = slot.GetComponent<UnityEngine.UI.Image>();
+        if (bg != null) bg.color = isActive ? SlotBgActive : SlotBg;
+        if (underlines[i] != null) underlines[i].enabled = isActive;
+        var bar = slot.transform.Find("ActiveBar");
+        if (bar != null && bar.gameObject.activeSelf) bar.gameObject.SetActive(false); // SetActiveBar가 다시 켬
+        var num = slot.transform.Find("NumberLabel")?.GetComponent<TMPro.TextMeshProUGUI>();
+        if (num != null) num.color = SlotNumberColor;
     }
 
     // ── 3번 투척 칸 (2026-11-16): 주황 테두리 + "투척" 라벨 + 빈 칸 흐린 투척물 아이콘 + 아래 "수류탄 x3" / "비어 있음" ──
@@ -584,7 +653,8 @@ public class WeaponHotbarUI : MonoBehaviour
             slots[i].SetEmpty(theme, isActive);
 
         slots[i].SetNumber(i + 1, isActive, theme);
-        UpdateRarityFrame(i);
+        // UpdateRarityFrame(i); // (이전 2026-11-12~16) 핫바 안 등급 테두리 → 2026-11-17 핫바에서는 안 그림
+        RestyleSlot(i, isActive);
 
         if (SlotTypeFilter.IsThrowSlot(i))
         {

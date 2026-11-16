@@ -254,27 +254,33 @@ public static class SpecialWeaponBuilder
     }
 
     // ── 발사 섬광 재질 (2026-11-17): Resources/FX/MuzzleFlash.mat (가산 합성 파티클 셰이더) + 코드로 그린 섬광 텍스처 ──
-    //  텍스처: 가운데 밝은 원 + 4갈래 빛줄기 (흰색, 알파 = 밝기). 색은 MuzzleLight가 _TintColor로 (#FFE090 / 무기 색)
+    //  (이전 1차) 흰색 원 + 4갈래 줄기, 색은 _TintColor로 → 약하고 뭉개짐
+    //  (2차) 색이 들어간 별 모양: 중앙 흰(FFFFFF) → 노랑(FFE060) → 주황(FF8020), 긴 4갈래 + 짧은 대각 4갈래. 실행할 때마다 다시 그림
     const string FlashTexPath = "Assets/Resources/FX/muzzle_flash.png";
     const string FlashMatPath = "Assets/Resources/FX/MuzzleFlash.mat";
 
     public static Material EnsureMuzzleFlashMaterial()
     {
         Directory.CreateDirectory("Assets/Resources/FX");
-        if (!File.Exists(FlashTexPath))
         {
-            const int N = 128;
+            const int N = 256;
             var tex = new Texture2D(N, N, TextureFormat.RGBA32, false);
+            Color white = Color.white, yellow = new Color32(0xFF, 0xE0, 0x60, 0xFF), orange = new Color32(0xFF, 0x80, 0x20, 0xFF);
             for (int y = 0; y < N; y++)
                 for (int x = 0; x < N; x++)
                 {
                     float u = (x + 0.5f) / N * 2f - 1f, v = (y + 0.5f) / N * 2f - 1f;
                     float r = Mathf.Sqrt(u * u + v * v);
-                    float core = Mathf.Clamp01(1f - r / 0.45f); core *= core;                       // 가운데 원
                     float ang = Mathf.Atan2(v, u);
-                    float rays = Mathf.Pow(Mathf.Abs(Mathf.Cos(ang * 2f)), 24f) * Mathf.Clamp01(1f - r); // 4갈래 빛줄기
-                    float a = Mathf.Clamp01(core + rays * 0.8f);
-                    tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+                    float core = Mathf.Clamp01(1f - r / 0.28f);                                         // 가운데 밝은 원
+                    float glow = Mathf.Clamp01(1f - r / 0.55f) * 0.55f;                                 // 주변 번짐
+                    float longRays = Mathf.Pow(Mathf.Abs(Mathf.Cos(ang * 2f)), 40f) * Mathf.Clamp01(1f - r);          // 십자 (끝까지)
+                    float shortRays = Mathf.Pow(Mathf.Abs(Mathf.Sin(ang * 2f)), 60f) * Mathf.Clamp01(1f - r / 0.6f) * 0.8f; // 대각선 (짧게)
+                    float a = Mathf.Clamp01(core + glow + longRays + shortRays);
+                    // 색: 중심 흰 → 노랑 → 주황
+                    Color c = r < 0.18f ? white : r < 0.45f ? Color.Lerp(white, yellow, (r - 0.18f) / 0.27f) : Color.Lerp(yellow, orange, Mathf.Clamp01((r - 0.45f) / 0.5f));
+                    c.a = a;
+                    tex.SetPixel(x, y, c);
                 }
             tex.Apply();
             File.WriteAllBytes(FlashTexPath, tex.EncodeToPNG());
@@ -293,7 +299,7 @@ public static class SpecialWeaponBuilder
             AssetDatabase.CreateAsset(mat, FlashMatPath);
         }
         mat.mainTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(FlashTexPath);
-        if (mat.HasProperty("_TintColor")) mat.SetColor("_TintColor", new Color32(0xFF, 0xE0, 0x90, 0xFF));
+        if (mat.HasProperty("_TintColor")) mat.SetColor("_TintColor", new Color(0.5f, 0.5f, 0.5f, 0.5f)); // 텍스처 색 그대로 (파티클 가산은 틴트 ×2)
         EditorUtility.SetDirty(mat);
         AssetDatabase.SaveAssets();
         return mat;
@@ -328,7 +334,7 @@ public static class SpecialWeaponBuilder
                 go.transform.localPosition = new Vector3(0f, 0f, 0.05f); // 총구 바로 앞
                 var li = go.AddComponent<Light>();
                 // li.type = LightType.Point; li.color = Yellow; li.intensity = 0.8f; li.range = 2.5f; // (이전) 바닥에 원이 생김
-                li.type = LightType.Spot; li.color = Yellow; li.intensity = 1.75f; li.range = 6f; li.spotAngle = 25f; // 2026-11-17 조준등
+                li.type = LightType.Spot; li.color = Yellow; li.intensity = 2f; li.range = 6f; li.spotAngle = 28f; // 2026-11-17 조준등 (2차: 28°, 2)
                 li.shadows = LightShadows.None; li.enabled = false; // 손에 들 때 Weapon이 켬
                 go.AddComponent<MuzzleLight>();
                 PrefabUtility.SaveAsPrefabAsset(root, path);
