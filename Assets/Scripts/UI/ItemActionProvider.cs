@@ -36,11 +36,20 @@ public static class ItemActionProvider
                 break;
         }
 
+        // 상점 창이 열려 있을 때만 맨 위에 '팔기' (상인 앞에서만 팔 수 있음)
+        if (ShopUI.IsOpen && ShopPricing.SellPrice(slot.item) > 0)
+        {
+            int price = ShopPricing.SellPrice(slot.item);
+            if (slot.amount > 1)
+                actions.Insert(0, new ItemAction($"전부 팔기 (+${price * slot.amount})", ActionType.SellAll));
+            actions.Insert(0, new ItemAction($"팔기 (+${price})", ActionType.Sell));
+        }
+
         return actions;
     }
 }
 
-public enum ActionType { Use, Equip, EquipToHotbar, Drop, Craft }
+public enum ActionType { Use, Equip, EquipToHotbar, Drop, Craft, Sell, SellAll }
 
 public class ItemAction
 {

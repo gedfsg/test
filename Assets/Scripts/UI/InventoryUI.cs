@@ -131,6 +131,12 @@ public class InventoryUI : MonoBehaviour
             case ActionType.Craft:
                 Craft(slot);
                 break;
+            case ActionType.Sell:       // 상점 창이 열려 있을 때만 메뉴에 나옴 (ShopUI)
+                ShopUI.SellFromInventory(slot, 1);
+                break;
+            case ActionType.SellAll:
+                ShopUI.SellFromInventory(slot, slot.amount);
+                break;
         }
 
         UpdateUI();

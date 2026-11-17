@@ -22,6 +22,8 @@ using UnityEngine.InputSystem;
 /// 등장 조건:
 ///   상자 열기 : 상자를 열면 소리를 듣고 무리가 몰려온다 (등급이 높을수록 잘 나온다 —— 군용 상자를 지키는 사냥꾼).
 ///   밤        : 밤마다 일정에 따라 투입 (spawnAtNight를 켰을 때).
+///   평소      : 떠돌이 무리 —— roamingCheckInterval초마다 낮은 확률로 (낮 roamingChanceDay, 밤 roamingChanceNight).
+///               상자 무리와 쿨타임(crateCooldown)을 같이 쓴다 → 연달아 나오지 않음
 ///
 /// 설치 (씬을 안 건드리는 방법 —— main 씬은 팀원도 자주 고쳐서 머지 때 우리 변경이 날아간다):
 ///   설정을 마친 이 컴포넌트를 프리팹으로 만들어 Assets/Resources/HunterPackSpawner.prefab 으로 두면,
@@ -52,8 +54,8 @@ public class HunterPackSpawner : MonoBehaviour
     public GameObject[] hunterVariants;
 
     [Header("무리 구성 — 기본값 = 학습 조건")]
-    [Tooltip("한 무리의 마리 수. 학습은 5마리로 했다 (3~6 정도까지는 무난)")]
-    public int packSize = 5;
+    [Tooltip("한 무리의 마리 수. 학습은 5마리로 했다. 조율기가 마리 수에 맞춰 둘러쌀 자리를 나누므로 8마리까지 쓴다")]
+    public int packSize = 8;
     [Tooltip("사냥꾼 이동 속도(m/s). 학습 때 3.5. 0이면 프리팹 프로필 속도를 그대로 쓴다.\n" +
              "플레이어 걷기 속도(5m/s)가 학습 때 더미보다 빨라서, 너무 쉽게 느껴지면 4.0~4.5로 올려볼 것.")]
     public float moveSpeed = 3.5f;
@@ -90,6 +92,19 @@ public class HunterPackSpawner : MonoBehaviour
     [Tooltip("이 일차부터 상자 무리가 나온다 (1 = 첫날부터)")]
     [Min(1)] public int crateMinDay = 1;
     public string crateWarningMessage = "상자 소리에 사냥꾼 무리가 몰려온다";
+
+    [Header("등장 조건: 떠돌이 무리 (평소)")]
+    [Tooltip("켜면 상자를 안 열어도 가끔 무리가 나타난다")]
+    public bool roamingSpawn = true;
+    [Tooltip("이 간격(초)마다 한 번씩 확률을 굴린다")]
+    public float roamingCheckInterval = 60f;
+    [Tooltip("낮·노을에 한 번 굴릴 때 나올 확률 (기본 4% → 하루에 0.2무리쯤)")]
+    [Range(0f, 1f)] public float roamingChanceDay = 0.04f;
+    [Tooltip("밤에 한 번 굴릴 때 나올 확률 (밤이 더 위험하게)")]
+    [Range(0f, 1f)] public float roamingChanceNight = 0.10f;
+    [Tooltip("이 일차부터 떠돌이 무리가 나온다 (첫날은 숨 돌리게)")]
+    [Min(1)] public int roamingMinDay = 2;
+    public string roamingWarningMessage = "어디선가 사냥꾼 무리의 울음소리가 들린다";
 
     [Header("등장 일정 (밤)")]
     [Tooltip("켜면 밤마다 아래 일정대로도 무리가 나온다 (상자 무리와 별개)")]
@@ -199,6 +214,7 @@ public class HunterPackSpawner : MonoBehaviour
     private DayNightCycle.Phase lastPhase = DayNightCycle.Phase.Day;
     private int   spawnedThisNight;
     private float nightTimer;
+    private float roamingTimer;
     private Coroutine warningRoutine;
     private float     crateReadyAt;
     private bool      crateSpawnPending;
@@ -272,9 +288,6 @@ public class HunterPackSpawner : MonoBehaviour
     void OnEnable()
     {
         LootCrate.AnyOpened += OnCrateOpened;
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-        ZombieShowcase.EnsureExists();   // 촬영 모드도 같이 (게임 씬 구성이 달라도 확실히 생기게)
-#endif
     }
     void OnDisable() { LootCrate.AnyOpened -= OnCrateOpened; }
 
@@ -339,6 +352,8 @@ public class HunterPackSpawner : MonoBehaviour
             lastPhase = phase;
         }
 
+        UpdateRoaming(cycle, phase);
+
         if (!spawnAtNight || phase != DayNightCycle.Phase.Night) return;
         if (spawnedThisNight >= PacksTonight(cycle.CurrentDay)) return;
 
@@ -353,6 +368,32 @@ public class HunterPackSpawner : MonoBehaviour
 
         if (SpawnPack()) spawnedThisNight++;
         nightTimer = packInterval;
+    }
+
+    /// <summary>떠돌이 무리: 일정 간격마다 낮은 확률로 (상자 무리와 쿨타임 공유)</summary>
+    private void UpdateRoaming(DayNightCycle cycle, DayNightCycle.Phase phase)
+    {
+        if (!roamingSpawn) return;
+        roamingTimer -= Time.deltaTime;
+        if (roamingTimer > 0f) return;
+        roamingTimer = Mathf.Max(5f, roamingCheckInterval);
+
+        if (cycle.CurrentDay < roamingMinDay) return;
+        if (phase == DayNightCycle.Phase.Dawn) return;          // 새벽엔 물러가는 시간
+        if (MenuUI.CutsceneActive || crateSpawnPending) return;
+        if (Time.time < crateReadyAt) return;                   // 방금 무리가 나왔으면 쉼
+        if (ActivePacks() >= maxActivePacks) return;
+
+        float chance = phase == DayNightCycle.Phase.Night ? roamingChanceNight : roamingChanceDay;
+        if (Random.value >= chance) return;
+
+        nextWarning = roamingWarningMessage;
+        if (SpawnPack())
+        {
+            crateReadyAt = Time.time + crateCooldown;
+            if (debugLog) Debug.Log($"[사냥꾼] 떠돌이 무리 등장 ({phase}, 확률 {chance:P0})");
+        }
+        nextWarning = null;
     }
 
     // ─────────────────────────────────────────────
