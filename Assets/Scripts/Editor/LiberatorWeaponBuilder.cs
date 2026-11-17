@@ -200,7 +200,10 @@ public static class LiberatorWeaponBuilder
     static string Safe(string s) => s.Replace("&", "and").Replace(".", "").Replace(" ", "_").Replace("/", "_");
 
     // ── 아이콘 (옆에서 본 정사영, 투명 배경, 총구가 오른쪽) ──
-    static Sprite BuildIcon(GameObject prefab, Entry e)
+    static Sprite BuildIcon(GameObject prefab, Entry e) => RenderIcon(prefab, $"{IconDir}/icon_{Safe(e.display)}.png");
+
+    /// <summary>무기 프리팹 → 옆모습 아이콘 PNG(투명 배경) + Sprite 임포트. SpecialWeaponBuilder도 같이 씀 (2026-11-16 분리)</summary>
+    internal static Sprite RenderIcon(GameObject prefab, string path)
     {
         const int W = 256, H = 128;
         var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
@@ -228,7 +231,7 @@ public static class LiberatorWeaponBuilder
         var px = tex.GetPixels32();
         for (int i = 0; i < px.Length; i++) if (px[i].a > 0) px[i].a = 255; // 불투명 셰이더가 알파를 덜 쓰는 경우 보정
         tex.SetPixels32(px); tex.Apply();
-        string path = $"{IconDir}/icon_{Safe(e.display)}.png";
+        // string path = $"{IconDir}/icon_{Safe(e.display)}.png"; // (이전) 경로를 여기서 만듦 → 이제 인자로 받음
         File.WriteAllBytes(path, tex.EncodeToPNG());
         Object.DestroyImmediate(tex); rt.Release(); Object.DestroyImmediate(rt);
         Object.DestroyImmediate(camGo); Object.DestroyImmediate(lightGo); Object.DestroyImmediate(go);
@@ -304,7 +307,31 @@ public static class LiberatorWeaponBuilder
                 d.rigidGrip = true;
                 break;
         }
+        PistolOverride(d); // 2026-11-16 권총 정리 (Five-seveN / Deagle만 남김)
         if (isNew) AssetDatabase.CreateAsset(d, path); else EditorUtility.SetDirty(d);
         return d;
+    }
+
+    // ── 권총 밸런스 (2026-11-16): 드롭되는 권총은 희귀 1 + 영웅 1자루만 (나머지는 LootTableBuilder.RetiredPistols로 드롭 0) ──
+    //  희귀 Five-seveN: 데미지 30, 탄창 12, 재장전 1.8초 / 영웅 Deagle: 데미지 45, 탄창 15, 재장전 1.5초
+    static void PistolOverride(WeaponData d)
+    {
+        if (d == null) return;
+        if (d.itemName == "Five-seveN") { d.damage = 30f; d.maxAmmo = 12; d.reloadTime = 1.8f; }
+        else if (d.itemName == "Deagle") { d.damage = 45f; d.maxAmmo = 15; d.reloadTime = 1.5f; }
+    }
+
+    /// <summary>프리팹을 다시 만들지 않고 권총 2자루 스탯만 적용 (Build Loot Tables가 같이 부름)</summary>
+    [MenuItem("Tools/Weapons/Apply Pistol Balance")]
+    public static void ApplyPistolBalance()
+    {
+        foreach (var n in new[] { "Five-seveN", "Deagle" })
+        {
+            var d = AssetDatabase.LoadAssetAtPath<WeaponData>($"{DataDir}/{n}.asset");
+            if (d == null) { Debug.LogWarning("[권총 밸런스] 없음: " + n); continue; }
+            PistolOverride(d);
+            EditorUtility.SetDirty(d);
+        }
+        AssetDatabase.SaveAssets();
     }
 }

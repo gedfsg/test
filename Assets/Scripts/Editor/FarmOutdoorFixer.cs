@@ -34,6 +34,7 @@ public static class FarmOutdoorFixer
         var log = new System.Text.StringBuilder();
         foreach (var go in Object.FindObjectsByType<GameObject>(FindObjectsInactive.Include, FindObjectsSortMode.None))
         {
+            if (go == null) continue; // 다시 실행할 때: 앞에서 지운 옛 FenceBlockers 자식이 목록에 남아 있음 (2026-11-16)
             if (!IsFarmName(go.name)) continue;
             // 농장 루트만 (자식 메시 이름 Farm_1 등은 루트가 처리)
             if (go.transform.parent != null && IsFarmName(go.transform.parent.name)) continue;
@@ -83,8 +84,10 @@ public static class FarmOutdoorFixer
         new Vector4(108.6f, -332.7f, 110.6f, -332.7f),   // 남쪽 (출입구 서쪽 기둥)
         new Vector4(127.5f, -332.7f, 164.9f, -332.7f),   // 남쪽 (출입구 동쪽 ~ 남동 모서리)
         new Vector4(164.4f, -332.9f, 164.4f, -283.9f),   // 동쪽
-        new Vector4(108.6f, -284.2f, 164.9f, -284.2f),   // 북쪽
-        new Vector4(108.8f, -332.9f, 108.8f, -283.9f),   // 서쪽
+        // new Vector4(108.6f, -284.2f, 164.9f, -284.2f),   // (이전) 북쪽 - 북서쪽 탑(돌 기단 + 나무 틀, x 108~127.6) 밑까지 막아서
+        // new Vector4(108.8f, -332.9f, 108.8f, -283.9f),   // (이전) 서쪽   틀 기둥 사이로 못 지나갔음 (2026-11-16 "풍차 밑 안 보이는 벽")
+        new Vector4(127.6f, -284.2f, 164.9f, -284.2f),   // 북쪽: 탑 동쪽 끝(x 127.6)부터 - 탑 구간은 탑 자체가 경계
+        new Vector4(108.8f, -332.9f, 108.8f, -306.0f),   // 서쪽: 탑 남쪽 끝(z -306)까지
     };
 
     /// <summary>농장 울타리 선에 투명 벽 생성 (다시 실행하면 지우고 새로 만듦). 만든 개수 반환</summary>

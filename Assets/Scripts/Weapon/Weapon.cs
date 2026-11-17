@@ -21,6 +21,11 @@ public class Weapon : MonoBehaviour
     public float muzzleFlashDuration = 0.05f;
     public GameObject muzzleFlashPrefab;
 
+    [Header("총구 불빛 (2026-11-16) - 손에 든 무기 모델의 MuzzleLight. 비워두면 WeaponHandAttacher의 현재 모델에서 자동으로 찾음")]
+    public MuzzleLight muzzleLight;
+    private WeaponHandAttacher handAttacher;
+    private Transform lightVisual; // muzzleLight를 찾은 무기 모델 (모델이 바뀌면 다시 찾음)
+
     [Header("UI Events")]
     public UnityEvent<float> onReloadStart;
     public UnityEvent onReloadComplete;
@@ -28,6 +33,10 @@ public class Weapon : MonoBehaviour
     private int currentAmmo;
     private float lastFireTime;
     private bool isReloading = false;
+
+    // 미니건 예열 (2026-11-16): 방아쇠를 누른 채 spinUpTime이 지나야 발사
+    private float spinStartTime = -1f;
+    private float lastTriggerTime = -99f;
 
 
     void Start()
@@ -48,6 +57,14 @@ public class Weapon : MonoBehaviour
 
         bool auto = (weaponData != null) && weaponData.autoFire;
         if (!auto) return;
+
+        // 미니건 예열: 매 프레임 불리는 TryFire가 0.15초 넘게 끊기면 방아쇠를 뗀 것 → 예열 다시
+        if (weaponData.spinUpTime > 0f)
+        {
+            if (Time.time - lastTriggerTime > 0.15f) spinStartTime = Time.time;
+            lastTriggerTime = Time.time;
+            if (Time.time < spinStartTime + weaponData.spinUpTime) return;
+        }
 
         float currentFireRate = (weaponData != null) ? weaponData.attackRate : 0.2f;
         if (Time.time >= lastFireTime + currentFireRate)
@@ -85,6 +102,9 @@ public class Weapon : MonoBehaviour
 
         if (muzzleFlashLight != null)
             StartCoroutine(MuzzleFlash());
+
+        // 총구 불빛 번쩍 (0.1초간 밝기 ×3, 범위 ×1.5)
+        ResolveMuzzleLight()?.Flash();
 
         if (muzzleFlashPrefab != null)
         {
@@ -139,6 +159,19 @@ public class Weapon : MonoBehaviour
                 bullet.speed = weaponData.bulletSpeed;
                 bullet.effectiveRange = weaponData.effectiveRange;
                 bullet.penetrating = (weaponData.type == WeaponType.Sniper) && weaponData.penetrating;
+                // 2026-11-16: 관통 횟수 + 특수 탄 (RPG 폭발 / 화염 점화) + 궤적 색
+                bullet.penetrationCount = weaponData.penetrationCount;
+                bullet.splashDamage = weaponData.splashDamage;
+                bullet.splashRadius = weaponData.splashRadius;
+                bullet.knockback = weaponData.knockback;
+                bullet.burnDps = weaponData.burnDps;
+                bullet.burnDuration = weaponData.burnDuration;
+                switch (weaponData.specialKind)
+                {
+                    case SpecialWeaponKind.Flamethrower: bullet.trailColor = new Color(1f, 0.4f, 0.05f); bullet.trailWidth = 0.35f; break;
+                    case SpecialWeaponKind.RPG: bullet.trailColor = new Color(1f, 0.55f, 0.2f); bullet.trailWidth = 0.12f; break;
+                    case SpecialWeaponKind.Laser: bullet.trailColor = new Color(0f, 0.93f, 1f); bullet.trailWidth = 0.08f; break;
+                }
             }
         }
     }
@@ -173,6 +206,45 @@ public class Weapon : MonoBehaviour
         muzzleFlashLight.enabled = true;
         yield return new WaitForSeconds(muzzleFlashDuration);
         muzzleFlashLight.enabled = false;
+    }
+
+    // ── 총구 불빛 (2026-11-16) ──
+    // 손에 든 무기 모델이 바뀌면(핫바 전환) 새 모델의 MuzzleLight를 찾아 켜고, 이전 것은 끔
+    void Update()
+    {
+        if (shooterTag == "Player") ResolveMuzzleLight();
+    }
+
+    void OnDisable()
+    {
+        // 근접 무기로 바꾸면 이 오브젝트가 꺼짐 → 불빛도 끔
+        if (muzzleLight != null) muzzleLight.Deactivate();
+        muzzleLight = null; lightVisual = null;
+    }
+
+    MuzzleLight ResolveMuzzleLight()
+    {
+        if (handAttacher == null) handAttacher = FindAnyObjectByType<WeaponHandAttacher>();
+        Transform visual = handAttacher != null ? handAttacher.CurrentVisual : null;
+        bool showing = visual != null && visual.gameObject.activeInHierarchy;
+        if (visual != lightVisual || (muzzleLight != null && !showing))
+        {
+            if (muzzleLight != null) muzzleLight.Deactivate();
+            muzzleLight = null;
+            lightVisual = visual;
+            if (showing)
+            {
+                muzzleLight = MuzzleLight.FindIn(visual);
+                if (muzzleLight != null) muzzleLight.Activate(weaponData);
+            }
+        }
+        else if (muzzleLight == null && showing)
+        {
+            // 구르기 동안 숨겼다가 다시 보이게 된 경우
+            muzzleLight = MuzzleLight.FindIn(visual);
+            if (muzzleLight != null) muzzleLight.Activate(weaponData);
+        }
+        return muzzleLight;
     }
 
     public IEnumerator Reload()
@@ -234,5 +306,7 @@ public class Weapon : MonoBehaviour
 
         weaponData = newData;
         currentAmmo = (savedAmmo >= 0) ? savedAmmo : newData.maxAmmo;
+        spinStartTime = -1f; // 미니건 예열 초기화
+        lightVisual = null;  // 다음 Update에서 새 모델의 총구 불빛 + 새 색으로 다시 켬
     }
 }

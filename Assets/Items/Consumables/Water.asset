@@ -29,3 +29,5 @@ MonoBehaviour:
   buffDuration: 0
   speedMultiplier: 1
   attackRateMultiplier: 1
+  useTime: 1.5
+  useSound: {fileID: 8300000, guid: ff439fdd8d6449848898c4ded12b9649, type: 3}

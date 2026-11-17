@@ -38,6 +38,10 @@ public class PlayerController : MonoBehaviour
     public Transform axeBackPoint;
 
     public bool IsRolling => isRolling;
+    /// <summary>사망 상태 (UpperBodyAimIK가 조준 IK를 끌 때)</summary>
+    public bool IsDead => isDead;
+    /// <summary>도끼 휘두르는 중 (내려찍기 몸통 비틀기 = 공격 동작이라 상체 조준 IK를 끔)</summary>
+    public bool IsMeleeSwinging => meleeHeld && Time.time < meleeSwingUntil;
     private bool isRolling;
     private float rollEndTime = -99f;
     private Vector3 rollVelocity;
@@ -93,7 +97,28 @@ public class PlayerController : MonoBehaviour
     {
         inputActions = new PlayerInputActions();
         locomotion = GetComponent<Locomotion>();
+        // 낙하 복구 (2026-11-12): 맵 아래/강바닥에 빠지면 마지막 안전 지점으로
+        if (GetComponent<FallSafetyNet>() == null) gameObject.AddComponent<FallSafetyNet>();
+        // 회복템 사용 딜레이 (2026-11-16): 진행 바 + 맞으면 취소
+        consumableUser = GetComponent<ConsumableUseController>();
+        if (consumableUser == null) consumableUser = gameObject.AddComponent<ConsumableUseController>();
+        consumableUser.Cancelled += OnConsumableCancelled;
+        // 상체 조준 IK (2026-11-16): 척추·가슴·머리가 마우스를 봄
+        if (GetComponent<UpperBodyAimIK>() == null) gameObject.AddComponent<UpperBodyAimIK>();
+        // 투척 (2026-11-16): 핫바 3번 수류탄·화염병 - 짧게/길게 클릭, 궤적, 우클릭 거리 전환
+        throwCtrl = GetComponent<ThrowableController>();
+        if (throwCtrl == null) throwCtrl = gameObject.AddComponent<ThrowableController>();
     }
+
+    private ThrowableController throwCtrl;
+
+    /// <summary>투척 궤적 조준 중 (핫바 휠 전환 막음)</summary>
+    public bool IsThrowAiming => throwCtrl != null && throwCtrl.IsAiming;
+
+    /// <summary>핫바에서 투척물(3번 칸)을 들고 있는지</summary>
+    bool HoldingThrowable => WeaponHotbarUI.Instance != null && WeaponHotbarUI.Instance.GetActiveItem() is ThrowableData;
+
+    private ConsumableUseController consumableUser;
 
     void Start()
     {
@@ -119,7 +144,13 @@ public class PlayerController : MonoBehaviour
             hotbar?.AddWeapon(rangedWeapon.weaponData, rangedWeapon.GetCurrentAmmo());
 
         EquipWeapon(WeaponMode.Ranged);
-        if (hotbar != null && startingMeleeWeapon != null) hotbar.SelectSlot(0); // 도끼 들고 시작
+        // if (hotbar != null && startingMeleeWeapon != null) hotbar.SelectSlot(0); // (이전) 도끼 = 1번 칸
+        // 2026-11-16 핫바 재구성: 1 주력 총 / 2 권총·보조 / 3 투척 / 4·5 자유 → 도끼는 4번 칸에 지급되고 그걸 들고 시작
+        if (hotbar != null && startingMeleeWeapon != null)
+        {
+            int axeSlot = hotbar.IndexOf(startingMeleeWeapon);
+            hotbar.SelectSlot(axeSlot >= 0 ? axeSlot : 3);
+        }
 
         // 애니메이션 연결: 피격 / 사망 / 재장전
         var health = GetComponent<Health>();
@@ -563,12 +594,14 @@ public class PlayerController : MonoBehaviour
         // 빈 슬롯이면 아무것도 안 함
         if (activeItem == null) { firePressed = false; return; }
 
-        if (activeItem is ThrowableData)
+        if (activeItem is ThrowableData throwable)
         {
-            if (firePressed) ThrowActiveItem();
+            // if (firePressed) ThrowActiveItem();   // (이전) 클릭하면 바로 정면으로 던짐
+            throwCtrl.Tick(throwable, isFireButtonPressed); // 짧게 = 즉시, 길게 = 궤적 조준 후 뗄 때
             firePressed = false;
             return;
         }
+        throwCtrl.Cancel(); // 투척물을 내려놓음 → 궤적·손 모델 정리
 
         if (activeItem is ConsumableData)
         {
@@ -576,6 +609,9 @@ public class PlayerController : MonoBehaviour
             firePressed = false;
             return;
         }
+
+        // 회복템 사용 중엔 공격 불가 (이동은 됨) - 2026-11-16
+        if (consumableUser != null && consumableUser.IsUsing) { firePressed = false; return; }
 
         // 일반 무기
         if (currentMode == WeaponMode.Ranged && rangedWeapon != null)
@@ -605,6 +641,7 @@ public class PlayerController : MonoBehaviour
 
     // ── 투척 ─────────────────────────────────────
 
+    // (이전) 정면으로 바로 던지기. 2026-11-16부터 ThrowableController가 담당 (호출 안 함, 참고용으로 남김)
     private void ThrowActiveItem()
     {
         var hotbar = WeaponHotbarUI.Instance;
@@ -637,18 +674,45 @@ public class PlayerController : MonoBehaviour
         ConsumableData consumable = hotbar.GetActiveItem() as ConsumableData;
         if (consumable == null) return;
 
-        UseConsumable(consumable);
-
-        hotbar.ConsumeItem(hotbar.GetActiveSlot());
+        // UseConsumable(consumable);                 // (이전) 즉시 사용
+        // hotbar.ConsumeItem(hotbar.GetActiveSlot());
+        int slot = hotbar.GetActiveSlot();
+        BeginConsumable(consumable, () => hotbar.ConsumeItem(slot, consumable));
     }
+
+    /// <summary>
+    /// 회복템 사용 시작 (2026-11-16): useTime 동안 진행 바 → 끝까지 버티면 효과 적용 + consumeOne(개수 차감).
+    /// 맞으면 취소(아이템 그대로). 핫바·인벤토리 모두 이걸 부름. 시작했으면 true
+    /// </summary>
+    public bool BeginConsumable(ConsumableData consumable, System.Action consumeOne)
+    {
+        if (consumable == null || isDead) return false;
+        if (consumableUser == null) consumableUser = gameObject.AddComponent<ConsumableUseController>();
+        bool started = consumableUser.Begin(consumable, () => { UseConsumable(consumable); consumeOne?.Invoke(); });
+        if (started && consumable.useTime > 0f)
+        {
+            // 사용 동작은 시작할 때 (마시기, 상체만 → 걸으면서 가능). 그동안 왼손 IK 끔
+            if (EnsureAnimRefs()) animator.SetTrigger(UseItemHash);
+            ikBlockUntil = Time.time + consumable.useTime;
+            UpperAction(consumable.useTime);
+        }
+        return started;
+    }
+
+    // 맞아서 취소 → 왼손 IK 바로 복구 (상체는 피격 동작이 이어받음)
+    void OnConsumableCancelled() => ikBlockUntil = Time.time;
 
     /// <summary>소비 아이템 효과 적용 (핫바 3~5 키에서도 호출). 개수 차감은 호출하는 쪽에서</summary>
     public void UseConsumable(ConsumableData consumable)
     {
         // 아이템 사용 동작 (마시기, 상체만 → 걸으면서 가능) - 그동안 왼손 IK 끔
-        if (EnsureAnimRefs()) animator.SetTrigger(UseItemHash);
-        ikBlockUntil = Time.time + 3.0f;
-        UpperAction(3.0f);
+        // 2026-11-16: 사용 시간이 있는 아이템은 BeginConsumable이 시작할 때 동작을 틀어서, 여기선 즉시 사용(useTime 0)일 때만
+        if (consumable.useTime <= 0f)
+        {
+            if (EnsureAnimRefs()) animator.SetTrigger(UseItemHash);
+            ikBlockUntil = Time.time + 3.0f;
+            UpperAction(3.0f);
+        }
 
         PlayerBuffManager buffMgr = GetComponent<PlayerBuffManager>();
         // 씬 플레이어에 PlayerBuffManager가 안 붙어 있으면 수분/포만감/지속 회복이 전부 무시됐음 → 없으면 붙임
@@ -732,7 +796,8 @@ public class PlayerController : MonoBehaviour
     {
         EnsureAnimRefs();
         bool reloading = Time.time < reloadUntil;
-        bool ikOff = meleeHeld || isDead || reloading || isRolling || Time.time < ikBlockUntil;
+        bool throwableHeld = HoldingThrowable; // 투척물을 쥐고 있으면 총 그립 IK/조준 끔 (총은 숨김)
+        bool ikOff = meleeHeld || isDead || reloading || isRolling || throwableHeld || Time.time < ikBlockUntil;
         if (handIKRig != null) handIKRig.weight = ikOff ? 0f : 1f;
 
         // 상체 레이어: 총 = 항상 켬(권총/소총 자세), 도끼 = 평소 끔(맨손처럼 자연스럽게) + 상체 동작 중에만 켬, 사망 = 끔
@@ -769,13 +834,13 @@ public class PlayerController : MonoBehaviour
             }
         }
         if (weaponHandAttacher == null) weaponHandAttacher = FindAnyObjectByType<WeaponHandAttacher>();
-        if (weaponHandAttacher != null) weaponHandAttacher.aimAtTarget = !(meleeHeld || isDead || reloading || isRolling);
+        if (weaponHandAttacher != null) weaponHandAttacher.aimAtTarget = !(meleeHeld || isDead || reloading || isRolling || throwableHeld);
         // 권총 양손 그립 (가슴 중앙): 권총을 들고 있을 때만. IK가 꺼지는 상황(재장전/전환/사망/구르기)은 Rig weight 0으로 같이 꺼짐
         if (weaponHandAttacher != null)
         {
-            weaponHandAttacher.pistolHeld = !meleeHeld && currentMode == WeaponMode.Ranged && rangedWeapon != null && rangedWeapon.weaponData != null && rangedWeapon.weaponData.type == WeaponType.Pistol;
+            weaponHandAttacher.pistolHeld = !meleeHeld && !throwableHeld && currentMode == WeaponMode.Ranged && rangedWeapon != null && rangedWeapon.weaponData != null && rangedWeapon.weaponData.type == WeaponType.Pistol;
             // 2026-11-12: 모든 총 양손 그립 (권총 가슴 중앙 / AR·샷건 어깨 견착) + 달릴 때 Low Ready
-            bool gunHeld = !meleeHeld && currentMode == WeaponMode.Ranged && rangedWeapon != null && rangedWeapon.weaponData != null;
+            bool gunHeld = !meleeHeld && !throwableHeld && currentMode == WeaponMode.Ranged && rangedWeapon != null && rangedWeapon.weaponData != null;
             weaponHandAttacher.gripWeapon = gunHeld ? rangedWeapon.weaponData : null;
             float planarSpeed = rb != null ? new Vector2(rb.linearVelocity.x, rb.linearVelocity.z).magnitude : 0f;
             weaponHandAttacher.gripLowReady = gunHeld && locomotion != null && locomotion.IsSprinting && planarSpeed > 2f && !isFireButtonPressed;

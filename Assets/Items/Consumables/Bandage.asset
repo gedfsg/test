@@ -16,6 +16,7 @@ MonoBehaviour:
   icon: {fileID: 21300000, guid: 3310ef73ca0b5a544b770b6298cea32f, type: 3}
   itemType: 2
   rarity: 0
+  worldModel: {fileID: 0}
   isStackable: 1
   maxStackSize: 10
   healAmount: 20
@@ -28,3 +29,5 @@ MonoBehaviour:
   buffDuration: 0
   speedMultiplier: 1
   attackRateMultiplier: 1
+  useTime: 2
+  useSound: {fileID: 8300000, guid: f28157555cd2a8d4a92fbd02f6b720f0, type: 3}

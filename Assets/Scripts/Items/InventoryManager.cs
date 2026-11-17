@@ -58,6 +58,15 @@ public class InventoryManager : MonoBehaviour
             return true;
         }
 
+        // 투척물 (2026-11-16): 핫바 3번(투척 칸)이 비었거나 같은 투척물이면 거기로
+        if (itemToAdd is ThrowableData th && WeaponHotbarUI.Instance != null
+            && WeaponHotbarUI.Instance.TryAddThrowable(th, amountToAdd))
+        {
+            Debug.Log($"{itemToAdd.itemName} {amountToAdd}개 획득 → 핫바 3번(투척)");
+            RefreshUI();
+            return true;
+        }
+
         if (itemToAdd.isStackable)
         {
             foreach (InventorySlot slot in inventory)
@@ -138,6 +147,22 @@ public class InventoryManager : MonoBehaviour
     {
         ConsumableData potion = slot.item as ConsumableData;
         if (potion == null) return;
+
+        // 2026-11-16: 사용 시간(진행 바) → 끝나면 효과 + 차감, 맞으면 취소. PlayerController가 효과 적용을 맡음
+        var pc = GetComponent<PlayerController>();
+        if (pc != null)
+        {
+            pc.BeginConsumable(potion, () =>
+            {
+                if (!inventory.Contains(slot) || slot.amount <= 0) return; // 사용 중에 버렸거나 옮김
+                slot.amount--;
+                Debug.Log($"{potion.itemName} 사용! (남은 개수: {slot.amount})");
+                if (slot.amount <= 0) inventory.Remove(slot);
+                RefreshUI();
+            });
+            return;
+        }
+        // (아래는 PlayerController가 없을 때의 예전 즉시 사용 경로)
 
         PlayerBuffManager buffMgr = GetComponent<PlayerBuffManager>();
         Health health = GetComponent<Health>();

@@ -10,6 +10,8 @@ public class AmmoInventory : MonoBehaviour
     public int maxARAmmo = 200;
     public int maxShotgunAmmo = 60;
     public int maxSniperAmmo = 30;
+    [Tooltip("특수 무기(화염방사기·RPG·미니건·레이저, WeaponType.Ranged) 공용 탄약/연료/에너지셀. 상점 시스템이 AddAmmo(WeaponType.Ranged, n)로 보충 (2026-11-16)")]
+    public int maxSpecialAmmo = 400;
 
     private Dictionary<WeaponType, int> ammo = new Dictionary<WeaponType, int>();
 
@@ -22,6 +24,7 @@ public class AmmoInventory : MonoBehaviour
         ammo[WeaponType.AR] = 0;
         ammo[WeaponType.Shotgun] = 0;
         ammo[WeaponType.Sniper] = 0;
+        ammo[WeaponType.Ranged] = 0; // 특수 무기 공용 (2026-11-16)
     }
 
     void Start()
@@ -64,6 +67,7 @@ public class AmmoInventory : MonoBehaviour
             case WeaponType.AR: return maxARAmmo;
             case WeaponType.Shotgun: return maxShotgunAmmo;
             case WeaponType.Sniper: return maxSniperAmmo;
+            case WeaponType.Ranged: return maxSpecialAmmo;
             default: return 0;
         }
     }

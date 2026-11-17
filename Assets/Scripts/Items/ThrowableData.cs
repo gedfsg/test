@@ -34,4 +34,23 @@ public class ThrowableData : ItemData
 
     [Tooltip("섬광 범위 (반경, 미터)")]
     public float flashRadius = 8f;
+
+    [Header("2026-11-16 투척 시스템 (ThrowableController / Grenade / Molotov)")]
+    [Tooltip("수류탄: 이 반경 안은 최대 데미지(damage), 바깥 radius까지 선형 감소해 0")]
+    public float innerRadius = 3f;
+    [Tooltip("터질 때 좀비를 부르는 소음 반경 (m)")]
+    public float noiseRadius = 100f;
+    [Tooltip("화염병: 불 지대를 벗어나도 남는 점화 (초당 데미지 / 초)")]
+    public float igniteDps = 10f;
+    public float igniteDuration = 3f;
+    [Tooltip("조준 궤적 끝 위험 범위 원 색 (수류탄 빨강, 화염병 주황)")]
+    public Color rangeColor = Color.red;
+
+    [Header("소리 (Assets/Audio/throwable)")]
+    public AudioClip pinSound;      // 수류탄 핀 뽑기 (던지기 시작)
+    public AudioClip throwSound;    // 던지기
+    public AudioClip explodeSound;  // 수류탄 폭발
+    public AudioClip breakSound;    // 화염병 유리 깨짐
+    public AudioClip igniteSound;   // 화염병 불 붙음
+    public AudioClip loopSound;     // 화염병 불 지속
 }

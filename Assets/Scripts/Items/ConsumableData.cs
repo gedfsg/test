@@ -48,4 +48,10 @@ public class ConsumableData : ItemData
 
     [Tooltip("공격속도 배율 (예: 1.5 = 50% 증가) — Adrenaline 전용")]
     public float attackRateMultiplier = 1f;
+
+    [Header("사용 시간 / 소리 (2026-11-16)")]
+    [Tooltip("사용에 걸리는 시간(초). 이 동안 이동은 되고 공격은 안 됨, 맞으면 취소(아이템 안 줄어듦). 0이면 즉시 사용")]
+    public float useTime = 0f;
+    [Tooltip("사용 시작할 때 재생 (Assets/Audio/consume). SFX 믹서 그룹으로 재생, 취소되면 멈춤")]
+    public AudioClip useSound;
 }

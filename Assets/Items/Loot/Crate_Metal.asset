@@ -19,10 +19,6 @@ MonoBehaviour:
     weight: 8
     minAmount: 1
     maxAmount: 1
-  - item: {fileID: 11400000, guid: e1c82f8efba17cb4fb4699a22f7fcbb2, type: 2}
-    weight: 6
-    minAmount: 1
-    maxAmount: 1
   - item: {fileID: 11400000, guid: 5c7d2dec6fdd4704c81a5c71cf771204, type: 2}
     weight: 4
     minAmount: 1
@@ -40,21 +36,17 @@ MonoBehaviour:
     minAmount: 1
     maxAmount: 1
   - item: {fileID: 11400000, guid: 0b1b7f57d9fbd0d4f89465ac7e6370f5, type: 2}
-    weight: 8
-    minAmount: 15
-    maxAmount: 30
+    weight: 24
+    minAmount: 22
+    maxAmount: 45
   - item: {fileID: 11400000, guid: d7d64191447ce2049a3bbb05cb355656, type: 2}
-    weight: 5
-    minAmount: 18
-    maxAmount: 36
+    weight: 30
+    minAmount: 45
+    maxAmount: 90
   - item: {fileID: 11400000, guid: b5d195c9fff6c404a9210a71ade6433b, type: 2}
-    weight: 3
-    minAmount: 4
-    maxAmount: 8
-  - item: {fileID: 11400000, guid: 272cef92113e53846ba3841e9dd2e926, type: 2}
-    weight: 2
-    minAmount: 1
-    maxAmount: 1
+    weight: 18
+    minAmount: 9
+    maxAmount: 18
   - item: {fileID: 11400000, guid: 08a184e18447fba46bae8a45ee3dbb7c, type: 2}
     weight: 2
     minAmount: 1
@@ -72,10 +64,6 @@ MonoBehaviour:
     minAmount: 1
     maxAmount: 1
   - item: {fileID: 11400000, guid: dddcb140e924770448ebec47e41e1189, type: 2}
-    weight: 1.5
-    minAmount: 1
-    maxAmount: 1
-  - item: {fileID: 11400000, guid: 6d921c079dd5cad40b746fd3bc68bce6, type: 2}
     weight: 1.5
     minAmount: 1
     maxAmount: 1
@@ -133,5 +121,17 @@ MonoBehaviour:
     maxAmount: 1
   - item: {fileID: 11400000, guid: c409828ef0832274abd3c9cf70c42056, type: 2}
     weight: 6
+    minAmount: 1
+    maxAmount: 1
+  - item: {fileID: 11400000, guid: c31dad83561cd3745a67523afe78d671, type: 2}
+    weight: 3
+    minAmount: 5
+    maxAmount: 10
+  - item: {fileID: 11400000, guid: e1c82f8efba17cb4fb4699a22f7fcbb2, type: 2}
+    weight: 7.811765
+    minAmount: 1
+    maxAmount: 1
+  - item: {fileID: 11400000, guid: e4051650ae5a6544eb7498e2bcc7aa52, type: 2}
+    weight: 15.62353
     minAmount: 1
     maxAmount: 1
