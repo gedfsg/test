@@ -313,6 +313,7 @@ public static class InteriorDecorBuilder
         b = default; bool has = false;
         foreach (var r in go.GetComponentsInChildren<Renderer>())
         {
+            if (r is ParticleSystemRenderer) continue; // 연기·불 파티클은 바운드가 커서 제외 (차 크기 계산이 틀어짐)
             if (!has) { b = r.bounds; has = true; } else b.Encapsulate(r.bounds);
         }
         return has;
@@ -795,7 +796,7 @@ public static class InteriorDecorBuilder
     ///  3) 바닥에서 5cm 넘게 떠 있으면 → 바닥으로 내림 (@top 소품·벽 부착물 제외)
     /// 반환: 사람이 읽을 보고서
     /// </summary>
-    public static string Validate(Transform root, BuildingInterior bi, bool fix, List<Vector3> extraDoors = null)
+    public static string Validate(Transform root, BuildingInterior bi, bool fix, List<Vector3> extraDoors = null, bool fixWalls = true)
     {
         var sb = new System.Text.StringBuilder();
         // 검사할 문: 건물 정문(BuildingWallCollider 문 구멍) + 내부 문 틈(칸막이·교실 문, Ctx.Door로 등록)
@@ -850,7 +851,7 @@ public static class InteriorDecorBuilder
                         }
                         if (!hit) break;
                         if (step == 0) { issues++; sb.AppendLine($"  - 벽/건물에 겹침: {nm}"); }
-                        if (!fix || step == 6) break;
+                        if (!fix || !fixWalls || step == 6) break;   // 검수(AuditAll)에선 보고만: 매번 밀면 같은 가구가 조금씩 계속 밀려남
                         var toC = center - c; toC.y = 0;
                         piece.position += toC.normalized * 0.1f;
                         if (step == 0) fixedCount++;
@@ -1753,5 +1754,81 @@ public static class InteriorDecorBuilder
         c.OnWall("GasStation", "wallVine", -126f, -268f, "E", 1.2f);   // 가게 서쪽 벽 (가게 = z -273~-263)
         c.OnWall("GasStation", "wallVine", -82f, -268f, "W", 1.2f);    // 가게 동쪽 벽
         c.OnWall("GasStation", "vines", -108f, -279f, "N", 1.3f);      // 가게 뒷벽
+    }
+
+    // ───────────────────────── 입구 검수 (전체) ─────────────────────────
+    // 각 Building_Interior_* 루트를 그 건물 정문 + 내부 문 틈(칸막이·교실·홀 입구) 기준으로 다시 검사·자동 수정.
+    // 바깥 장식(Exterior 그룹, Street_Decor 전체)은 씬의 "모든" 건물 문 1.5m 반경에서 밀어냄.
+    // 검사 항목: 문 앞 1.5m 비움(가구·데칼·소품 발밑 겹침), 벽 겹침(콜라이더 가구), 공중에 뜸
+    // (문짝 여닫이 궤적: 이 맵 건물 문은 열린 구멍/미닫이라 여닫이 문짝이 없음 → 해당 없음)
+
+    static readonly (string root, string building, Vector2[] innerDoors)[] AuditTargets =
+    {
+        ("Building_Interior_House",     "Buildings/building-a (4)",                                    new Vector2[0]),
+        ("Building_Interior_Church",    "Buildings/Enterable_Church by Poly by Google - 2-J0Y-8AQOG",  new[] { new Vector2(-287.1f, -82.5f) }),
+        ("Building_Interior_Hospital",  "Buildings/Enterable_scene (3)",                               new[] { new Vector2(-286f, 24f), new Vector2(-271f, 24f), new Vector2(-327f, -17.5f), new Vector2(-315f, -17.5f) }),
+        ("Building_Interior_Police",    "Buildings/Enterable_scene (4)",                               new[] { new Vector2(-109.1f, -133.3f) }),
+        ("Building_Interior_School",    "Buildings/Enterable_School",                                  new[] { new Vector2(-305.5f, 140f), new Vector2(-269.5f, 140f), new Vector2(-260.5f, 140f) }),
+        ("Building_Interior_Mart",      "Buildings/Building by Kay Lousberg - bbH2Bg73qM",            new[] { new Vector2(-108.4f, -61.5f) }),
+        ("Building_Interior_Warehouse", "Buildings/Enterable_Structure by Quaternius - ilWoURnbZW",   new[] { new Vector2(-9.3f, -329.4f) }),
+    };
+
+    [MenuItem("Tools/Interior/Audit All Entrances (입구 검수)")]
+    public static void AuditAll()
+    {
+        if (EditorApplication.isPlaying) { Debug.LogWarning("[Interior] Play 모드에서는 실행 불가"); return; }
+        var sb = new System.Text.StringBuilder("[Interior] 입구 검수\n");
+        BeginSession();
+        try
+        {
+            foreach (var t in AuditTargets)
+            {
+                var rootGo = GameObject.Find(t.root);
+                var bgo = GameObject.Find(t.building);
+                var bi = bgo != null ? bgo.GetComponent<BuildingInterior>() : null;
+                if (rootGo == null || bi == null) { sb.AppendLine($"  {t.root}: 없음 (건너뜀)"); continue; }
+                var extra = new List<Vector3>();
+                foreach (var d in t.innerDoors) extra.Add(new Vector3(d.x, FloorAt(d.x, d.y, 15.5f), d.y));
+                sb.AppendLine($"  {t.root}: {Validate(rootGo.transform, bi, true, extra, false)}");
+            }
+            // 바깥 장식: 모든 건물 문
+            var doors = AllDoors();
+            int moved = 0;
+            var outside = new List<Transform>();
+            var street = GameObject.Find("Street_Decor");
+            if (street != null) foreach (Transform g in street.transform) foreach (Transform p in g) outside.Add(p);
+            foreach (var t in AuditTargets)
+            {
+                var ext = GameObject.Find(t.root + "/Exterior");
+                if (ext != null) foreach (Transform p in ext.transform) outside.Add(p);
+            }
+            foreach (var p in outside)
+            {
+                if (p.name.EndsWith("@wall") || p.name.EndsWith("@top")) continue;   // 벽 덩굴·옥상 소품은 바닥 통로를 안 막음
+                foreach (var door in doors)
+                    for (int step = 0; step < 6; step++)
+                    {
+                        if (!WorldBounds(p.gameObject, out var wb)) break;
+                        var cp = wb.ClosestPoint(new Vector3(door.x, wb.center.y, door.z));
+                        if (new Vector2(cp.x - door.x, cp.z - door.z).magnitude >= DoorClear) break;
+                        var away = wb.center - door; away.y = 0;
+                        p.position += away.normalized * 0.5f;
+                        if (step == 0) { moved++; sb.AppendLine($"  - 바깥 소품 문 앞 → 밀어냄: {p.parent.name}/{p.name}"); }
+                    }
+            }
+            sb.AppendLine($"  바깥 장식 {outside.Count}개 검사, 문 앞에서 밀어낸 것 {moved}개 (건물 문 {doors.Count}곳)");
+        }
+        finally { EndSession(); }
+        Debug.Log(sb.ToString());
+        EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+    }
+
+    /// <summary>전체 다시 만들기 (1~8) → 입구 검수 → NavMesh 재굽기(벽 반영, 씬 저장)</summary>
+    [MenuItem("Tools/Interior/Build All + Audit + Rebake NavMesh")]
+    public static void BuildAll()
+    {
+        BuildHouse(); BuildChurch(); BuildHospital(); BuildPolice(); BuildSchool(); BuildMart(); BuildWarehouse(); BuildStreet();
+        AuditAll();
+        RebakeNavMeshWithWalls.Run();
     }
 }
