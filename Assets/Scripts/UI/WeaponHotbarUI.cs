@@ -321,6 +321,12 @@ public class WeaponHotbarUI : MonoBehaviour
     /// <summary>현재 선택된 슬롯에 아이템 세팅 (Equip to Hotbar용)</summary>
     public bool AddItemToActiveSlot(ItemData item, int count) => SetSlot(activeSlot, item, count);
 
+    /// <summary>(2026-11-18) 투척 취소(우클릭) → 투척물을 넣고 마지막으로 든 총 칸으로 (그 칸이 비었으면 그대로)</summary>
+    public void ReturnToLastGun()
+    {
+        if (lastGunSlot != activeSlot && items[lastGunSlot] != null) SelectSlot(lastGunSlot);
+    }
+
     public void ConsumeThrowable(int index)
     {
         if (index < 0 || index >= SLOT_COUNT) return;

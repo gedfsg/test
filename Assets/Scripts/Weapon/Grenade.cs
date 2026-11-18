@@ -8,11 +8,14 @@ using UnityEngine;
 ///  - 폭발: explosin.mp3 + 연기·불꽃 파티클(1초) + 섬광
 ///  - 광역 데미지: 반경 innerRadius(3m) 안 = damage(500, 즉사), 3~radius(8m) 500 → 0 선형 감소. 플레이어도 맞음
 ///  - 좀비 넉백 + 시체(래그돌) AddExplosionForce, 소음 반경 100m, 화면 흔들림 0.3초
+///  (2026-11-18) 사실적인 신관: ThrowableController가 핀을 뽑은 순간부터 5초를 재고 남은 시간을 fuseOverride로 넘김.
+///   공중이든 땅이든 그 시간 뒤 폭발 (좀비에 맞아도 바로 안 터짐)
 /// </summary>
 public class Grenade : MonoBehaviour
 {
     [HideInInspector] public ThrowableData data;
     [HideInInspector] public GameObject thrower; // 던진 사람 (닿아도 터지지 않음)
+    [HideInInspector] public float fuseOverride = -1f; // (2026-11-18) 0 이상이면 이 시간(초) 뒤 폭발 (핀 뽑은 뒤 남은 시간)
 
     bool exploded;
 
@@ -23,7 +26,8 @@ public class Grenade : MonoBehaviour
 
     IEnumerator Fuse()
     {
-        yield return new WaitForSeconds(data != null ? data.fuseTime : 3f);
+        // yield return new WaitForSeconds(data != null ? data.fuseTime : 3f); // (이전)
+        yield return new WaitForSeconds(fuseOverride >= 0f ? fuseOverride : data != null ? data.fuseTime : 3f);
         Explode();
     }
 
@@ -31,9 +35,9 @@ public class Grenade : MonoBehaviour
     {
         if (exploded || c.collider == null) return;
         if (thrower != null && c.collider.transform.IsChildOf(thrower.transform)) return;
-        // 적(좀비)에 직접 맞으면 즉시
-        var z = c.collider.GetComponentInParent<ZombieController>();
-        if (z != null && !z.IsDead) Explode();
+        // (이전 2026-11-16) 적(좀비)에 직접 맞으면 즉시 → 2026-11-18 신관 시간으로만 폭발
+        // var z = c.collider.GetComponentInParent<ZombieController>();
+        // if (z != null && !z.IsDead) Explode();
     }
 
     public void Explode()
