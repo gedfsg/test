@@ -110,6 +110,10 @@ public static class InteriorDecorBuilder
         { "wall",          KFur("wall", true, true) },    // 칸막이 벽 (민가 방 나누기, NavMesh Carve)
         { "wallDoorway",   KFur("wallDoorway", true) },   // 문 뚫린 칸막이 벽
         { "wallHalf",      KFur("wallHalf", true) },
+        // 학교: 칠판 = Kenney 벽을 짙은 녹색으로 얇게 (칠판 에셋 없음), 사물함 = 닫힌 책장을 철제 회청색으로
+        { "blackboard",    new Spec { path = KF + "wall.fbx", fit = Fit.Scale, size = KenneyFurnitureScale, yawOffset = 180f, solid = false, noShadow = true, tint = new Color(0.12f, 0.24f, 0.18f) } },
+        { "locker",        new Spec { path = KF + "bookcaseClosedDoors.fbx", fit = Fit.Scale, size = KenneyFurnitureScale, yawOffset = 180f, obstacle = true, tint = new Color(0.42f, 0.50f, 0.56f) } },
+        { "cellBed",       KFur("bedSingle", false) },   // 유치장 안 간이침대 (철창 콜라이더 안이라 콜라이더 없음)
 
         // ── Kenney Survival (공용) ──
         { "box",           KSur("box", true) },
@@ -163,9 +167,9 @@ public static class InteriorDecorBuilder
 
         // ── 경찰서 / 사무실 ──
         { "pcDesk",        S(IA + "Police/LowPolyComputerDesk.fbx", null, Fit.None, 1f, 0f, true, true) },
-        { "officeDesk",    S(IA + "Police/LowPolyOffice.fbx", "desk", Fit.Scale, 10f, 0f, true, true) },
+        { "officeDesk",    new Spec { path = IA + "Police/LowPolyOffice.fbx", node = "desk", fit = Fit.Scale, size = 10f, obstacle = true, tint = new Color(0.47f, 0.33f, 0.21f) } },  // 텍스처 없는 회색 → 나무색
         { "officeChair",   S(IA + "Police/LowPolyOffice.fbx", "chair", Fit.Scale, 10f, 180f, true) },
-        { "officeDrawer",  S(IA + "Police/LowPolyOffice.fbx", "drawer", Fit.Scale, 10f, 0f, true) },
+        { "officeDrawer",  new Spec { path = IA + "Police/LowPolyOffice.fbx", node = "drawer", fit = Fit.Scale, size = 10f, tint = new Color(0.40f, 0.43f, 0.46f) } },   // 철제 서류함 색
         { "retroChair",    S(IA + "Police/90s_retro_office_pack.glb", "Chair 1.001_65", Fit.None, 1f, 90f, true) },
         { "cubicleWall",   S(IA + "Police/90s_retro_office_pack.glb", "Cubicle_Wall.004_97", Fit.None, 1f, 0f, true, true) },
         { "printer",       S(IA + "Police/90s_retro_office_pack.glb", "Printer Base.004_48", Fit.None, 1f, 0f, true) },
@@ -536,13 +540,22 @@ public static class InteriorDecorBuilder
     public static bool WallHit(Vector3 from, Vector3 dir, float maxDist, out Vector3 point, out Vector3 normal)
     {
         point = normal = Vector3.zero;
-        var hits = Physics.RaycastAll(from, dir.normalized, maxDist, ~0, QueryTriggerInteraction.Ignore);
+        // 학교처럼 벽 메시가 한쪽 면만 있는 모델은 안쪽에서 쏘면 뒷면이라 안 맞음 → 이 호출 동안만 뒷면도 맞게 (바로 원래 값 복원)
+        bool prevBackfaces = Physics.queriesHitBackfaces;
+        RaycastHit[] hits;
+        try
+        {
+            Physics.queriesHitBackfaces = true;
+            hits = Physics.RaycastAll(from, dir.normalized, maxDist, ~0, QueryTriggerInteraction.Ignore);
+        }
+        finally { Physics.queriesHitBackfaces = prevBackfaces; }
         float best = float.MaxValue;
         foreach (var h in hits)
         {
             if (IsInteriorObject(h.collider.transform)) continue;
             if (h.distance < best) { best = h.distance; point = h.point; normal = h.normal; }
         }
+        if (Vector3.Dot(normal, dir) > 0f) normal = -normal; // 뒷면에 맞으면 법선이 진행 방향 → 뒤집어서 "벽에서 나오는 쪽"으로
         return best < float.MaxValue;
     }
 
@@ -558,6 +571,10 @@ public static class InteriorDecorBuilder
         public BuildingInterior building;
         public int count;
         public Vector3 frameCenter;
+        public readonly List<Vector3> doors = new List<Vector3>();   // 검사용 내부 문 틈 (Door로 등록)
+
+        /// <summary>내부 문 틈 등록 (프레임 좌표) → 배치 후 검사에서 1.5m 반경 비워둠</summary>
+        public void Door(float x, float z) { var w = W(x, z); doors.Add(new Vector3(w.x, FloorAt(w.x, w.z, floorGuess), w.z)); }
         public float frameYaw;
 
         /// <summary>프레임 좌표 → 월드 (y=0)</summary>
@@ -596,6 +613,14 @@ public static class InteriorDecorBuilder
             return go;
         }
 
+        /// <summary>월드 좌표 그대로 배치 (다른 가구 바운드 기준 위치용), scaleMul로 크기 조절</summary>
+        public GameObject Root_P(string group, string key, float wx, float wz, float yaw, float scaleMul = 1f)
+        {
+            var go = Place(Group(root, group), key, new Vector3(wx, FloorAt(wx, wz, floorGuess), wz), yaw + frameYaw, default, scaleMul);
+            if (go != null) count++;
+            return go;
+        }
+
         /// <summary>벽에 붙여 놓는 가구 (snap 생략형)</summary>
         public GameObject PW(string group, string key, float x, float z, float yaw, string snap) => P(group, key, x, z, yaw, default, 1f, null, snap);
 
@@ -612,17 +637,17 @@ public static class InteriorDecorBuilder
         /// <summary>
         /// 벽에 붙이는 평면 소품(덩굴 등): 프레임 좌표 (x,z)에서 dir 쪽 벽을 찾아 표면 바로 앞에 세움, 정면 = 벽 법선 방향
         /// </summary>
-        public GameObject OnWall(string group, string key, float x, float z, string dir, float scaleMul = 1f, float heightAboveFloor = 0f)
+        public GameObject OnWall(string group, string key, float x, float z, string dir, float scaleMul = 1f, float heightAboveFloor = 0f, Vector3? stretch = null, float probeY = 1.5f)
         {
             var w = W(x, z);
             float fy = FloorAt(w.x, w.z, floorGuess);
-            if (!WallHit(new Vector3(w.x, fy + 1.5f, w.z), Dir(dir), 8f, out var p, out var n)) { Debug.LogWarning($"[Interior] 벽을 못 찾음: {key} @ ({x},{z}) {dir}"); return null; }
+            if (!WallHit(new Vector3(w.x, fy + probeY, w.z), Dir(dir), 8f, out var p, out var n)) { Debug.LogWarning($"[Interior] 벽을 못 찾음: {key} @ ({x},{z}) {dir}"); return null; }
             n.y = 0; n.Normalize();
             float yaw = Mathf.Atan2(n.x, n.z) * Mathf.Rad2Deg;
             var g = Group(root, group);
             var pos = p + n * 0.05f;
             pos.y = fy + heightAboveFloor;
-            var go = Place(g, key, pos, yaw, default, scaleMul, key + "@wall");   // @wall → 검사에서 "공중에 뜸" 제외
+            var go = Place(g, key, pos, yaw, default, scaleMul, key + "@wall", stretch);   // @wall → 검사에서 "공중에 뜸" 제외
             if (go != null)
             {
                 // Place는 바운드 중심을 pos에 맞추므로, 두께 절반만큼 바깥으로 밀어 벽 쪽 면이 표면에 닿게
@@ -719,7 +744,7 @@ public static class InteriorDecorBuilder
             var ctx = new Ctx { root = root, floorGuess = floorGuess, building = bi, frameYaw = frameYaw, frameCenter = trig != null ? trig.bounds.center : bi.transform.position };
             content(ctx);
             Physics.SyncTransforms();
-            var report = Validate(root, bi, true);
+            var report = Validate(root, bi, true, ctx.doors);
             Debug.Log($"[Interior] {name}: 가구/소품 {ctx.count}개 배치 (조명 {root.GetComponentsInChildren<Light>().Length}개)\n{report}");
         }
         finally { EndSession(); }
@@ -737,23 +762,26 @@ public static class InteriorDecorBuilder
     ///  3) 바닥에서 5cm 넘게 떠 있으면 → 바닥으로 내림 (@top 소품·벽 부착물 제외)
     /// 반환: 사람이 읽을 보고서
     /// </summary>
-    public static string Validate(Transform root, BuildingInterior bi, bool fix)
+    public static string Validate(Transform root, BuildingInterior bi, bool fix, List<Vector3> extraDoors = null)
     {
         var sb = new System.Text.StringBuilder();
-        bool hasDoor = bi.TryGetDoor(out var door, out var outDir);
+        // 검사할 문: 건물 정문(BuildingWallCollider 문 구멍) + 내부 문 틈(칸막이·교실 문, Ctx.Door로 등록)
+        var doors = new List<Vector3>();
+        if (bi.TryGetDoor(out var mainDoor, out _)) doors.Add(mainDoor);
+        if (extraDoors != null) doors.AddRange(extraDoors);
         var trig = bi.GetComponent<Collider>();
         Vector3 center = trig != null ? trig.bounds.center : bi.transform.position;
         int issues = 0, fixedCount = 0;
         foreach (Transform group in root)
         {
-            if (group.name == "Lights" || group.name == "Exterior") continue;
+            if (group.name == "Lights" || group.name == "Exterior" || group.name == "Partitions") continue;
             foreach (Transform piece in group)
             {
                 if (!WorldBounds(piece.gameObject, out var wb)) continue;
                 string nm = group.name + "/" + piece.name;
 
-                // 1) 입구
-                if (hasDoor)
+                // 1) 입구 (문마다): 문 중심에서 가구 쪽으로 50cm씩 밀어냄
+                foreach (var door in doors)
                 {
                     for (int step = 0; step <= 6; step++)
                     {
@@ -761,9 +789,11 @@ public static class InteriorDecorBuilder
                         var cp = wb.ClosestPoint(new Vector3(door.x, wb.center.y, door.z));
                         float d = new Vector2(cp.x - door.x, cp.z - door.z).magnitude;
                         if (d >= DoorClear) break;
-                        if (step == 0) { issues++; sb.AppendLine($"  - 입구 {d:F2}m: {nm}"); }
+                        if (step == 0) { issues++; sb.AppendLine($"  - 입구 {d:F2}m: {nm} (문 {door.x:F1},{door.z:F1})"); }
                         if (!fix || step == 6) break;
-                        piece.position += -outDir * 0.5f; // 실내 쪽으로 50cm
+                        var away = wb.center - door; away.y = 0;
+                        if (away.sqrMagnitude < 0.01f) away = center - door; away.y = 0;
+                        piece.position += away.normalized * 0.5f;
                         if (step == 0) fixedCount++;
                     }
                 }
@@ -989,4 +1019,188 @@ public static class InteriorDecorBuilder
         c.Light("Lights", -284f, 8f, 3.0f);
         c.Light("Lights", -300f, -10f, 3.0f);
     });
+
+    // ───────────────────────── 4. 경찰서 (low_poly_police_station, 본관 홀 22x28m) ─────────────────────────
+    // 실측: 홀 x -109.1~-86.9, z -147.2~-119.2, 바닥 15.85 (지면보다 0.85m 높음 → NavBake가 문 링크로 연결)
+    //       입구 = 서쪽 벽 틈 z -138~-129 (가운데 -133.3), 남·북 날개는 문 없는 막힌 방이라 제외
+    // 구역: 북쪽 사무실(책상 5 + 의자) / 남동 유치장(철창 3칸 + 간이침대) / 남서 무기고(상자 쌓기) / 바깥 경찰차 2대
+    // 분위기: 급히 비운 사무실 — 넘어진 의자, 바닥 서류, 핏자국
+
+    [MenuItem("Tools/Interior/Build 4. Police (경찰서)")]
+    public static void BuildPolice() => Run("Police", "Buildings/Enterable_scene (4)", 15.85f, 0f, c =>
+    {
+        c.Door(-109.1f, -133.3f);   // 홀 서쪽 벽의 실제 입구 (건물 문 좌표는 트리거 끝이라 4m 바깥)
+
+        // 사무실: 1열 = LowPolyOffice 책상 3 + 레트로 의자(남쪽에 앉아 북쪽을 봄), 2열 = 컴퓨터 책상 2 (의자 포함, 남쪽)
+        var desk0 = c.P("Office", "officeDesk", -102.5f, -121.4f, 0f);
+        c.P("Office", "officeDesk", -98.0f, -121.4f, 0f);
+        c.P("Office", "officeDesk", -93.5f, -121.4f, 0f);
+        c.P("Office", "retroChair", -102.5f, -122.6f, 0f);
+        c.P("Office", "retroChair", -98.0f, -122.7f, 15f);
+        c.P("Office", "pcDesk", -101.5f, -126.0f, 180f);
+        c.P("Office", "pcDesk", -95.5f, -126.0f, 180f);
+        c.OnTopOf("Office", "radio", desk0, 0f, 0.3f);                     // 무전기 (라디오 송신기 역할)
+        c.PW("Office", "waterCooler", -108.6f, -119.7f, 135f, "NW");       // 정수기 = 북서 모서리
+        c.PW("Office", "officeDrawer", -89.5f, -119.6f, 180f, "N");        // 서류 캐비닛
+        c.P("Office", "retroChair", -93.0f, -124.0f, 60f, new Vector3(0, 0, 90));    // 넘어진 의자
+        c.P("Office", "retroChair", -105.0f, -125.5f, -40f, new Vector3(0, 0, 90));  // 넘어진 의자
+        c.P("Office", "books", -97.0f, -128.6f, 35f);
+        c.P("Office", "books", -91.5f, -127.5f, -60f);
+
+        // 유치장: 동쪽 벽에 철창 3칸 (문 = 서쪽), 안에 간이침대
+        float[] cz = { -145.4f, -142.5f, -139.6f };
+        foreach (var z in cz)
+        {
+            var cage = c.PW("Cells", "cage", -88.6f, z, 270f, "E");
+            if (cage != null && WorldBounds(cage, out var cb))
+                c.Root_P("Cells", "cellBed", cb.center.x + 0.3f, cb.center.z, 90f, 0.9f);
+        }
+
+        // 무기고 (남서): 상자 쌓기 + 금속 상자 — 무기를 숨겨둔 느낌
+        var b1 = c.PW("Armory", "boxLarge", -107.8f, -146.3f, 0f, "SW");
+        c.OnTopOf("Armory", "box", b1, 10f);
+        var b2 = c.PW("Armory", "box", -106.4f, -146.5f, 5f, "S");
+        c.OnTopOf("Armory", "box", b2, -12f);
+        c.PW("Armory", "chest", -105.2f, -146.6f, 0f, "S");
+        c.P("Armory", "boxOpen", -104.2f, -144.8f, 30f);
+        c.P("Armory", "workbench", -102.0f, -146.4f, 180f, default, 1f, null, "S");
+
+        // 핏자국
+        c.P("Clutter", "blood", -98.0f, -131.5f, 20f);
+        c.P("Clutter", "blood2", -92.0f, -136.0f, 140f);
+
+        // 바깥: 경찰차 2대 (입구 양옆, 건물과 나란히), 입구 남쪽 드럼통 (창고 에셋 혼용)
+        c.P("Exterior", "policeCar", -119.5f, -123.0f, 90f);
+        c.P("Exterior", "policeCar", -120.0f, -144.0f, 95f);
+        c.P("Exterior", "drum", -112.3f, -147.5f, 0f);
+        c.P("Exterior", "drum", -113.0f, -146.7f, 0f);
+        c.P("Exterior", "drum", -112.4f, -146.0f, 0f, new Vector3(90, 0, 0));
+
+        c.Light("Lights", -101f, -123.5f);
+        c.Light("Lights", -94f, -123.5f);
+        c.Light("Lights", -90.5f, -142.5f);
+        c.Light("Lights", -105f, -144.5f);
+        c.Light("Lights", -103f, -133.3f);
+    });
+
+    // ───────────────────────── 5. 학교 (low_poly_school "scene (2)") ─────────────────────────
+    // 실측(Play, 콜라이더 854개): 앞 복도(베란다) x -315~-249, z 129.5~139.5 / 교실 줄 z 140.5~150.5 (방 폭 6~8m, 복도 쪽 문 틈 2m)
+    //       교실 A x -307.5~-299.5 (문 x -305.5) / E x -274.5~-267.5 (문 -269.5) / F x -266.5~-258.5 (문 -260.5), 바닥 ≈ 16.5
+    //       뒤쪽 큰 홀(z 152~166)은 사방이 막혀 못 들어감 → 제외
+    // 교실 2칸(책상 6·4) + 교무실 1칸 + 복도 사물함. Japanese Classroom(clasroom.fbx)은 벽·책상이 메시 1개(8.5x18.9m)라
+    // 분해도 안 되고 교실 크기(7x10m)에 안 맞아서 Kenney 책상/의자로 그리드 구성
+
+    /// <summary>
+    /// 학교를 "들어갈 수 있는 건물"로: Buildings/Enterable_School(교실 줄 트리거 + BuildingInterior) 아래로 scene (2)를 옮김 (월드 위치 유지).
+    /// 학교 콜라이더(854개)는 그대로 둠 — 문 정보(BuildingWallCollider)가 없으므로 트리거에 들어오면 실내로 침 (BuildingInterior 예전 방식).
+    /// 다시 실행해도 안전 (이미 있으면 건너뜀)
+    /// </summary>
+    [MenuItem("Tools/Interior/Make School Enterable")]
+    public static BuildingInterior EnsureSchoolEnterable()
+    {
+        var existing = GameObject.Find("Buildings/Enterable_School");
+        if (existing != null) return existing.GetComponent<BuildingInterior>();
+        var school = GameObject.Find("scene (2)");
+        var buildings = GameObject.Find("Buildings");
+        if (school == null || buildings == null) { Debug.LogError("[Interior] 학교(scene (2)) 또는 Buildings 없음"); return null; }
+        var wrap = new GameObject("Enterable_School");
+        Undo.RegisterCreatedObjectUndo(wrap, "Make School Enterable");
+        wrap.transform.SetParent(buildings.transform, false);
+        wrap.transform.position = new Vector3(-283f, 18.8f, 145.5f);
+        var bc = wrap.AddComponent<BoxCollider>();
+        bc.isTrigger = true;
+        bc.size = new Vector3(66f, 5f, 11f);   // 교실 줄 (x -316~-250, z 140~151, y 16.3~21.3)
+        wrap.AddComponent<BuildingInterior>();
+        Undo.SetTransformParent(school.transform, wrap.transform, "Make School Enterable");
+        EditorSceneManager.MarkSceneDirty(wrap.scene);
+        Debug.Log("[Interior] 학교를 Enterable_School 아래로 옮기고 교실 트리거를 붙였습니다 (콜라이더는 그대로)");
+        return wrap.GetComponent<BuildingInterior>();
+    }
+
+    /// <summary>
+    /// 꾸미는 교실 3칸(A·E·F)의 미닫이 나무문(Component_43_N/…Wood_Cherry, 높이 8m짜리 문짝 + MeshCollider)을 끔 → 문틈이 열림.
+    /// 닫힌 문 때문에 복도↔교실 NavMesh가 끊겨 있었음 (Play 실측 PathPartial). 끈 뒤 Rebake NavMesh 필요. 다시 실행해도 안전
+    /// </summary>
+    static void OpenClassroomDoors()
+    {
+        var school = GameObject.Find("scene (2)");
+        if (school == null) return;
+        int opened = 0;
+        foreach (var id in new[] { "Component_43_15", "Component_43_13", "Component_43_10" })   // 교실 A, E, F 문
+        {
+            foreach (var t in school.GetComponentsInChildren<Transform>(true))
+            {
+                if (t.name != id) continue;
+                foreach (var leaf in t.GetComponentsInChildren<Transform>(true))
+                {
+                    if (!leaf.name.Contains("Wood_Cherry") || !leaf.gameObject.activeSelf) continue;
+                    Undo.RecordObject(leaf.gameObject, "Open Classroom Door");
+                    leaf.gameObject.SetActive(false);
+                    opened++;
+                }
+            }
+        }
+        if (opened > 0) Debug.Log($"[Interior] 교실 문짝 {opened}개를 열었음(끔) → Tools/Map/Rebake NavMesh With Building Walls 필요");
+    }
+
+    [MenuItem("Tools/Interior/Build 5. School (학교)")]
+    public static void BuildSchool()
+    {
+        if (EnsureSchoolEnterable() == null) return;
+        OpenClassroomDoors();
+        Run("School", "Buildings/Enterable_School", 16.4f, 0f, c =>
+        {
+            c.Door(-305.5f, 140.0f); c.Door(-269.5f, 140.0f); c.Door(-260.5f, 140.0f);
+
+            // 교실 A: 칠판 = 북쪽 벽, 학생 책상 3x2 (의자 남쪽, 북쪽을 봄), 교탁 = 칠판 앞
+            ClassroomGrid(c, new[] { -305.2f, -303.3f, -301.4f }, new[] { 144.3f, 146.6f });
+            c.OnWall("Classroom", "blackboard", -303.5f, 148f, "N", 1f, 0.9f, new Vector3(1.6f, 0.5f, 1f), 1.0f);   // 창문 높이(1.5m)를 피해 1m에서 벽 찾기
+            c.P("Classroom", "officeDesk", -303.5f, 149.3f, 180f);
+            c.P("Classroom", "trashcan", -300.1f, 141.2f, 0f);
+            c.P("Classroom", "books", -302.4f, 143.2f, 40f);                          // 바닥에 떨어진 책
+
+            // 교실 E: 책상 2x2 + 넘어진 의자
+            ClassroomGrid(c, new[] { -272.6f, -270.0f }, new[] { 144.3f, 146.6f });
+            c.OnWall("Classroom", "blackboard", -271f, 148f, "N", 1f, 0.9f, new Vector3(1.6f, 0.5f, 1f), 1.0f);   // 창문 높이(1.5m)를 피해 1m에서 벽 찾기
+            c.P("Classroom", "officeDesk", -271f, 149.3f, 180f);
+            c.P("Classroom", "chair", -268.4f, 143.4f, 70f, new Vector3(0, 0, 90));
+            c.P("Classroom", "kBoxOpen", -273.8f, 149.6f, 15f);
+
+            // 교무실 F: 사무 책상 3 + 의자, 서랍장, 정수기
+            c.P("Staffroom", "pcDesk", -264.3f, 145.2f, 180f);
+            c.P("Staffroom", "officeDesk", -261.0f, 144.6f, 0f);
+            c.P("Staffroom", "retroChair", -261.0f, 143.5f, 0f);
+            c.P("Staffroom", "officeDesk", -263.0f, 148.8f, 180f);
+            c.P("Staffroom", "retroChair", -263.0f, 149.9f, 180f);
+            c.PW("Staffroom", "officeDrawer", -259.5f, 147.5f, 270f, "E");
+            c.PW("Staffroom", "waterCooler", -259.0f, 150.0f, 225f, "NE");
+
+            // 복도: 사물함(문 틈 피해서 북쪽 벽), 쓰레기통, 떨어진 책·박스, 핏자국
+            foreach (var x in new[] { -294.5f, -286.5f, -279.0f, -256.0f })
+                c.PW("Hallway", "locker", x, 139.0f, 180f, "N");
+            c.P("Hallway", "trashcan", -297.5f, 138.9f, 0f, default, 1f, null, "N");
+            c.P("Hallway", "trashcan", -265.0f, 138.9f, 0f, default, 1f, null, "N");
+            c.P("Hallway", "books", -288.0f, 134.0f, 120f);
+            c.P("Hallway", "books", -275.5f, 132.5f, 10f);
+            c.P("Hallway", "kBoxClosed", -252.5f, 137.0f, 30f);
+            c.P("Hallway", "blood", -283.0f, 134.5f, 60f);
+
+            c.Light("Lights", -303.5f, 145.5f);
+            c.Light("Lights", -271f, 145.5f);
+            c.Light("Lights", -262.5f, 146.5f);
+            c.Light("Lights", -298f, 134.5f, 2.8f);
+            c.Light("Lights", -270f, 134.5f, 2.8f);
+        });
+    }
+
+    /// <summary>학생 책상(Kenney desk를 가로세로 60%로 줄임) + 의자(책상 남쪽, 북쪽 칠판을 봄) 그리드</summary>
+    static void ClassroomGrid(Ctx c, float[] xs, float[] zs)
+    {
+        foreach (var z in zs)
+            foreach (var x in xs)
+            {
+                c.P("Classroom", "desk", x, z, 0f, default, 1f, new Vector3(0.6f, 1f, 0.6f));
+                c.P("Classroom", "chair", x, z - 0.55f, 0f);
+            }
+    }
 }
