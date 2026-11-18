@@ -124,6 +124,8 @@ public class DayNightCycle : MonoBehaviour
         }
         if (flashlightStatusText == null && buildLegacyFlashlightText) BuildFlashlightUI();
         if (flashlight != null) flashlight.enabled = flashlightOn; // 씬에서 켜져 있어도 시작은 꺼짐
+        // (2026-11-18) 손에 든 손전등 모형 + Spot 15m/35°/3/#FFE8B0 (HandFlashlight). 토글·배터리는 여기 그대로
+        if (flashlight != null && flashlight.GetComponent<HandFlashlight>() == null) flashlight.gameObject.AddComponent<HandFlashlight>();
         Debug.Log($"[Flashlight] 초기화: flashlight={(flashlight != null ? flashlight.name : "NULL! 못 찾음")}" +
                    (flashlight != null ? $" localPos={flashlight.transform.localPosition} enabled={flashlight.enabled}" : ""));
 

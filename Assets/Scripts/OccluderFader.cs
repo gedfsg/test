@@ -70,7 +70,8 @@ public class OccluderFader : MonoBehaviour
 
         var list = new List<Renderer>();
         foreach (var r in FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
-            if (r.gameObject.layer == layer && r.GetComponentInParent<BuildingInterior>() == null) list.Add(r); // 건물은 ㄱ자 등 범위가 실제보다 커서 콜라이더로만
+            if (r.gameObject.layer == layer && r.GetComponentInParent<BuildingInterior>() == null // 건물은 ㄱ자 등 범위가 실제보다 커서 콜라이더로만
+                && Mathf.Max(r.bounds.size.x, r.bounds.size.z) < 40f) list.Add(r); // 땅째 붙은 큰 메시(농장 등)는 범위 검사 안 함
         boundsOnly = list.ToArray();
 
         // 예전 가림 처리는 지우지 않고 끔 (Fade로 대체)
@@ -185,6 +186,8 @@ public class OccluderFader : MonoBehaviour
     static Material FadeMaterialFor(Material src)
     {
         if (fadeMats.TryGetValue(src, out var m) && m != null) return m;
+        if (fadeShader == null) fadeShader = Shader.Find("Custom/FadeOccluder"); // 아직 쓰는 재질이 없을 때 씬 로드의 UnloadUnusedAssets로 풀릴 수 있음
+        if (fadeShader == null) return src;
         m = new Material(fadeShader) { name = src.name + " (Fade)" };
         bool gltf = src.shader != null && src.shader.name.StartsWith("glTF");
 

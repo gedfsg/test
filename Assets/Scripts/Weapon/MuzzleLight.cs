@@ -15,6 +15,9 @@ using UnityEngine.InputSystem;
 ///  c) 조준등: Spot Light 상시 (총 든 동안), 총구 forward, Range 6m, Spot Angle 28°, Intensity 2.
 ///     바닥이 Default 레이어라(Ground 레이어 쓰는 렌더러 없음) cullingMask로는 못 빼서 좁은 각도로 막음 (총구 1.3m 높이에서 아래 가장자리 14°가 바닥 닿는 곳 ≈ 5.2m, 범위 끝 근처라 흐림)
 ///  d) 특수 무기: 화염방사기 #FF5500 0.8m 0.1초 / RPG #FF8800 1.0m 0.12초 / 미니건 = 일반 섬광 + 섬광 조명이 매 프레임 밝기가 튀며 깜빡 / 레이저 #00EEFF
+///  (2026-11-18 3차) 피드백 "섬광 터질 때 발 밑에 원형 빛" → 섬광 조명(Point)은 총구 끝(MuzzlePoint 자식, 앞 0.1m)에서만, Range 3.5 / Intensity 9 / 0.04초,
+///     cullingMask에서 지면(Default·Ground)·물·플레이어 제외 → 바닥에 원이 안 생기고, 근처 벽·나무·차(Occludable 레이어)만 번쩍.
+///     (좀비도 Default 레이어라 섬광 조명은 안 받음 - 섬광 스프라이트로만). 별 모양 섬광 스프라이트·조준등(Spot 28°/6m)은 그대로
 /// </summary>
 [RequireComponent(typeof(Light))]
 public class MuzzleLight : MonoBehaviour
@@ -31,8 +34,12 @@ public class MuzzleLight : MonoBehaviour
     public float flashGrow = 1.3f;
 
     [Header("섬광 조명 (Point, 아주 짧게)")]
-    public float flashLightRange = 4f;
-    public float flashLightIntensity = 8f; // 스펙 8~12 중 하한: 10이면 가까운 벽·바닥이 하얗게 날아가 섬광 스프라이트가 묻힘 (Play 캡처)
+    // public float flashLightRange = 4f; // (이전 2026-11-17)
+    // public float flashLightIntensity = 8f; // (이전) 스펙 8~12 중 하한: 10이면 가까운 벽·바닥이 하얗게 날아가 섬광 스프라이트가 묻힘 (Play 캡처)
+    // (2026-11-18) 3~4m / 8~10 - 바닥을 cullingMask로 빼서 밝혀도 바닥이 하얗게 안 날아감.
+    // 이름을 바꾼 이유: 무기 프리팹에 예전 값(flashLightRange 4 / flashLightIntensity 10)이 저장돼 있어 코드 기본값이 안 먹음
+    public float flashPointRange = 3.5f;
+    public float flashPointIntensity = 9f;
     public float flashLightTime = 0.04f;
     static readonly Color FlashLightColor = new Color32(0xFF, 0xC0, 0x60, 0xFF);
 
@@ -117,8 +124,8 @@ public class MuzzleLight : MonoBehaviour
         if (flashLight != null)
         {
             flashLight.color = flashLightColor;
-            flashLight.range = flashLightRange;
-            flashLight.intensity = flashLightIntensity;
+            flashLight.range = flashPointRange;
+            flashLight.intensity = flashPointIntensity;
             // 화염·RPG는 섬광이 긴 만큼 조명도 같이
             lightUntil = Time.time + Mathf.Max(flashLightTime, kind == SpecialWeaponKind.Flamethrower || kind == SpecialWeaponKind.RPG ? flashDur : 0f);
             flashLight.enabled = true;
@@ -131,7 +138,7 @@ public class MuzzleLight : MonoBehaviour
         if (flashLight != null && flashLight.enabled)
         {
             if (!active || Time.time >= lightUntil) flashLight.enabled = false;
-            else if (kind == SpecialWeaponKind.Minigun) flashLight.intensity = flashLightIntensity * Random.Range(0.4f, 1.2f); // 매 프레임 깜빡
+            else if (kind == SpecialWeaponKind.Minigun) flashLight.intensity = flashPointIntensity * Random.Range(0.4f, 1.2f); // 매 프레임 깜빡
         }
     }
 
@@ -180,8 +187,21 @@ public class MuzzleLight : MonoBehaviour
             flashLight.type = LightType.Point;
             flashLight.shadows = LightShadows.None;
             flashLight.renderMode = LightRenderMode.ForcePixel; // 짧아도 확실히 보이게
+            flashLight.cullingMask = FlashCullingMask(); // (2026-11-18) 지면·플레이어 제외 → 발밑 원형 빛 없음
             flashLight.enabled = false;
         }
+    }
+
+    /// <summary>섬광 조명이 비추는 레이어: 지면(Default·Ground)·물·플레이어·UI 빼고 전부 (건물·나무·차 = Occludable)</summary>
+    static int FlashCullingMask()
+    {
+        int mask = ~0;
+        foreach (var n in new[] { "Default", "Ground", "Water", "Player", "UI", "TransparentFX", "Ignore Raycast" })
+        {
+            int l = LayerMask.NameToLayer(n);
+            if (l >= 0) mask &= ~(1 << l);
+        }
+        return mask;
     }
 
     /// <summary>무기 모델 안에서 총구 불빛 찾기 (없으면 null)</summary>

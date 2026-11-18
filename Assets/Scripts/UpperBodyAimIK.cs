@@ -15,18 +15,31 @@ using UnityEngine.Animations.Rigging;
 ///  - 달리기: 가중치 70% (팔·어깨 흔들림 유지), 구르기·사망: 끔, 도끼 휘두르는 중: 끔 (내려찍기 몸통 비틀기가 공격 동작 자체라서)
 ///  - 뒤로 90° 넘게 꺾이는 경우: 루트(하체)가 PlayerController.AimAtMouse로 항상 마우스 쪽으로 돌기 때문에
 ///    상체가 각도 제한(±60/80°)에 걸리는 동안 하체가 따라 돌아서 자연스럽게 풀림
+///  (2026-11-18) 총 자세 3종과 맞춤 (WeaponHandAttacher):
+///   - 우클릭 조준·발사 중(PlayerController.IsGunAiming): 가슴 0.6 → 1.0 (몸통 전체가 커서 쪽), 머리 0.8. 전환 0.15초
+///   - 총 들고 달리기(IsGunSprinting): 전체 0.2 (몸통과 총이 같이 움직임)
+///   - 각도 제한: 가슴 ±60°, 머리 ±70°
 /// </summary>
 public class UpperBodyAimIK : MonoBehaviour
 {
     [Header("가중치 (Multi-Aim Constraint)")]
     [Range(0f, 1f)] public float spineWeight = 0.3f;
-    [Range(0f, 1f)] public float chestWeight = 0.5f;
+    // [Range(0f, 1f)] public float chestWeight = 0.5f; // (이전)
+    [Range(0f, 1f)] public float chestWeight = 0.6f;  // (2026-11-18) 평상시
     [Range(0f, 1f)] public float headWeight = 0.9f;
+    [Header("조준(우클릭·발사) 중 가중치 (2026-11-18)")]
+    [Range(0f, 1f)] public float aimChestWeight = 1f;
+    [Range(0f, 1f)] public float aimHeadWeight = 0.8f;
+    [Tooltip("조준 가중치 전환 시간(초)")]
+    public float aimBlendTime = 0.15f;
+    [Tooltip("총 들고 달릴 때 전체 가중치")]
+    [Range(0f, 1f)] public float gunSprintWeight = 0.2f;
 
     [Header("각도 제한 (±도)")]
     public float spineLimit = 60f;
     public float chestLimit = 60f;
-    public float headLimit = 80f;
+    // public float headLimit = 80f; // (이전)
+    public float headLimit = 70f; // (2026-11-18)
 
     [Header("부드럽게")]
     [Tooltip("조준 방향을 따라가는 시간 상수(초)")]
@@ -43,6 +56,8 @@ public class UpperBodyAimIK : MonoBehaviour
     Transform aimProxy;     // 실제 제약이 바라보는 점 (부드럽게 움직임)
     Vector3 smoothDir;      // 부드럽게 따라가는 수평 조준 방향
     bool built, failed;
+    MultiAimConstraint chestAim, headAim; // (2026-11-18) 조준 중 가중치 바꿈
+    float aimBlend;
 
     void Awake()
     {
@@ -125,6 +140,8 @@ public class UpperBodyAimIK : MonoBehaviour
         c.data.worldUpType = MultiAimConstraintData.WorldUpType.None;
         c.weight = weight;
         if (hb == HumanBodyBones.Head) headAimLocal = AxisVector(c.data.aimAxis);
+        if (hb == HumanBodyBones.Chest) chestAim = c;
+        if (hb == HumanBodyBones.Head) headAim = c;
         return true;
     }
 
@@ -176,7 +193,13 @@ public class UpperBodyAimIK : MonoBehaviour
         bool off = player != null && (player.IsRolling || player.IsDead || player.IsMeleeSwinging);
         float planar = rb != null ? new Vector2(rb.linearVelocity.x, rb.linearVelocity.z).magnitude : 0f;
         bool sprinting = locomotion != null && locomotion.IsSprinting && planar > 2f;
-        float target = off ? 0f : sprinting ? sprintWeight : 1f;
+        // float target = off ? 0f : sprinting ? sprintWeight : 1f; // (이전)
+        bool gunSprint = player != null && player.IsGunSprinting;
+        float target = off ? 0f : gunSprint ? gunSprintWeight : sprinting ? sprintWeight : 1f;
+        // 조준 중: 가슴·머리 가중치 (0.15초 전환)
+        aimBlend = Mathf.MoveTowards(aimBlend, player != null && player.IsGunAiming ? 1f : 0f, Time.deltaTime / Mathf.Max(0.01f, aimBlendTime));
+        if (chestAim != null) chestAim.weight = Mathf.Lerp(chestWeight, aimChestWeight, aimBlend);
+        if (headAim != null) headAim.weight = Mathf.Lerp(headWeight, aimHeadWeight, aimBlend);
         float speed = off ? 20f : 4f; // 끌 땐 즉시(구르기 시작), 켤 땐 부드럽게
         aimRig.weight = Mathf.MoveTowards(aimRig.weight, target, Time.deltaTime * speed);
     }

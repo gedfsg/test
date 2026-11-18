@@ -18,6 +18,8 @@ using UnityEngine;
 public static class OccludableMarker
 {
     const float MinPropHeight = 1.2f;
+    // 실내(BuildingInterior)가 없고 바닥 넓이가 이보다 큰 건물 = 땅까지 한 메시로 붙은 농장 등 → 통째로 반투명해지면 땅이 사라져 배경색이 보임 (2026-11-18 Play)
+    const float MaxPlainBuildingFootprint = 40f;
 
     static readonly string[] GroundWords =
     {
@@ -44,6 +46,7 @@ public static class OccludableMarker
         int buildings = 0, props = 0, objs = 0;
         var marked = new HashSet<GameObject>();
         var noCollider = new List<string>();
+        var skippedBig = new List<string>();
 
         // ── 건물: Buildings 아래 직계 자식 = 건물 하나 → 자식 전체 ──
         foreach (var root in scene.GetRootGameObjects())
@@ -52,6 +55,12 @@ public static class OccludableMarker
             foreach (Transform b in root.transform)
             {
                 if (IsExcluded(b)) continue;
+                if (b.GetComponentInChildren<BuildingInterior>(true) == null && Footprint(b) >= MaxPlainBuildingFootprint)
+                {
+                    foreach (var t in b.GetComponentsInChildren<Transform>(true)) if (t.gameObject.layer == layer) Set(t.gameObject, 0);
+                    skippedBig.Add(b.name);
+                    continue;
+                }
                 buildings++;
                 foreach (var t in b.GetComponentsInChildren<Transform>(true))
                 {
@@ -72,6 +81,7 @@ public static class OccludableMarker
             {
                 var go = r.gameObject;
                 if (marked.Contains(go)) continue;
+                if (Mathf.Max(r.bounds.size.x, r.bounds.size.z) >= MaxPlainBuildingFootprint) { if (go.layer == layer) Set(go, 0); continue; } // 땅째 붙은 큰 메시
                 if (go.layer != 0 && go.layer != layer) continue;
                 if (IsExcluded(go.transform) || IsGroundLike(r)) { if (go.layer == layer) Set(go, 0); continue; }
                 if (r.bounds.size.y < MinPropHeight) { if (go.layer == layer) Set(go, 0); continue; }
@@ -101,9 +111,17 @@ public static class OccludableMarker
 
         var sb = new StringBuilder();
         sb.AppendLine($"[Occludable] 레이어 {layer} - 건물 {buildings}채 / 큰 Prop {props}개 / 레이어 바뀐 오브젝트 {objs}개");
+        if (skippedBig.Count > 0) sb.AppendLine("  땅째 붙은 큰 건물(제외): " + string.Join(", ", skippedBig));
         if (noCollider.Count > 0)
             sb.AppendLine($"  콜라이더 없음(가려도 페이드 안 됨) {noCollider.Count}개: " + string.Join(", ", noCollider.GetRange(0, Mathf.Min(40, noCollider.Count))));
         Debug.Log(sb.ToString());
+    }
+
+    static float Footprint(Transform t)
+    {
+        bool any = false; Bounds b = default;
+        foreach (var r in t.GetComponentsInChildren<Renderer>(true)) { if (!any) { b = r.bounds; any = true; } else b.Encapsulate(r.bounds); }
+        return any ? Mathf.Max(b.size.x, b.size.z) : 0f;
     }
 
     static bool Set(GameObject go, int layer)

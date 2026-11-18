@@ -114,6 +114,10 @@ public class PlayerController : MonoBehaviour
 
     /// <summary>투척 궤적 조준 중 (핫바 휠 전환 막음)</summary>
     public bool IsThrowAiming => throwCtrl != null && throwCtrl.IsAiming;
+    /// <summary>(2026-11-18) 총을 든 상태 / 우클릭 조준·발사 중 / 총 들고 달리는 중 (RefreshIKAndAim이 매 프레임 갱신, UpperBodyAimIK가 읽음)</summary>
+    public bool IsGunHeld { get; private set; }
+    public bool IsGunAiming { get; private set; }
+    public bool IsGunSprinting { get; private set; }
 
     /// <summary>핫바에서 투척물(3번 칸)을 들고 있는지</summary>
     bool HoldingThrowable => WeaponHotbarUI.Instance != null && WeaponHotbarUI.Instance.GetActiveItem() is ThrowableData;
@@ -844,6 +848,11 @@ public class PlayerController : MonoBehaviour
             weaponHandAttacher.gripWeapon = gunHeld ? rangedWeapon.weaponData : null;
             float planarSpeed = rb != null ? new Vector2(rb.linearVelocity.x, rb.linearVelocity.z).magnitude : 0f;
             weaponHandAttacher.gripLowReady = gunHeld && locomotion != null && locomotion.IsSprinting && planarSpeed > 2f && !isFireButtonPressed;
+            // (2026-11-18) 우클릭 조준(AimZoom 홀드) 또는 발사 중 → 눈높이 견착. UpperBodyAimIK도 이 값으로 가슴·머리 가중치를 올림
+            IsGunHeld = gunHeld;
+            IsGunAiming = gunHeld && (MuzzleLight.IsAiming || isFireButtonPressed) && !weaponHandAttacher.gripLowReady;
+            IsGunSprinting = weaponHandAttacher.gripLowReady;
+            weaponHandAttacher.gripAiming = IsGunAiming;
         }
     }
 
