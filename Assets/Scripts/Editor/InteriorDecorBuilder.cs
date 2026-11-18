@@ -46,6 +46,7 @@ public static class InteriorDecorBuilder
         public bool decal;         // 바닥 데칼 (콜라이더·그림자 없음, 바닥 위 1.5cm)
         public bool noShadow;      // 그림자 안 드리움 (작은 소품)
         public bool meshCollider;  // 렌더 메시 그대로 MeshCollider (방 통째 모델: 교실 벽·책상)
+        public bool resetYaw;      // 팩 안에서 노드가 돌아가 있는 차(Proop3): 회전을 (270,0,0)으로 되돌려 길이축 = Z
         public Color tint;         // a>0이면 모든 재질을 이 색 Standard 재질로 교체 (텍스처 없는 흰 모델용: 교회 벤치·설교대)
     }
 
@@ -181,7 +182,7 @@ public static class InteriorDecorBuilder
         { "printer",       S(IA + "Police/90s_retro_office_pack.glb", "Printer Base.004_48", Fit.None, 1f, 0f, true) },
         { "cage",          S(IA + "Police/low-poly_prison_cage__free_game_asset.glb", null, Fit.Height, 2.6f, 0f, true, true) },
         { "waterCooler",   S(IA + "Police/water_cooler.glb", null, Fit.Height, 1.3f, 0f, true) },
-        { "policeCar",     S(IA + "Police/police_car_-_low_poly.glb", null, Fit.Length, 4.9f, 0f, true, true) },
+        { "policeCar",     S(IA + "Police/police_car_-_low_poly.glb", null, Fit.Length, 10.5f, 0f, true, true) },   // 맵 축척(기존 차 11.7m)에 맞춤
 
         // ── 학교 ──
         { "classroom",     new Spec { path = IA + "school/clasroom.fbx", fit = Fit.None, size = 1f, solid = false, meshCollider = true } }, // 벽·책상·칠판이 메시 1개인 교실 통째 → 메시 콜라이더
@@ -228,18 +229,39 @@ public static class InteriorDecorBuilder
         { "phoneBooth",    S(IA + "street/citypack.fbx", "Phone", Fit.Height, 2.1f, 0f, true) },
         { "trashBin",      S(IA + "street/citypack.fbx", "TrashBin", Fit.Height, 0.9f, 0f, true) },
         { "newsStand",     S(IA + "street/citypack.fbx", "NewspaperStand", Fit.Height, 1.4f, 0f, true) },
+        // Low Poly Cars Pack: Object_2~46 = 차 한 대씩 (차종 5 x 색), Object_47~ = 전시용 바닥판
+        { "carA",          S(IA + "street/low_poly_cars_pack.glb", "Object_2", Fit.Length, 4.2f, 0f, true, true) },
+        { "carB",          S(IA + "street/low_poly_cars_pack.glb", "Object_4", Fit.Length, 4.2f, 0f, true, true) },
+        { "carC",          S(IA + "street/low_poly_cars_pack.glb", "Object_9", Fit.Length, 3.8f, 0f, true, true) },
+        { "carD",          S(IA + "street/low_poly_cars_pack.glb", "Object_14", Fit.Length, 4.6f, 0f, true, true) },
+        { "carE",          S(IA + "street/low_poly_cars_pack.glb", "Object_20", Fit.Length, 4.4f, 0f, true, true) },
+        { "carF",          S(IA + "street/low_poly_cars_pack.glb", "Object_29", Fit.Length, 3.4f, 0f, true, true) },
+        { "carG",          S(IA + "street/low_poly_cars_pack.glb", "Object_30", Fit.Length, 2.0f, 0f, true, true) },
+        // 거리 차: 기존 씬 차(Proop3, 맵 축척 2.5배 = 길이 약 11.5m)와 같은 모델·크기 (Low Poly Cars Pack은 바퀴·유리가 전시판 메시에 합쳐져 있고 차체가 검게 나와 못 씀)
+        { "streetCar0",    new Spec { path = "Assets/Props/Cars/Proop3.fbx", node = "car 1", fit = Fit.Scale, size = 2.5f, resetYaw = true, obstacle = true } },
+        { "streetCar1",    new Spec { path = "Assets/Props/Cars/Proop3.fbx", node = "car 2", fit = Fit.Scale, size = 2.5f, resetYaw = true, obstacle = true } },
+        { "streetCar2",    new Spec { path = "Assets/Props/Cars/Proop3.fbx", node = "car 3", fit = Fit.Scale, size = 2.5f, resetYaw = true, obstacle = true } },
+        { "streetCar3",    new Spec { path = "Assets/Props/Cars/Proop3.fbx", node = "car 1.RC", fit = Fit.Scale, size = 2.5f, resetYaw = true, obstacle = true } },
+        { "streetCar4",    new Spec { path = "Assets/Props/Cars/Proop3.fbx", node = "car 2.RC", fit = Fit.Scale, size = 2.5f, resetYaw = true, obstacle = true } },
+        { "streetCar5",    new Spec { path = "Assets/Props/Cars/Proop3.fbx", node = "car 1,/2", fit = Fit.Scale, size = 2.5f, resetYaw = true, obstacle = true } },
+        { "streetCar6",    new Spec { path = "Assets/Props/Cars/Proop3.fbx", node = "car 2./2", fit = Fit.Scale, size = 2.5f, resetYaw = true, obstacle = true } },
+        { "streetCar7",    new Spec { path = "Assets/Props/Cars/Proop3.fbx", node = "car ./", fit = Fit.Scale, size = 2.5f, resetYaw = true, obstacle = true } },
+        { "trafficLight",  S(IA + "street/citypack.fbx", "Traffic Light2", Fit.Height, 7.0f, 0f, true) },
+        { "antenna",       new Spec { path = KF + "televisionAntenna.fbx", fit = Fit.Height, size = 4.0f, solid = false } },
         { "biohazard",     S(IA + "street/street_signs__stoplight.glb", "Biohazard Sign_0", Fit.Height, 2.1f, 0f, false) },
     };
 
     // ───────────────────────── 배치 핵심 ─────────────────────────
 
     /// <summary>이 툴이 만들고 다시 실행 시 지우는 구역 그룹 이름</summary>
-    static readonly string[] GroupNames = { "Living", "Bedroom", "Kitchen", "Bathroom", "Clutter", "Lights", "Nave", "Altar", "Ward", "Reception", "Corridor", "Office", "Cells", "Armory", "Aisles", "Checkout", "Storage", "Classroom", "Staffroom", "Hallway", "Exterior", "Partitions" };
+    static readonly string[] GroupNames = { "Living", "Bedroom", "Kitchen", "Bathroom", "Clutter", "Lights", "Nave", "Altar", "Ward", "Reception", "Corridor", "Office", "Cells", "Armory", "Aisles", "Checkout", "Storage", "Classroom", "Staffroom", "Hallway", "Exterior", "Partitions", "Cars", "CityProps", "Ruins", "MissionProps", "GasStation" };
 
     /// <summary>씬 루트의 Building_Interior_[name] (없으면 생성)</summary>
-    public static Transform Root(string name)
+    public static Transform Root(string name) => RootFull("Building_Interior_" + name);
+
+    /// <summary>씬 루트의 이름 그대로 (없으면 생성)</summary>
+    public static Transform RootFull(string full)
     {
-        string full = "Building_Interior_" + name;
         var scene = EditorSceneManager.GetActiveScene();
         foreach (var g in scene.GetRootGameObjects()) if (g.name == full) return g.transform;
         var go = new GameObject(full);
@@ -269,7 +291,9 @@ public static class InteriorDecorBuilder
 
     static Transform FindNode(Transform root, string path)
     {
-        // 경로 끝부분 일치 ("a/b" → .../a/b), 이름 정확히 일치를 먼저
+        // 이름에 '/'가 들어간 노드(Proop3 "car 1,/2")가 있어서 전체 이름 정확히 일치를 먼저, 그다음 경로 끝부분 일치 ("a/b" → .../a/b)
+        foreach (var t in root.GetComponentsInChildren<Transform>(true))
+            if (t.name == path) return t;
         string[] parts = path.Split('/');
         string last = parts[parts.Length - 1];
         foreach (var t in root.GetComponentsInChildren<Transform>(true))
@@ -356,6 +380,7 @@ public static class InteriorDecorBuilder
 
         var wrapper = new GameObject(name ?? key);
         content.transform.SetParent(wrapper.transform, true);
+        if (s.resetYaw) content.transform.rotation = Quaternion.Euler(270f, 0f, 0f);   // Proop3 차: 메시 Y(길이) → 월드 Z, 메시 Z(위) → 월드 Y
         if (s.baseEuler != Vector3.zero)
             content.transform.rotation = Quaternion.Euler(s.baseEuler) * content.transform.rotation;
 
@@ -507,7 +532,9 @@ public static class InteriorDecorBuilder
         sessionWalls = MakeTempWalls();
         foreach (var mf in Object.FindObjectsByType<MeshFilter>(FindObjectsSortMode.None))
         {
-            if (!mf.name.StartsWith("Zone_") || mf.sharedMesh == null || mf.GetComponent<Collider>() != null) continue;
+            // 장식 바닥판(Zone_*) + 콜라이더 없는 주유소 모델(사용자가 놓은 low_poly_gas_station: 벽 찾기·겹침 검사용)
+            bool gas = mf.transform.root.name == "low_poly_gas_station";
+            if ((!mf.name.StartsWith("Zone_") && !gas) || mf.sharedMesh == null || mf.GetComponent<Collider>() != null) continue;
             var mc = mf.gameObject.AddComponent<MeshCollider>();
             mc.sharedMesh = mf.sharedMesh;
             sessionPlates.Add(mc);
@@ -647,7 +674,7 @@ public static class InteriorDecorBuilder
         {
             var w = W(x, z);
             float fy = FloorAt(w.x, w.z, floorGuess);
-            if (!WallHit(new Vector3(w.x, fy + probeY, w.z), Dir(dir), 8f, out var p, out var n)) { Debug.LogWarning($"[Interior] 벽을 못 찾음: {key} @ ({x},{z}) {dir}"); return null; }
+            if (!WallHit(new Vector3(w.x, fy + probeY, w.z), Dir(dir), 25f, out var p, out var n)) { Debug.LogWarning($"[Interior] 벽을 못 찾음: {key} @ ({x},{z}) {dir}"); return null; }
             n.y = 0; n.Normalize();
             float yaw = Mathf.Atan2(n.x, n.z) * Mathf.Rad2Deg;
             var g = Group(root, group);
@@ -1323,4 +1350,408 @@ public static class InteriorDecorBuilder
         c.Light("Lights", 13f, -314f, 3.4f);
         c.Light("Lights", -9f, -325f, 3.0f);
     });
+
+    // ───────────────────────── 8. 거리 / 차량 / 폐허 / 미션 소품 / 주유소 ─────────────────────────
+    // 씬 루트 "Street_Decor" 아래 그룹(Cars, CityProps, Ruins, MissionProps, GasStation). 고정 시드라 다시 실행해도 같은 배치.
+    // 축척: 이 맵은 도로 폭 38m, 기존 차(Proop3) 길이 11.7m인 약 2.5배 축척 → 차·신호등·방벽은 맵 축척, 사람 손 소품(시신·제리캔)은 실제 크기
+    // 길가 배치 기준: Kenney 도로 조각(로컬 X = 도로 방향), 차선(주차) = 중심에서 ±11m, 인도 = ±14m
+    // 이미 씬에 있는 것은 새로 안 만듦: 가로등 183개(light-square, StreetLightManager가 관리), 기존 차 70대, 런타임 장식(WorldFX 차 불,
+    // WorldFallenProps 쓰러진 가로등·쓰레기통, WorldDecals 도로 균열·핏자국)
+
+
+    static readonly string[] CarNodes = { "car 1", "car 2", "car 3", "car 1.RC", "car 2.RC", "car 1,/2", "car 2./2", "car ./" };
+
+    [MenuItem("Tools/Interior/Build 8. Street (거리·차량·미션 소품·주유소)")]
+    public static void BuildStreet()
+    {
+        if (EditorApplication.isPlaying) { Debug.LogWarning("[Interior] Play 모드에서는 실행 불가"); return; }
+        BeginSession();
+        var log = new System.Text.StringBuilder();
+        try
+        {
+            var root = RootFull("Street_Decor");   // 건물 실내(Building_Interior_*)와 구분되는 거리 장식 루트
+            ClearGenerated(root);
+            Physics.SyncTransforms();
+            var c = new Ctx { root = root, floorGuess = 15.0f, frameYaw = 0f, frameCenter = Vector3.zero };
+            var rng = new System.Random(20261119);
+            var roads = RoadPieces();
+            var doors = AllDoors();
+
+            int cars = StreetCars(c, rng, roads, doors, log);
+            int props = CityProps(c, rng, roads, doors, log);
+            int ruins = Ruins(c, rng, roads, doors, log);
+            MissionProps(c, log);
+            GasStation(c, log);
+            log.Insert(0, $"[Interior] Street: 차 {cars}대, 도시 소품 {props}개, 폐허 {ruins}개, 전체 {c.count}개\n");
+        }
+        finally { EndSession(); }
+        Debug.Log(log.ToString());
+        EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+    }
+
+    struct RoadPiece { public Vector3 c; public Vector3 along; public Vector3 side; public string kind; }
+
+    /// <summary>씬 Roads 아래 Kenney 도로 조각 (직선·횡단보도 = 차/소품 자리, 교차로 = 신호등 자리). 다리·경사 조각은 제외</summary>
+    static List<RoadPiece> RoadPieces()
+    {
+        var list = new List<RoadPiece>();
+        var roads = GameObject.Find("Roads");
+        if (roads == null) return list;
+        foreach (Transform t in roads.transform)
+        {
+            string n = t.name;
+            string kind = n.StartsWith("road-straight") ? "straight" : n.StartsWith("road-crossing") ? "crossing" : (n.StartsWith("road-intersection") || n.StartsWith("road-crossroad")) ? "intersection" : null;
+            if (kind == null || !WorldBounds(t.gameObject, out var b) || b.size.y > 1.5f) continue; // 경사/다리(높이 있음) 제외
+            var along = t.rotation * Vector3.right; along.y = 0; along.Normalize();
+            list.Add(new RoadPiece { c = new Vector3(b.center.x, b.max.y, b.center.z), along = along, side = Vector3.Cross(Vector3.up, along), kind = kind });
+        }
+        list.Sort((a, b2) => (a.c.x * 1000 + a.c.z).CompareTo(b2.c.x * 1000 + b2.c.z)); // 순서 고정 (시드 재현)
+        return list;
+    }
+
+    /// <summary>모든 건물 문 위치 (문 앞은 비워둠)</summary>
+    static List<Vector3> AllDoors()
+    {
+        var l = new List<Vector3>();
+        foreach (var b in Object.FindObjectsByType<BuildingInterior>(FindObjectsSortMode.None))
+            if (b.TryGetDoor(out var d, out _)) l.Add(d);
+        return l;
+    }
+
+    static bool NearAny(Vector3 p, List<Vector3> pts, float r)
+    {
+        foreach (var q in pts) if (new Vector2(p.x - q.x, p.z - q.z).sqrMagnitude < r * r) return true;
+        return false;
+    }
+
+    /// <summary>이 오브젝트 콜라이더가 도로·지면 말고 다른 것(건물, 기존 차, 가로등, 앞서 놓은 소품)과 겹치는지</summary>
+    static bool Blocked(GameObject go)
+    {
+        Physics.SyncTransforms();
+        var bc = go.GetComponent<BoxCollider>();
+        Vector3 c; Vector3 half; Quaternion rot;
+        if (bc != null) { c = go.transform.TransformPoint(bc.center); half = Vector3.Scale(bc.size * 0.5f, go.transform.lossyScale); rot = go.transform.rotation; }
+        else { if (!WorldBounds(go, out var wb)) return false; c = wb.center; half = wb.extents; rot = Quaternion.identity; }
+        half = new Vector3(Mathf.Abs(half.x), Mathf.Abs(half.y) * 0.8f, Mathf.Abs(half.z));
+        foreach (var col in Physics.OverlapBox(c + Vector3.up * half.y * 0.2f, half, rot, ~0, QueryTriggerInteraction.Ignore))
+        {
+            if (col.transform.IsChildOf(go.transform) || col is TerrainCollider || sessionPlates.Contains(col as MeshCollider)) continue;
+            string n = col.name.ToLower();
+            if (n.StartsWith("road") || n.StartsWith("ground") || n.Contains("asphalt") || n.Contains("walking")) continue;
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>놓고 겹치면 along 방향으로 조금씩 옮겨 다시 시도, 끝내 겹치면 지움</summary>
+    static GameObject PlaceFree(Ctx c, string group, string key, Vector3 pos, float yaw, Vector3 along, Vector3 tilt = default, float scaleMul = 1f)
+    {
+        float[] shifts = { 0f, 6f, -6f, 12f, -12f };
+        foreach (var s in shifts)
+        {
+            var p = pos + along * s;
+            var go = Place(Group(c.root, group), key, new Vector3(p.x, FloorAt(p.x, p.z, pos.y), p.z), yaw, tilt, scaleMul);
+            if (go == null) return null;
+            if (!Blocked(go)) { c.count++; return go; }
+            Object.DestroyImmediate(go);
+        }
+        return null;
+    }
+
+    static void Tint(GameObject go, Color col)
+    {
+        var tm = TintMaterial(col);
+        foreach (var r in go.GetComponentsInChildren<Renderer>())
+        {
+            var arr = r.sharedMaterials;
+            for (int i = 0; i < arr.Length; i++) arr[i] = tm;
+            r.sharedMaterials = arr;
+        }
+    }
+
+    // ── 차량: 정상 40% / 녹슴·파손 40% / 연기·불 20%, 뒤집힌 차 3, 도로 가운데 사고 2쌍 ──
+    static int StreetCars(Ctx c, System.Random rng, List<RoadPiece> roads, List<Vector3> doors, System.Text.StringBuilder log)
+    {
+        var existing = new List<Vector3>();
+        var proop = GameObject.Find("Proop3");
+        if (proop != null) foreach (Transform t in proop.transform) existing.Add(t.position);
+        var cand = roads.FindAll(r => r.kind == "straight" || r.kind == "crossing");
+        int placed = 0, target = 18;
+        var used = new List<Vector3>();
+        for (int guard = 0; placed < target && guard < 200 && cand.Count > 0; guard++)
+        {
+            var r = cand[rng.Next(cand.Count)];
+            float sideSign = rng.Next(2) == 0 ? -1f : 1f;
+            bool accident = placed < 4 && placed % 2 == 0 && guard % 3 == 0;   // 사고 쌍은 도로 가운데
+            Vector3 pos = r.c + r.side * (accident ? rng.Range(-2f, 2f) : 11f * sideSign) + r.along * rng.Range(-12f, 12f);
+            if (NearAny(pos, existing, 10f) || NearAny(pos, used, 14f) || NearAny(pos, doors, 18f)) continue;
+            float yaw = Mathf.Atan2(r.along.x, r.along.z) * Mathf.Rad2Deg + (rng.Next(2) == 0 ? 0f : 180f); // 차 길이축 = 래퍼 Z (resetYaw)
+            int state = placed % 5;    // 0,1 정상 / 2,3 녹슴·파손 / 4 연기·불
+            bool flipped = placed == 5 || placed == 11 || placed == 16;
+            Vector3 tilt = flipped ? new Vector3(0, 0, placed == 11 ? 92f : 180f) : default;
+            if (accident) yaw += rng.Range(25f, 50f) * (rng.Next(2) == 0 ? 1 : -1);
+            var key = "streetCar" + rng.Next(CarNodes.Length);
+            var car = PlaceFree(c, "Cars", key, pos, yaw, r.along, tilt);
+            if (car == null) continue;
+            used.Add(car.transform.position);
+            placed++;
+            if (state == 2 || state == 3 || flipped) Tint(car, state == 2 ? new Color(0.42f, 0.27f, 0.17f) : new Color(0.30f, 0.29f, 0.27f)); // 녹슨 / 그을린 파손
+            if (state == 4)
+            {
+                Tint(car, new Color(0.13f, 0.12f, 0.11f));                                   // 불탄 차체
+                WorldBounds(car, out var cb);
+                var hood = cb.center + Vector3.up * cb.extents.y * 0.9f + (Quaternion.Euler(0, yaw, 0) * Vector3.right) * cb.extents.magnitude * 0.25f;
+                AddSmoke(car.transform, hood);
+                if (placed % 2 == 0) AddFire(car.transform, hood);
+            }
+            if (accident)
+            {
+                // 부딪친 두 번째 차: 첫 차 옆으로 비스듬히
+                var p2 = car.transform.position + r.along * 9f + r.side * 3f;
+                var car2 = PlaceFree(c, "Cars", "streetCar" + rng.Next(CarNodes.Length), p2, yaw + 75f, r.along);
+                if (car2 != null) { Tint(car2, new Color(0.30f, 0.29f, 0.27f)); AddSmoke(car2.transform, car2.transform.position + Vector3.up * 3f); used.Add(car2.transform.position); placed++; }
+            }
+        }
+        return placed;
+    }
+
+    static Material FxMaterial(string name, string shader)
+    {
+        const string dir = "Assets/Materials/Interior";
+        if (!AssetDatabase.IsValidFolder(dir)) AssetDatabase.CreateFolder("Assets/Materials", "Interior");
+        string path = $"{dir}/{name}.mat";
+        var m = AssetDatabase.LoadAssetAtPath<Material>(path);
+        if (m != null) return m;
+        m = new Material(Shader.Find(shader));
+        m.mainTexture = AssetDatabase.GetBuiltinExtraResource<Texture2D>("Default-Particle.psd");
+        AssetDatabase.CreateAsset(m, path);
+        return m;
+    }
+
+    /// <summary>연기: 회색, 위로, rate 5, lifetime 3s (보닛에서 피어오름)</summary>
+    static void AddSmoke(Transform parent, Vector3 pos)
+    {
+        var go = new GameObject("Smoke");
+        go.transform.SetParent(parent, true);
+        go.transform.position = pos;
+        go.transform.rotation = Quaternion.Euler(-90f, 0f, 0f);
+        var ps = go.AddComponent<ParticleSystem>();
+        var main = ps.main;
+        main.startLifetime = 3f; main.startSpeed = 2.0f; main.startSize = new ParticleSystem.MinMaxCurve(1.5f, 3.0f);
+        main.startColor = new Color(0.35f, 0.35f, 0.35f, 0.55f); main.maxParticles = 40; main.simulationSpace = ParticleSystemSimulationSpace.World;
+        var em = ps.emission; em.rateOverTime = 5f;
+        var sh = ps.shape; sh.shapeType = ParticleSystemShapeType.Cone; sh.angle = 12f; sh.radius = 0.6f;
+        var sz = ps.sizeOverLifetime; sz.enabled = true; sz.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.Linear(0, 0.6f, 1, 1.8f));
+        var col = ps.colorOverLifetime; col.enabled = true;
+        var g = new Gradient(); g.SetKeys(new[] { new GradientColorKey(Color.white, 0), new GradientColorKey(Color.white, 1) }, new[] { new GradientAlphaKey(0.8f, 0), new GradientAlphaKey(0f, 1) });
+        col.color = g;
+        go.GetComponent<ParticleSystemRenderer>().sharedMaterial = FxMaterial("FX_Smoke", "Legacy Shaders/Particles/Alpha Blended");
+    }
+
+    /// <summary>불: 주황 파티클 + Point Light (intensity 2, range 3m)</summary>
+    static void AddFire(Transform parent, Vector3 pos)
+    {
+        var go = new GameObject("Fire");
+        go.transform.SetParent(parent, true);
+        go.transform.position = pos;
+        go.transform.rotation = Quaternion.Euler(-90f, 0f, 0f);
+        var ps = go.AddComponent<ParticleSystem>();
+        var main = ps.main;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(0.5f, 1.0f); main.startSpeed = 1.5f; main.startSize = new ParticleSystem.MinMaxCurve(0.8f, 1.6f);
+        main.startColor = new Color(1f, 0.55f, 0.15f, 0.9f); main.maxParticles = 60;
+        var em = ps.emission; em.rateOverTime = 25f;
+        var sh = ps.shape; sh.shapeType = ParticleSystemShapeType.Cone; sh.angle = 8f; sh.radius = 0.7f;
+        var col = ps.colorOverLifetime; col.enabled = true;
+        var g = new Gradient(); g.SetKeys(new[] { new GradientColorKey(new Color(1f, 0.8f, 0.3f), 0), new GradientColorKey(new Color(0.8f, 0.2f, 0.05f), 1) }, new[] { new GradientAlphaKey(1f, 0), new GradientAlphaKey(0f, 1) });
+        col.color = g;
+        go.GetComponent<ParticleSystemRenderer>().sharedMaterial = FxMaterial("FX_Fire", "Legacy Shaders/Particles/Additive");
+        var lgo = new GameObject("FireLight");
+        lgo.transform.SetParent(go.transform, false);
+        lgo.transform.localPosition = new Vector3(0, 0, 0.8f);
+        var l = lgo.AddComponent<Light>();
+        l.type = LightType.Point; l.color = new Color(1f, 0.55f, 0.2f); l.intensity = 2f; l.range = 3f; l.shadows = LightShadows.None;
+    }
+
+    // ── 도시 소품: 인도(±14m)에 벤치·쓰레기통·공중전화·소화전·우체통, 교차로 신호등, 공사 콘·바리케이드로 도로 일부 막기, 콘크리트 방벽 3세트 ──
+    static int CityProps(Ctx c, System.Random rng, List<RoadPiece> roads, List<Vector3> doors, System.Text.StringBuilder log)
+    {
+        int n = 0;
+        string[] cycle = { "cityBench", "trashBin", "hydrant", "phoneBooth", "mailbox", "newsStand", "dumpster" };
+        int k = 0;
+        var straights = roads.FindAll(r => r.kind == "straight");
+        for (int i = 0; i < straights.Count; i += 2)
+        {
+            var r = straights[i];
+            float s = (i / 2) % 2 == 0 ? 1f : -1f;
+            var pos = r.c + r.side * (14.2f * s) + r.along * rng.Range(-10f, 10f);
+            if (NearAny(pos, doors, 8f)) continue;
+            float yaw = Mathf.Atan2(-r.side.x * s, -r.side.z * s) * Mathf.Rad2Deg;   // 도로 쪽을 봄
+            if (PlaceFree(c, "CityProps", cycle[k % cycle.Length], pos, yaw, r.along, default, 1.6f) != null) { n++; k++; }
+        }
+        // 신호등: 교차로마다 한쪽 모서리
+        foreach (var r in roads.FindAll(x => x.kind == "intersection"))
+        {
+            var corner = r.c + r.side * 15.5f + r.along * 15.5f;
+            float yaw = Mathf.Atan2(r.c.x - corner.x, r.c.z - corner.z) * Mathf.Rad2Deg;
+            if (PlaceFree(c, "CityProps", "trafficLight", corner, yaw, r.side) != null) n++;
+        }
+        // 공사 구간 2곳: 도로 한쪽 차선을 콘·바리케이드·작업등으로 막음 (좀비가 다른 차선으로 몰리게)
+        foreach (var target in new[] { new Vector3(-61f, 15f, -278f), new Vector3(-149f, 15f, -281f) })
+        {
+            var r = Nearest(straights, target);
+            for (int i = -2; i <= 2; i++)
+            {
+                var p = r.c + r.side * 6f + r.along * (i * 4f);
+                string key = i == 0 ? "cTrafficLight" : (i % 2 == 0 ? "cBarrier" : "cBarrel");
+                if (PlaceFree(c, "CityProps", key, p, Mathf.Atan2(r.along.x, r.along.z) * Mathf.Rad2Deg, r.along, default, 2.2f) != null) n++;
+            }
+            if (PlaceFree(c, "CityProps", "cSign", r.c + r.side * 10f + r.along * -11f, 0f, r.along, default, 2.2f) != null) n++;
+        }
+        // 콘크리트 방벽 3세트 (중요 길목: 경찰서 앞 도로 북쪽, 병원 앞 도로, 다리 남쪽 끝) — 가운데는 사람 한 명 지나갈 틈
+        foreach (var target in new[] { new Vector3(-145f, 15f, -80f), new Vector3(-250f, 15f, -163f), new Vector3(-8f, 15f, 64f) })
+        {
+            var r = Nearest(roads, target);
+            float yaw = Mathf.Atan2(r.side.x, r.side.z) * Mathf.Rad2Deg + 90f;   // 길이 방향 = 도로를 가로지름
+            foreach (var off in new[] { -9f, -4.5f, 4.5f, 9f })
+                if (PlaceFree(c, "CityProps", rng.Next(2) == 0 ? "jersey" : "jerseyCaution", r.c + r.side * off, yaw + rng.Range(-8f, 8f), r.along, default, 2.0f) != null) n++;
+        }
+        return n;
+    }
+
+    static RoadPiece Nearest(List<RoadPiece> list, Vector3 p)
+    {
+        RoadPiece best = default; float bd = float.MaxValue;
+        foreach (var r in list) { float d = (r.c - p).sqrMagnitude; if (d < bd) { bd = d; best = r; } }
+        return best;
+    }
+
+    // ── 폐허: 건물 외벽 덩굴 25, 기둥 잔해 8, 덮인 시신 6, 거리 핏자국 12, 판자·박스 더미 6 ──
+    static int Ruins(Ctx c, System.Random rng, List<RoadPiece> roads, List<Vector3> doors, System.Text.StringBuilder log)
+    {
+        int n = 0;
+        var blds = new List<BuildingInterior>(Object.FindObjectsByType<BuildingInterior>(FindObjectsSortMode.None));
+        blds.Sort((a, b) => string.CompareOrdinal(a.name, b.name));
+        int vines = 0;
+        for (int guard = 0; vines < 25 && guard < 120 && blds.Count > 0; guard++)
+        {
+            var b = blds[rng.Next(blds.Count)];
+            var tc = b.GetComponent<Collider>();
+            if (tc == null) continue;
+            var bb = tc.bounds;
+            Vector3[] dirs = { Vector3.forward, Vector3.back, Vector3.left, Vector3.right };
+            var d = dirs[rng.Next(4)];
+            float ext = Mathf.Abs(Vector3.Dot(bb.extents, new Vector3(Mathf.Abs(d.x), 0, Mathf.Abs(d.z))));
+            var lat = Vector3.Cross(Vector3.up, d) * rng.Range(-0.35f, 0.35f) * (Mathf.Abs(d.x) > 0 ? bb.size.z : bb.size.x);
+            var from = new Vector3(bb.center.x, 0, bb.center.z) + d * (ext + 6f) + lat;
+            float fy = FloorAt(from.x, from.z, 15f);
+            from.y = fy + 1.5f;
+            if (!WallHit(from, -d, 12f, out var hp, out var hn)) continue;
+            if (!hits_building(hp, b) || NearAny(hp, doors, 5f)) continue;
+            hn.y = 0; hn.Normalize();
+            var go = Place(Group(c.root, "Ruins"), rng.Next(3) == 0 ? "vines" : "wallVine", new Vector3(hp.x + hn.x * 0.05f, fy, hp.z + hn.z * 0.05f), Mathf.Atan2(hn.x, hn.z) * Mathf.Rad2Deg, default, rng.Range(0.9f, 1.4f), "wallVine@wall");
+            if (go == null) continue;
+            WorldBounds(go, out var vb);
+            go.transform.position += hn * (Mathf.Abs(vb.extents.x * hn.x) + Mathf.Abs(vb.extents.z * hn.z));
+            c.count++; vines++; n++;
+        }
+        // 길가 잔해·시신·핏자국·더미
+        var straights = roads.FindAll(r => r.kind == "straight" || r.kind == "crossing");
+        for (int i = 0; i < 8; i++)
+        {
+            var r = straights[rng.Next(straights.Count)];
+            var p = r.c + r.side * (rng.Next(2) == 0 ? 15.5f : -15.5f) + r.along * rng.Range(-14f, 14f);
+            if (PlaceFree(c, "Ruins", "pillarDebris", p, rng.Range(0f, 360f), r.along, default, 1.8f) != null) n++;
+        }
+        // 덮인 시신: 경찰서 앞 2, 병원 안뜰 2, 거리 2
+        var bodies = new List<Vector3> { new Vector3(-115.5f, 15f, -129f), new Vector3(-116f, 15f, -139.5f), new Vector3(-318f, 15f, 12f), new Vector3(-322f, 15f, 24f) };
+        for (int i = 0; i < 2; i++) { var r = straights[rng.Next(straights.Count)]; bodies.Add(r.c + r.side * rng.Range(-7f, 7f) + r.along * rng.Range(-10f, 10f)); }
+        foreach (var p in bodies) if (PlaceFree(c, "Ruins", "deadBody", p, rng.Range(0f, 360f), Vector3.right) != null) n++;
+        for (int i = 0; i < 12; i++)
+        {
+            var r = straights[rng.Next(straights.Count)];
+            var p = r.c + r.side * rng.Range(-9f, 9f) + r.along * rng.Range(-14f, 14f);
+            if (NearAny(p, doors, 4f)) continue;
+            var go = Place(Group(c.root, "Ruins"), rng.Next(2) == 0 ? "blood" : "blood2", new Vector3(p.x, FloorAt(p.x, p.z, 15f), p.z), rng.Range(0f, 360f), default, rng.Range(1.2f, 2.0f));
+            if (go != null) { c.count++; n++; }
+        }
+        for (int i = 0; i < 6; i++)
+        {
+            var r = straights[rng.Next(straights.Count)];
+            var p = r.c + r.side * (rng.Next(2) == 0 ? 13f : -13f) + r.along * rng.Range(-12f, 12f);
+            var pl = PlaceFree(c, "Ruins", "planks", p, rng.Range(0f, 360f), r.along, default, 1.6f);
+            if (pl == null) continue;
+            n++;
+            var bx = PlaceFree(c, "Ruins", rng.Next(2) == 0 ? "boxOpen" : "box", p + r.along * 1.4f, rng.Range(0f, 360f), r.along, default, 1.3f);
+            if (bx != null) n++;
+        }
+        return n;
+    }
+
+    static bool hits_building(Vector3 p, BuildingInterior b)
+    {
+        // 맞은 점이 이 건물 트리거 근처(바운드 + 3m)인지 → 옆 건물·나무에 붙는 것 방지
+        var bb = b.GetComponent<Collider>().bounds; bb.Expand(6f);
+        return bb.Contains(new Vector3(p.x, bb.center.y, p.z));
+    }
+
+    // ── 미션 소품 (보이는 모형만 — 실제 미션 판정은 MissionManager가 그날 위치에 따로 만듦) ──
+    static void MissionProps(Ctx c, System.Text.StringBuilder log)
+    {
+        // 발전기: 창고 동쪽 바깥 (전력 복구 미션 분위기)
+        var gen = Place(Group(c.root, "MissionProps"), "generator", new Vector3(22.8f, FloorAt(22.8f, -316f, 15f), -316f), 88f, default, 2.0f);
+        if (gen != null) { c.count++; if (Blocked(gen)) { gen.transform.position += Vector3.right * 2f; } }
+        c.P("MissionProps", "jerrycan", 21.0f, -313.8f, 30f, default, 1.4f);
+        // 도어락 패널: 경찰서 입구 옆 벽(바깥), 병원 정문 옆 벽(안뜰 쪽) / 카드: 경찰서 접수 책상 옆 바닥
+        c.OnWall("MissionProps", "doorPanel", -114f, -127.4f, "E", 1f, 1.3f, null, 1.3f);
+        c.OnWall("MissionProps", "doorPanel", -309f, 24.6f, "E", 1f, 1.3f, null, 1.3f);
+        c.P("MissionProps", "keyCard", -100.2f, -129.4f, 25f);
+        // 라디오 송신기 역할: 경찰서 옥상에 TV 안테나(크게) + 무전기
+        float roofY = RoofAt(-100f, -138f);
+        if (roofY > 20f)
+        {
+            var ant = Place(Group(c.root, "MissionProps"), "antenna", new Vector3(-100f, roofY, -138f), 0f, default, 1f, "antenna@top");
+            if (ant != null) c.count++;
+            var rad = Place(Group(c.root, "MissionProps"), "radio", new Vector3(-98.2f, roofY, -138f), 270f, default, 4f, "radio@top");
+            if (rad != null) c.count++;
+        }
+        else log.AppendLine("  - 경찰서 옥상 높이를 못 찾아 송신기 생략");
+    }
+
+    static float RoofAt(float x, float z)
+    {
+        bool prev = Physics.queriesHitBackfaces;
+        try
+        {
+            Physics.queriesHitBackfaces = false;
+            if (Physics.Raycast(new Vector3(x, 150f, z), Vector3.down, out var h, 150f, ~0, QueryTriggerInteraction.Ignore)) return h.point.y;
+        }
+        finally { Physics.queriesHitBackfaces = prev; }
+        return 0f;
+    }
+
+    // ── 주유소 (사용자가 놓은 low_poly_gas_station, 앞마당 = 북쪽 도로 z≈-202 쪽) ──
+    static void GasStation(Ctx c, System.Text.StringBuilder log)
+    {
+        var gs = GameObject.Find("low_poly_gas_station");
+        if (gs == null) { log.AppendLine("  - 주유소 없음"); return; }
+        // 앞마당 주유기 3 (캐노피 앞 한 줄)
+        foreach (var x in new[] { -114.5f, -108.5f, -102.5f })
+            c.P("GasStation", "gasPump", x, -236.5f, 180f, default, 1.7f);
+        // 제리캔 5 (바닥에 흩어짐)
+        float[,] jp = { { -117f, -233.5f }, { -111.2f, -239.5f }, { -105.5f, -232.8f }, { -99.0f, -240.2f }, { -96.5f, -235.0f } };
+        for (int i = 0; i < 5; i++) c.P("GasStation", "jerrycan", jp[i, 0], jp[i, 1], i * 63f, i == 3 ? new Vector3(90, 0, 0) : default, 1.4f);
+        // 입구 콘크리트 방벽 2 (방어 흔적, 앞마당과 도로 사이)
+        c.P("GasStation", "jersey", -121.0f, -229.8f, 12f, default, 2.0f);
+        c.P("GasStation", "jerseyCaution", -95.5f, -230.4f, -14f, default, 2.0f);
+        // 앞 도로: 뒤집힌 차 1 + 사고 차 1
+        var flipped = Place(Group(c.root, "GasStation"), "streetCar2", new Vector3(-111f, FloorAt(-111f, -205f, 15f), -205f), 8f, new Vector3(0, 0, 180f));
+        if (flipped != null) { c.count++; Tint(flipped, new Color(0.30f, 0.29f, 0.27f)); AddSmoke(flipped.transform, flipped.transform.position + Vector3.up * 2.5f); }
+        var crash = Place(Group(c.root, "GasStation"), "streetCar0", new Vector3(-97f, FloorAt(-97f, -199f, 15f), -199f), 128f);
+        if (crash != null) { c.count++; Tint(crash, new Color(0.42f, 0.27f, 0.17f)); }
+        // 핏자국 1, 외벽 덩굴 3
+        c.P("GasStation", "blood", -107.0f, -242.0f, 35f, default, 1.5f);
+        c.OnWall("GasStation", "wallVine", -126f, -268f, "E", 1.2f);   // 가게 서쪽 벽 (가게 = z -273~-263)
+        c.OnWall("GasStation", "wallVine", -82f, -268f, "W", 1.2f);    // 가게 동쪽 벽
+        c.OnWall("GasStation", "vines", -108f, -279f, "N", 1.3f);      // 가게 뒷벽
+    }
 }
