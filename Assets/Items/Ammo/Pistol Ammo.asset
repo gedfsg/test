@@ -15,6 +15,8 @@ MonoBehaviour:
   itemName: Pistol Ammo
   icon: {fileID: 0}
   itemType: 4
+  rarity: 0
+  worldModel: {fileID: 3498218497430617236, guid: cf2708a7f37c3c7479e87ac6e892a130, type: 3}
   isStackable: 1
   maxStackSize: 5
   weaponType: 1

@@ -6,8 +6,8 @@ Shader "Custom/RarityOutline"
 {
     Properties
     {
-        _Color ("Color", Color) = (1, 1, 1, 0.45)
-        _Width ("Width (screen)", Float) = 0.004
+        [HDR] _Color ("Color", Color) = (1, 1, 1, 0.9) // (2026-11-18) HDR 발광 색 (Emissive 1.5배) - 조명·안개 영향 없음
+        _Width ("Width (screen)", Float) = 0.006
     }
     SubShader
     {
@@ -21,7 +21,7 @@ Shader "Custom/RarityOutline"
             #pragma vertex vert
             #pragma fragment frag
             #include "UnityCG.cginc"
-            fixed4 _Color;
+            half4 _Color; // (2026-11-18) fixed → half: 1 넘는 HDR 발광 값이 잘리지 않게
             float _Width;
             struct appdata { float4 vertex : POSITION; float3 normal : NORMAL; };
             struct v2f { float4 pos : SV_POSITION; };
@@ -35,7 +35,7 @@ Shader "Custom/RarityOutline"
                 o.pos.xy += off * _Width * o.pos.w * 2.0;   // w를 곱해서 원근 나눗셈 뒤에도 화면에서 같은 두께
                 return o;
             }
-            fixed4 frag (v2f i) : SV_Target { return _Color; }
+            half4 frag (v2f i) : SV_Target { return _Color; }
             ENDCG
         }
     }

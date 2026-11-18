@@ -15,6 +15,8 @@ MonoBehaviour:
   itemName: AR Ammo
   icon: {fileID: 0}
   itemType: 4
+  rarity: 0
+  worldModel: {fileID: 1639493877501625975, guid: d6a38f308abf6ea4c831170286d8c90b, type: 3}
   isStackable: 1
   maxStackSize: 5
   weaponType: 2

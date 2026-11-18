@@ -1,0 +1,13 @@
+Model Information:
+* title:	Ammo Boxes Pack
+* author:	TampaJoey (Sketchfab)
+* file:	AmmoBoxes.fbx
+
+Model License:
+* license type:	CC-BY (Creative Commons Attribution)
+* requirements:	Author must be credited.
+
+Credit:
+Ammo Boxes Pack by TampaJoey (Sketchfab, CC-BY)
+
+Note (2026-11-18): The FBX did not include textures. In-game prefabs (Assets/Prefabs/Ammo) use flat-color materials per box.

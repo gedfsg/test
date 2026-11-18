@@ -29,7 +29,7 @@ public class PickupItem : MonoBehaviour
 
         // 등급 외곽선 (2026-11-17): 희미한 등급 색 테두리, 플레이어 20m 안에서만
         if (itemData != null && GetComponent<DropRarityOutline>() == null)
-            gameObject.AddComponent<DropRarityOutline>().Setup(itemData.rarity);
+            gameObject.AddComponent<DropRarityOutline>().Setup(itemData is AmmoData ? Rarity.Common : itemData.rarity); // (2026-11-18) 탄약은 흰색 통일
 
         CreatePrompt();
     }
