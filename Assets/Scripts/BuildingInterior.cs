@@ -46,6 +46,14 @@ public class BuildingInterior : MonoBehaviour
              "카메라와 실내 사이에 있는 지붕이 실내를 가리지 않게 함 (어차피 검정으로 덮이는 부분)")]
     public float hideOccluderRadius = 90f;
 
+    /// <summary>
+    /// (2026-11-18) 컷어웨이 폐기 → OccluderFader(Fade 방식 가림 처리)로 대체.
+    /// false면 건물 재질을 Custom/BuildingCutaway로 바꾸지 않고(원래 재질 그대로 → 가릴 때 OccluderFader가 FadeOccluder로 잠깐 바꿈),
+    /// 들어가도 지붕 잘라내기·바깥 검정 마스크·화면 마스크·옆 건물 숨김을 하지 않음. 실내 안개(darkenSurroundings)·문 소리·카메라 줌은 그대로.
+    /// 코드는 지우지 않음: true로 바꾸면 예전 컷어웨이로 돌아감.
+    /// </summary>
+    public static bool CutawayEnabled = false;
+
     static readonly int CutHeightId = Shader.PropertyToID("_CutHeight");
     static readonly int CutEnabledId = Shader.PropertyToID("_CutEnabled");
 
@@ -248,6 +256,8 @@ public class BuildingInterior : MonoBehaviour
         renderers = System.Array.FindAll(GetComponentsInChildren<Renderer>(true), r => r.enabled);
         float cutHeightWorldY = ComputeCutHeight();
         cutHeightWorld = cutHeightWorldY;
+
+        if (!CutawayEnabled) return; // (2026-11-18) 컷어웨이 재질 교체 안 함 - OccluderFader가 페이드 처리
 
         Shader cutawayShader = Shader.Find("Custom/BuildingCutaway");
         if (cutawayShader == null)
@@ -478,6 +488,7 @@ public class BuildingInterior : MonoBehaviour
 
     void SetCut(bool cut)
     {
+        if (!CutawayEnabled) return; // (2026-11-18) 지붕 잘라내기·검정 마스크 안 씀 (Fade 방식)
         if (hideOutsideWhenIndoor)
         {
             if (cut && outsideMask == null) outsideMask = BuildOutsideMask();
