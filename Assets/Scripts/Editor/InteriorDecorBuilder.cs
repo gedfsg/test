@@ -46,6 +46,7 @@ public static class InteriorDecorBuilder
         public bool decal;         // 바닥 데칼 (콜라이더·그림자 없음, 바닥 위 1.5cm)
         public bool noShadow;      // 그림자 안 드리움 (작은 소품)
         public bool meshCollider;  // 렌더 메시 그대로 MeshCollider (방 통째 모델: 교실 벽·책상)
+        public Color tint;         // a>0이면 모든 재질을 이 색 Standard 재질로 교체 (텍스처 없는 흰 모델용: 교회 벤치·설교대)
     }
 
     static Spec S(string path, string node, Fit fit, float size, float yawOffset = 0f, bool solid = true, bool obstacle = false)
@@ -135,8 +136,8 @@ public static class InteriorDecorBuilder
         { "rugD",          Decal(IA + "House/low-poly_psx_style_vintage_rugs_pack.glb", "Vintage Rugs_012", 2.83f) },
 
         // ── 교회 ──
-        { "churchBench",   S(IA + "church/ChurchbenchSet.fbx", null, Fit.Length, 2.6f, 90f, true, true) },   // 등받이가 +X → 90° 보정
-        { "tribune",       S(IA + "church/tribune.fbx", null, Fit.Height, 1.5f, 0f, true, true) },
+        { "churchBench",   new Spec { path = IA + "church/ChurchbenchSet.fbx", fit = Fit.Length, size = 2.6f, yawOffset = 90f, obstacle = true, tint = new Color(0.36f, 0.23f, 0.14f) } },   // 등받이 +X → 90°, 텍스처 없는 흰색 → 짙은 나무색
+        { "tribune",       new Spec { path = IA + "church/tribune.fbx", fit = Fit.Height, size = 1.5f, obstacle = true, tint = new Color(0.30f, 0.19f, 0.11f) } },
         { "statue",        S(IA + "church/hl._brigitta.glb", null, Fit.Height, 2.2f, 0f, true, true) },
         { "candles",       Small(IA + "church/revenant__crosses_and_candles.glb", "Object_5", Fit.Height, 0.35f) },
         { "crossA",        S(IA + "church/revenant__crosses_and_candles.glb", "Object_3", Fit.Height, 1.6f, 0f, true) },
@@ -369,6 +370,18 @@ public static class InteriorDecorBuilder
         float lift = s.decal ? 0.015f : 0f;
         wrapper.transform.position += new Vector3(pos.x - wb.center.x, pos.y + lift - wb.min.y, pos.z - wb.center.z);
 
+        // 텍스처 없는 흰 모델 → 공용 색 재질 (Assets/Materials/Interior/Tint_RRGGBB.mat, 같은 색이면 재사용 → 배칭)
+        if (s.tint.a > 0f)
+        {
+            var tm = TintMaterial(s.tint);
+            foreach (var r in wrapper.GetComponentsInChildren<Renderer>())
+            {
+                var arr = r.sharedMaterials;
+                for (int i = 0; i < arr.Length; i++) arr[i] = tm;
+                r.sharedMaterials = arr;
+            }
+        }
+
         // 렌더 설정
         foreach (var r in wrapper.GetComponentsInChildren<Renderer>())
         {
@@ -411,6 +424,20 @@ public static class InteriorDecorBuilder
         wrapper.transform.SetParent(parent, true);
         Undo.RegisterCreatedObjectUndo(wrapper, "Place " + key);
         return wrapper;
+    }
+
+    /// <summary>색 재질 에셋 (없으면 생성). GPU Instancing 켬</summary>
+    static Material TintMaterial(Color c)
+    {
+        const string dir = "Assets/Materials/Interior";
+        if (!AssetDatabase.IsValidFolder(dir)) AssetDatabase.CreateFolder("Assets/Materials", "Interior");
+        string path = $"{dir}/Tint_{ColorUtility.ToHtmlStringRGB(c)}.mat";
+        var m = AssetDatabase.LoadAssetAtPath<Material>(path);
+        if (m != null) return m;
+        m = new Material(Shader.Find("Standard")) { color = c, enableInstancing = true };
+        m.SetFloat("_Glossiness", 0.15f);
+        AssetDatabase.CreateAsset(m, path);
+        return m;
     }
 
     /// <summary>방 조명 (Point, intensity 0.8, range 6m, #FFE8B0). 바닥에서 2.6m 높이</summary>
@@ -595,7 +622,7 @@ public static class InteriorDecorBuilder
             var g = Group(root, group);
             var pos = p + n * 0.05f;
             pos.y = fy + heightAboveFloor;
-            var go = Place(g, key, pos, yaw, default, scaleMul);
+            var go = Place(g, key, pos, yaw, default, scaleMul, key + "@wall");   // @wall → 검사에서 "공중에 뜸" 제외
             if (go != null)
             {
                 // Place는 바운드 중심을 pos에 맞추므로, 두께 절반만큼 바깥으로 밀어 벽 쪽 면이 표면에 닿게
@@ -620,8 +647,9 @@ public static class InteriorDecorBuilder
             float len = (B - A).magnitude;
             // 양 끝을 실제 벽까지 (못 찾으면 주어진 끝점)
             float t0 = -len * 0.5f, t1 = len * 0.5f;
-            if (WallHit(mid, -u, len, out var pa, out _)) t0 = Vector3.Dot(pa - mid, u);   // 음수 (mid 뒤쪽)
-            if (WallHit(mid, u, len, out var pb, out _)) t1 = Vector3.Dot(pb - mid, u);
+            float reach = len * 0.5f + 0.8f; // 주어진 끝점에서 최대 0.8m까지만 늘림 (빈 공간 쪽으로 끝없이 늘어나지 않게)
+            if (WallHit(mid, -u, reach, out var pa, out _)) t0 = Vector3.Dot(pa - mid, u);   // 음수 (mid 뒤쪽)
+            if (WallHit(mid, u, reach, out var pb, out _)) t1 = Vector3.Dot(pb - mid, u);
             // 구간 나누기 (gaps = 프레임 좌표에서 선 방향 축 값 → mid 기준 t로 변환)
             bool alongX = Mathf.Abs(bx - ax) > Mathf.Abs(bz - az);
             float midF = alongX ? (ax + bx) * 0.5f : (az + bz) * 0.5f;
@@ -767,7 +795,7 @@ public static class InteriorDecorBuilder
                 }
 
                 // 3) 공중에 뜸
-                if (!piece.name.EndsWith("@top") && group.name != "Exterior")
+                if (!piece.name.EndsWith("@top") && !piece.name.EndsWith("@wall") && group.name != "Exterior")
                 {
                     WorldBounds(piece.gameObject, out wb);
                     float fy = FloorAt(wb.center.x, wb.center.z, wb.min.y);
@@ -850,5 +878,115 @@ public static class InteriorDecorBuilder
         c.Light("Lights", 69.0f, 26.0f);
         c.Light("Lights", 76.8f, 18.2f);
         c.Light("Lights", 69.0f, 18.2f);
+    });
+
+    // ───────────────────────── 2. 교회 (Church by Poly by Google, 신랑 59x28m) ─────────────────────────
+    // 실측: 신랑 x -346.3~-287.1, z -96.5~-68.5, 바닥 15.0, 입구 = 동쪽 벽 가운데 틈(z -85~-80) → 현관 → 문(x≈-279)
+    // 제단 = 서쪽 끝. 가운데 통로(z=-82.5, 폭 3m) 양쪽 벤치 4열씩 (열 간격 1.2m), 통로엔 러그, 양초
+    // 분위기: 신성한 폐허 — 넘어진 벤치, 기둥 잔해, 벽 덩굴, 제단 앞 핏자국
+
+    [MenuItem("Tools/Interior/Build 2. Church (교회)")]
+    public static void BuildChurch() => Run("Church", "Buildings/Enterable_Church by Poly by Google - 2-J0Y-8AQOG", 15.0f, 0.48f, c =>
+    {
+        const float aisleZ = -82.5f;
+        // 제단: 설교대(Tribune) + 양옆 성녀상, 뒷벽 십자가
+        c.P("Altar", "tribune", -341.5f, aisleZ, 90f);
+        c.PW("Altar", "statue", -344.8f, aisleZ + 5.0f, 90f, "W");
+        c.PW("Altar", "statue", -344.8f, aisleZ - 5.0f, 90f, "W");
+        c.OnWall("Altar", "crossA", -340f, aisleZ, "W", 1f, 1.1f);
+        c.P("Altar", "candles", -340.2f, aisleZ + 2.2f, 90f);
+        c.P("Altar", "candles", -340.2f, aisleZ - 2.2f, 90f);
+
+        // 벤치: 정면 = 제단(서쪽) → yaw 270, 길이 2.6m가 통로와 직각. 열 간격 = 벤치 폭 1.05 + 1.2
+        float[] rows = { -335.0f, -332.75f, -330.5f, -328.25f };
+        foreach (var x in rows)
+        {
+            c.P("Nave", "churchBench", x, aisleZ - 1.5f - 1.3f, 270f);   // 남쪽 (통로 왼쪽)
+            c.P("Nave", "churchBench", x, aisleZ + 1.5f + 1.3f, 270f);   // 북쪽 (통로 오른쪽)
+        }
+        c.P("Nave", "churchBench", -324.5f, aisleZ + 3.6f, 250f, new Vector3(80, 0, 0));  // 넘어진 벤치 (뒤쪽 열, 길이 축 기준으로 뒤로 넘어짐)
+        // 통로 양옆 양초 (벤치 끝 통로 쪽)
+        c.P("Nave", "candles", -333.9f, aisleZ - 1.25f, 0f);
+        c.P("Nave", "candles", -329.4f, aisleZ + 1.25f, 0f);
+
+        // 통로 러그 (긴 쪽 = 통로 방향)
+        for (int i = 0; i < 4; i++) c.P("Nave", i % 2 == 0 ? "rugC" : "rugD", -338.0f + i * 2.85f, aisleZ, 90f);
+
+        // 폐허: 기둥 잔해, 덩굴, 핏자국
+        c.P("Clutter", "pillarDebris", -312f, -73.5f, 20f);
+        c.P("Clutter", "pillarDebris", -301f, -92.0f, 75f);
+        c.P("Clutter", "blood", -339.0f, aisleZ + 0.6f, 15f);   // 제단 앞
+        c.OnWall("Clutter", "wallVine", -318f, -75f, "N", 0.9f);
+        c.OnWall("Clutter", "wallVine", -303f, -75f, "N", 0.8f);
+        c.OnWall("Clutter", "wallVine", -310f, -90f, "S", 0.9f);
+
+        // 조명 (긴 공간: 제단 / 벤치 / 가운데 / 입구 쪽)
+        c.Light("Lights", -340.5f, aisleZ);
+        c.Light("Lights", -331.5f, aisleZ);
+        c.Light("Lights", -316f, aisleZ, 3.0f);
+        c.Light("Lights", -299f, aisleZ, 3.0f);
+    });
+
+    // ───────────────────────── 3. 병원 (low_poly_hospital, L자 큰 홀) ─────────────────────────
+    // 실측: 동쪽 동 x -305.9~-254.3 × z 2.7~33.0 / 남쪽 동 x -336.2~-254.3 × z -27.0~2.7 (두 동 사이 벽 없음), 바닥 15.54
+    // 정문 = 동쪽 동 서쪽 벽 x≈-306, z 14~23 (바깥은 안뜰). 회전 0.88°
+    // 구역: 정문 앞 접수대 / 북쪽 벽 병실 A (침대 4) / 남쪽 벽 병실 B (침대 4) / 가운데 복도(넘어진 트롤리·서류·핏자국)
+
+    [MenuItem("Tools/Interior/Build 3. Hospital (병원)")]
+    public static void BuildHospital() => Run("Hospital", "Buildings/Enterable_scene (3)", 15.54f, 0.88f, c =>
+    {
+        // 접수대 (정문 정면, 문 1.5m 밖), 정수기 = 북서 모서리
+        c.P("Reception", "pcDesk", -299.5f, 26.5f, 270f);
+        c.P("Reception", "retroChair", -297.8f, 27.2f, 270f);
+        c.P("Reception", "officeDrawer", -296.5f, 31.9f, 180f, default, 1f, null, "N");
+        c.PW("Reception", "waterCooler", -305.3f, 32.4f, 90f, "NW");
+        c.P("Reception", "cityBench", -299f, 9.0f, 90f);        // 대기 의자 (정문 남쪽)
+
+        // 병실 A: 북쪽 벽에 머리맡 (yaw 180 → 머리 +Z), 침대 옆 트롤리
+        float[] ax = { -289f, -282.5f, -276f, -269.5f };
+        foreach (var x in ax)
+        {
+            c.PW("Ward", "bedSingle", x, 31.8f, 180f, "N");
+            c.PW("Ward", "medCart", x + 1.35f, 32.4f, 180f, "N");
+        }
+        // 병실 B: 남쪽 벽에 머리맡 (yaw 0 → 머리 -Z)
+        float[] bx = { -331f, -324.5f, -318f, -311.5f };
+        for (int i = 0; i < bx.Length; i++)
+        {
+            c.PW("Ward", "bedSingle", bx[i], -25.8f, 0f, "S");
+            if (i != 2) c.PW("Ward", "medCart", bx[i] + 1.35f, -26.3f, 0f, "S");
+        }
+        // 병실 칸막이: A = 북동 (z=24 줄 + x=-296 줄), B = 남서 (z=-17.5 줄 + x=-305 줄), 문 틈 2곳씩
+        c.Partition("Partitions", -296f, 24f, -255f, 24f, new[] { -286f, -271f }, 2.2f);
+        c.Partition("Partitions", -296f, 24.1f, -296f, 32.6f, null);
+        c.Partition("Partitions", -335.6f, -17.5f, -305f, -17.5f, new[] { -327f, -315f }, 2.2f);
+        c.Partition("Partitions", -305f, -26.5f, -305f, -17.6f, null);
+
+        // 창가 커튼 (병실 A 동쪽 벽 창문, 병실 B 서쪽 벽 창문)
+        c.OnWall("Ward", "curtain", -258f, 28.5f, "E");
+        c.OnWall("Ward", "curtain", -258f, 22.0f, "E");
+        c.OnWall("Ward", "curtain", -333f, -22f, "W");
+
+        // 복도/홀: 넘어진 트롤리, 서류·박스, 핏자국, 덮인 시신
+        c.P("Corridor", "medCart", -286f, 12.5f, 35f, new Vector3(0, 0, 90));
+        c.P("Corridor", "medCart", -318.5f, -20.0f, 110f, new Vector3(0, 0, 85));
+        c.P("Corridor", "kBoxOpen", -279f, 6.5f, 20f);
+        c.P("Corridor", "kBoxClosed", -278.2f, 7.1f, -15f);
+        c.P("Corridor", "books", -283.5f, 9.2f, 60f);
+        c.P("Corridor", "books", -303.5f, -14.5f, -30f);
+        c.P("Corridor", "box", -262f, -20f, 10f);
+        c.P("Corridor", "blood", -284.0f, 11.0f, 40f);
+        c.P("Corridor", "blood2", -321.0f, -21.5f, 100f);
+        c.P("Corridor", "blood", -295.0f, -8.0f, -70f);
+        c.P("Corridor", "deadBody", -308.0f, -22.5f, 15f);
+
+        // 조명: 접수대 / 병실 A 2 / 병실 B 2 / 가운데 홀 2
+        c.Light("Reception", -300f, 24f);
+        c.Light("Lights", -285.5f, 29f);
+        c.Light("Lights", -272.5f, 29f);
+        c.Light("Lights", -327.5f, -22f);
+        c.Light("Lights", -314.5f, -22f);
+        c.Light("Lights", -284f, 8f, 3.0f);
+        c.Light("Lights", -300f, -10f, 3.0f);
     });
 }
