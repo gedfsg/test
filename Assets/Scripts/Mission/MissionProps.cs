@@ -56,7 +56,7 @@ public static class MissionProps
     }
 
     /// <summary>건물 라벨과 같은 모양의 이름표 (흰 글자 + 반투명 배경, 카메라를 향함)</summary>
-    public static void Label(Transform parent, string text, float height)
+    public static GameObject Label(Transform parent, string text, float height) // (2026-11-18) void → GameObject 반환 (MissionLabels 등록용)
     {
         var go = new GameObject("Label");
         go.transform.SetParent(parent, false);
@@ -81,6 +81,7 @@ public static class MissionProps
         var r = bg.GetComponent<Renderer>();
         r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         r.sharedMaterial = new Material(Shader.Find("Sprites/Default")) { color = new Color(0f, 0f, 0f, 0.5f), renderQueue = 2990 };
+        return go;
     }
 
     /// <summary>바닥 원 (조명 영향 없는 반투명). 장식 지면판(+0.2m)에 가리지 않게 +0.3m</summary>
@@ -129,7 +130,8 @@ public static class MissionProps
         // 통신실 (밟고 지나가지 않게 콜라이더 + NavMesh 장애물)
         var hut = Box(root, "Hut", new Vector3(0f, 1.1f, -3.2f), new Vector3(2.6f, 2.2f, 2.2f), Mat(new Color(0.55f, 0.57f, 0.55f)));
         Obstacle(hut, Vector3.zero, Vector3.one);
-        Label(root, "라디오 타워", 4.2f);
+        // Label(root, "라디오 타워", 4.2f); // (이전) 항상 표시
+        MissionLabels.Register(Label(root, "라디오 타워", 4.2f), groundPos); // (2026-11-18) 미션 중일 때만
         return root;
     }
 
@@ -142,7 +144,9 @@ public static class MissionProps
         var stone = Mat(new Color(0.7f, 0.68f, 0.64f));
         var basin = Prim(PrimitiveType.Cylinder, root, "FountainBasin", Vector3.up * 0.3f, new Vector3(3f, 0.3f, 3f), stone, true);
         Obstacle(basin, Vector3.zero, new Vector3(1f, 2f, 1f));
-        Prim(PrimitiveType.Cylinder, root, "FountainWater", Vector3.up * 0.58f, new Vector3(2.6f, 0.02f, 2.6f), Mat(new Color(0.3f, 0.6f, 0.9f), 0.4f), false);
+        // (이전) 물 윗면(0.58+0.02=0.6)이 수반 윗면(0.3+0.3=0.6)과 같은 높이라 z-fighting → 파란 별/바람개비 무늬가 떠 보이고, 발광 0.4라 밤에 마커처럼 빛남
+        // Prim(PrimitiveType.Cylinder, root, "FountainWater", Vector3.up * 0.58f, new Vector3(2.6f, 0.02f, 2.6f), Mat(new Color(0.3f, 0.6f, 0.9f), 0.4f), false);
+        Prim(PrimitiveType.Cylinder, root, "FountainWater", Vector3.up * 0.62f, new Vector3(2.6f, 0.02f, 2.6f), Mat(new Color(0.22f, 0.36f, 0.45f)), false); // (2026-11-18) 수반 위 2cm, 발광 없음, 어두운 물색
         Prim(PrimitiveType.Cylinder, root, "FountainPillar", Vector3.up * 1f, new Vector3(0.4f, 0.7f, 0.4f), stone, false);
 
         GameObject bench = FindSceneProp("Bench"), lamp = FindSceneProp("ParkLight");
@@ -153,7 +157,8 @@ public static class MissionProps
             if (bench != null) PlaceClone(bench, root, rot * new Vector3(0f, 0f, 4.8f), Quaternion.Euler(0f, a + 180f, 0f));
             if (lamp != null) PlaceClone(lamp, root, Quaternion.Euler(0f, a + 45f, 0f) * new Vector3(0f, 0f, 6.8f), Quaternion.identity);
         }
-        Label(root, "공원", 3.6f);
+        // Label(root, "공원", 3.6f); // (이전) 항상 표시
+        MissionLabels.Register(Label(root, "공원", 3.6f), groundPos); // (2026-11-18) 공원 서브 미션 중일 때만
         return root;
     }
 

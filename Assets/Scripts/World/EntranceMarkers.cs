@@ -157,6 +157,7 @@ public class EntranceMarkers : MonoBehaviour
         var bgRenderer = bg.GetComponent<Renderer>();
         bgRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         bgRenderer.sharedMaterial = LabelBackground;
+        MissionLabels.Register(go, door); // (2026-11-18) 건물 이름표는 그 건물이 미션 목표일 때만 (평소 숨김)
     }
 
     static Material labelBackground;

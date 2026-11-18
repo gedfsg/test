@@ -481,6 +481,11 @@ public class WeaponHotbarUI : MonoBehaviour
             // else if (SlotTypeFilter.IsThrowSlot(i)) DecorateThrowSlot(slot);
             ApplyMinimalStyle(slot, i); // 2026-11-17 핫바 재작업: 모든 칸 같은 모양, 테두리·라벨 없음
         }
+
+        // (2026-11-18) 패널 = 슬롯 총합 + 패딩 6px: 세로 100 = 슬롯 88 + 위아래 6, 가로는 ContentSizeFitter가 자동
+        var hlg = slotContainer.GetComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+        if (hlg != null) hlg.padding = new RectOffset(PanelPadding, PanelPadding, PanelPadding, PanelPadding);
+        if (slotContainer is RectTransform crt) crt.sizeDelta = new Vector2(crt.sizeDelta.x, SlotHeight + PanelPadding * 2);
     }
 
     // ── 2026-11-17 핫바 재작업 ──
@@ -488,7 +493,11 @@ public class WeaponHotbarUI : MonoBehaviour
     //  - 테두리 없음 (기본 Frame·선택 ActiveBar·등급 테두리 전부 안 그림. 등급은 인벤토리·바닥 아이템에서만)
     //  - 라벨 없음, 숫자 1~5만 좌상단 작게 (흰, 알파 0.6)
     //  - 선택 칸: 배경을 흰 반투명(1,1,1,0.18)으로 밝게 + 아래 2px 흰 밑줄
-    static readonly Vector2 SlotSize = new Vector2(110f, 70f);
+    // static readonly Vector2 SlotSize = new Vector2(110f, 70f); // (이전 2026-11-17) 5칸 모두 110x70 → 슬롯이 작아 패널 아래가 비고 전부 가로로 김
+    // (2026-11-18) 세로를 패널에 꽉 채움(88 = 100 - 위아래 패딩 6), 슬롯 1(주력 무기)만 가로 1.4:1, 나머지 정사각
+    const int PanelPadding = 6;
+    const float SlotHeight = 88f;
+    static Vector2 SlotSizeFor(int i) => i == 0 ? new Vector2(120f, SlotHeight) : new Vector2(SlotHeight, SlotHeight);
     static readonly Color SlotBg = new Color(0f, 0f, 0f, 0.55f);
     static readonly Color SlotBgActive = new Color(1f, 1f, 1f, 0.18f);
     static readonly Color SlotNumberColor = new Color(1f, 1f, 1f, 0.6f);
@@ -497,7 +506,7 @@ public class WeaponHotbarUI : MonoBehaviour
     private void ApplyMinimalStyle(SlotView slot, int i)
     {
         var rt = (RectTransform)slot.transform;
-        rt.sizeDelta = SlotSize;
+        rt.sizeDelta = SlotSizeFor(i);
         var bg = slot.GetComponent<UnityEngine.UI.Image>();
         if (bg != null) { bg.pixelsPerUnitMultiplier = 2.7f; bg.color = SlotBg; } // RoundedRect 모서리(16px) / 2.7 ≈ 6px
         var frame = slot.transform.Find("Frame");

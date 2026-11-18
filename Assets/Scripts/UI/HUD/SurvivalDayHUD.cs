@@ -136,13 +136,20 @@ public class SurvivalDayHUD : MonoBehaviour
         //     TextAlignmentOptions.Left, new Vector2(75.5f + 80f, BottomY), new Vector2(160f, 30f));
 
         // ── 아래 줄 (ui.jpg): ☀ │ 06:16  + 날씨 아이콘 (낮/밤 글자·생존 목표는 뺌) ──
-        phaseIcon = HudStyle.NewImage(root, "PhaseIcon", HudStyle.Sun, sunColor, new Vector2(-62f, BottomY), new Vector2(30f, 30f));
-        phaseDivider = HudStyle.NewImage(root, "Divider1", null, dividerColor, new Vector2(-38f, BottomY), new Vector2(1.5f, 24f));
+        // (이전 ~2026-11-17) 시각 오른쪽에 날씨 아이콘 → "☀ 12:59 ☀"처럼 아이콘이 양쪽에 두 개로 보여서 제거 (2026-11-18)
+        // phaseIcon = HudStyle.NewImage(root, "PhaseIcon", HudStyle.Sun, sunColor, new Vector2(-62f, BottomY), new Vector2(30f, 30f));
+        // phaseDivider = HudStyle.NewImage(root, "Divider1", null, dividerColor, new Vector2(-38f, BottomY), new Vector2(1.5f, 24f));
+        // clockText = HudStyle.NewText(root, "Clock", "12:51", HudStyle.Bold, 32f, clockColor,
+        //     TextAlignmentOptions.Left, new Vector2(-28f + 50f, BottomY), new Vector2(100f, 40f));
+        // weatherIcon = HudStyle.NewImage(root, "WeatherIcon", Resources.Load<Sprite>("HUD/Sprites/Weather_Clear"), Color.white,
+        //     new Vector2(84f, BottomY), new Vector2(22f, 22f));
+        // weatherIcon.preserveAspect = true;
+        // ── (2026-11-18) 아이콘 │ 시각 한 묶음을 가운데로 (왼쪽 해/달 아이콘만, 날씨 아이콘 없음 → weatherIcon = null) ──
+        const float GroupShift = 10f; // 날씨 아이콘이 빠진 만큼 묶음(-77~67)을 오른쪽으로 옮겨 가운데 맞춤
+        phaseIcon = HudStyle.NewImage(root, "PhaseIcon", HudStyle.Sun, sunColor, new Vector2(-62f + GroupShift, BottomY), new Vector2(30f, 30f));
+        phaseDivider = HudStyle.NewImage(root, "Divider1", null, dividerColor, new Vector2(-38f + GroupShift, BottomY), new Vector2(1.5f, 24f));
         clockText = HudStyle.NewText(root, "Clock", "12:51", HudStyle.Bold, 32f, clockColor,
-            TextAlignmentOptions.Left, new Vector2(-28f + 50f, BottomY), new Vector2(100f, 40f));
-        weatherIcon = HudStyle.NewImage(root, "WeatherIcon", Resources.Load<Sprite>("HUD/Sprites/Weather_Clear"), Color.white,
-            new Vector2(84f, BottomY), new Vector2(22f, 22f));
-        weatherIcon.preserveAspect = true;
+            TextAlignmentOptions.Left, new Vector2(-28f + 50f + GroupShift, BottomY), new Vector2(100f, 40f));
     }
 
     void Refresh(bool force)

@@ -163,6 +163,7 @@ public class MissionManager : MonoBehaviour
         BuildSchedule();
         gameObject.AddComponent<MissionHUD>();
         gameObject.AddComponent<MinimapMissionPins>(); // 미니맵 미션 핀 (월드 가이드 대신)
+        gameObject.AddComponent<MissionLabels>(); // (2026-11-18) 지역·건물 이름표는 미션 목표 근처일 때만
         StartDay(CurrentDay);
         if (DayNightCycle.Instance != null) DayNightCycle.Instance.onNewDay.AddListener(OnNewDay);
     }
