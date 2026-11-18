@@ -163,6 +163,12 @@ public static class InteriorDecorBuilder
         { "martBin",       S(IA + "Mart/low_poly_store_shelves_and_supermarket_rack_pack.glb", "Cube.036_18", Fit.None, 1f, 0f, true) },
         { "martSmall",     S(IA + "Mart/low_poly_store_shelves_and_supermarket_rack_pack.glb", "Cube.040_12", Fit.None, 1f, 0f, true) },
         { "martTall2",     S(IA + "Mart/low_poly_store_shelves_and_supermarket_rack_pack.glb", "Cube.020_35", Fit.None, 1f, 0f, true, true) },
+        // Kenney Food Kit (마트 바닥에 흩어진 상품)
+        { "foodCan",       Small(IA + "Mart/food_kit/FBX format/can.fbx", null, Fit.Height, 0.13f) },
+        { "foodBag",       Small(IA + "Mart/food_kit/FBX format/bag.fbx", null, Fit.Height, 0.30f) },
+        { "foodCarton",    Small(IA + "Mart/food_kit/FBX format/carton.fbx", null, Fit.Height, 0.24f) },
+        { "foodBottle",    Small(IA + "Mart/food_kit/FBX format/bottle-oil.fbx", null, Fit.Height, 0.28f) },
+        { "foodCandy",     Small(IA + "Mart/food_kit/FBX format/candy-bar-wrapper.fbx", null, Fit.Length, 0.16f) },
         { "snackShelf",    S(IA + "Mart/snack_aisle_shelf_3d_model.glb", null, Fit.Height, 1.8f, 90f, true, true) },  // 진열면이 ±X → 90°
 
         // ── 경찰서 / 사무실 ──
@@ -1203,4 +1209,118 @@ public static class InteriorDecorBuilder
                 c.P("Classroom", "chair", x, z - 0.55f, 0f);
             }
     }
+
+    // ───────────────────────── 6. 마트 (Building by Kay Lousberg - bbH2Bg73qM, 매장 23x43m) ─────────────────────────
+    // 실측: 매장 x -108.4~-85.5, z -85.6~-42.65, 바닥 15.1, 회전 -0.76°. 입구 = 서쪽 벽 틈(z -65~-58, 가운데 -64.1)
+    //       동쪽 뒤 작은 방(x -84~-78.7)은 계단/창고 구조라 제외. 서남쪽(x -108~-104, z -73~-68)에 기둥 구조물
+    // 구역: 입구 옆 계산대 / 가운데 진열대 3줄(선반 간격 2m) / 북쪽 벽 냉장 쇼케이스 / 동쪽 벽 벽선반
+    // 분위기: 약탈당한 편의점 — 넘어진 진열대 + 바닥에 흩어진 상품, 박스·드럼통, 핏자국, 입구 바깥 콘크리트 방벽
+
+    [MenuItem("Tools/Interior/Build 6. Mart (마트)")]
+    public static void BuildMart() => Run("Mart", "Buildings/Building by Kay Lousberg - bbH2Bg73qM", 15.1f, -0.76f, c =>
+    {
+        c.Door(-108.4f, -61.5f);   // 서쪽 벽의 실제 입구 틈
+
+        // 계산대 (입구 들어와서 북쪽), 계산대 뒤 담배·잡화 선반
+        c.P("Checkout", "martCounter", -103.6f, -56.2f, 90f);
+        c.P("Checkout", "martRack", -101.6f, -54.4f, 270f);
+
+        // 진열대 3줄 (동서로 길게, 줄 간격 = 깊이 1.28 + 통로 2m), 한 줄 = 곤돌라 3개
+        float[] rowZ = { -69.5f, -72.8f, -76.1f };
+        float[] colX = { -100.2f, -97.5f, -94.8f };
+        for (int r = 0; r < rowZ.Length; r++)
+            for (int i = 0; i < colX.Length; i++)
+            {
+                if (r == 2 && i == 2) continue;                                   // 넘어진 자리
+                string key = (r == 1 && i == 1) ? "snackShelf" : "martGondola";
+                c.P("Aisles", key, colX[i], rowZ[r], 0f);
+            }
+        // 넘어진 진열대 (마지막 줄 끝, 옆으로 75°) + 흩어진 상품
+        c.P("Aisles", "martGondola", -94.6f, -77.2f, 8f, new Vector3(0, 0, 75));
+        string[] goods = { "foodCan", "foodBag", "foodCarton", "foodBottle", "foodCan", "foodCandy", "foodBag" };
+        float[,] gp = { { -93.0f, -75.4f }, { -92.3f, -76.6f }, { -95.9f, -74.9f }, { -91.8f, -78.0f }, { -96.6f, -78.4f }, { -93.7f, -79.0f }, { -90.9f, -75.8f } };
+        for (int i = 0; i < goods.Length; i++) c.P("Aisles", goods[i], gp[i, 0], gp[i, 1], i * 47f, i % 3 == 0 ? new Vector3(90, 0, 0) : default);
+
+        // 북쪽 벽 냉장 쇼케이스 (정면 = 남쪽) + 가운데 냉동 진열대
+        c.PW("Storage", "martTall2", -104.5f, -43.4f, 180f, "N");
+        c.PW("Storage", "martTall2", -102.9f, -43.4f, 180f, "N");
+        c.PW("Storage", "martFridge", -100.6f, -43.4f, 180f, "N");
+        c.PW("Storage", "martFridge", -98.4f, -43.4f, 180f, "N");
+        c.P("Storage", "martFreezer", -94.5f, -49.5f, 180f);
+        // 동쪽 벽 벽선반 (정면 = 서쪽)
+        foreach (var z in new[] { -48.5f, -52.0f, -66.5f, -70.0f, -79.0f })
+            c.PW("Storage", "martWallShelf", -86.2f, z, 270f, "E");
+        c.P("Storage", "martCounter2", -90.5f, -60.5f, 270f);           // 농산물 칸 진열대
+
+        // 약탈 흔적: 박스·드럼통, 핏자국
+        c.P("Clutter", "boxOpen", -88.6f, -83.8f, 20f);
+        c.P("Clutter", "box", -89.4f, -84.4f, -10f);
+        c.P("Clutter", "barrel", -87.4f, -84.6f, 0f);
+        c.P("Clutter", "barrelOpen", -101.5f, -83.9f, 0f, new Vector3(90, 0, 0));
+        c.P("Clutter", "kBoxOpen", -97.0f, -60.5f, 35f);
+        c.P("Clutter", "blood", -97.4f, -66.4f, 50f);
+        c.P("Clutter", "blood2", -91.5f, -56.0f, 160f);
+
+        // 입구 바깥 콘크리트 방벽 2개 (약탈 저지 흔적, 문 앞 1.5m는 비움)
+        c.P("Exterior", "jersey", -114.8f, -59.0f, 70f);
+        c.P("Exterior", "jerseyCaution", -114.6f, -69.0f, 110f);
+
+        c.Light("Lights", -102f, -58f);
+        c.Light("Lights", -97.5f, -73f);
+        c.Light("Lights", -98f, -48f);
+        c.Light("Lights", -89f, -66f);
+    });
+
+    // ───────────────────────── 7. 창고 (Structure by Quaternius - ilWoURnbZW, 43x23m) ─────────────────────────
+    // 실측: x -25.1~18.1, z -329.4~-306.5, 바닥 15.0, 회전 -2.07°. 문 = 남쪽 벽 x≈-9.3
+    //       기둥: (-17,-312.5) (14.5,-316.5) (15.5,-322) (5.5,-324) (-11,-327) 근처, 서쪽 작은 방들(x -33~-27)은 제외
+    // 북쪽 벽 = 큰 랙 4개, 동쪽 벽 = 랙 2개, 남서 = 컨테이너 2개, 남동 모서리 = 드럼통 5개, 가운데 통로 = 지게차, 벽 위 환풍기 3
+
+    [MenuItem("Tools/Interior/Build 7. Warehouse (창고)")]
+    public static void BuildWarehouse() => Run("Warehouse", "Buildings/Enterable_Structure by Quaternius - ilWoURnbZW", 15.0f, -2.07f, c =>
+    {
+        c.Door(-9.3f, -329.4f);
+
+        // 랙 (상자 실린 철제 랙 묶음, 길이 4.45m): 북쪽 벽 4 + 동쪽 벽 2
+        foreach (var x in new[] { -21.0f, -16.3f, -11.6f, -6.9f })
+            c.PW("Storage", "rack", x, -308.0f, 90f, "N");
+        c.PW("Storage", "rack", 16.6f, -309.5f, 0f, "E");
+        c.PW("Storage", "rack", 16.6f, -314.2f, 0f, "E");
+        // 작은 선반 2 (서쪽 벽)
+        c.PW("Storage", "rackSmall", -24.3f, -318.0f, 90f, "W");
+        c.PW("Storage", "rackSmall", -24.3f, -320.6f, 90f, "W");
+
+        // 컨테이너 2 (남서, 남쪽 벽에 붙임, 문 열린 쪽이 동쪽)
+        c.PW("Storage", "container", -21.4f, -327.8f, 90f, "SW");
+        c.P("Storage", "container", -21.4f, -323.9f, 90f, default, 1f, null, "W");
+
+        // 드럼통 5 (남동 모서리)
+        float[,] dp = { { 17.2f, -328.6f }, { 16.5f, -328.7f }, { 15.8f, -328.6f }, { 17.1f, -327.9f }, { 16.4f, -327.9f } };
+        for (int i = 0; i < 5; i++) c.P("Storage", "drum", dp[i, 0], dp[i, 1], i * 30f);
+
+        // 바닥 팔레트 + 상자 더미 3
+        foreach (var p in new[] { new Vector2(-2.5f, -310.5f), new Vector2(3.5f, -311.0f), new Vector2(8.5f, -327.5f) })
+        {
+            var pal = c.P("Storage", "pallet", p.x, p.y, 10f);
+            var bx = c.OnTopOf("Storage", "wBox", pal, 5f, -0.25f, 0.1f);
+            c.OnTopOf("Storage", "wBox", bx, -15f);
+        }
+        c.P("Storage", "wBarrel", 9.6f, -327.0f, 0f);
+
+        // 지게차 (가운데 통로)
+        c.P("Storage", "forklift", -1.5f, -318.5f, 35f);
+
+        // 환풍기 3 (벽 위쪽, 랙보다 높이)
+        c.OnWall("Storage", "exhaustFan", 12f, -312f, "E", 1f, 3.6f);
+        c.OnWall("Storage", "exhaustFan", 12f, -319.5f, "E", 1f, 3.0f);
+        c.OnWall("Storage", "exhaustFan", 3f, -312f, "N", 1f, 3.6f);
+
+        c.P("Clutter", "blood", 1.5f, -322.0f, 25f);
+        c.P("Clutter", "boxOpen", -4.0f, -325.5f, 40f);
+
+        c.Light("Lights", -14f, -311f, 3.4f);
+        c.Light("Lights", 0f, -318f, 3.4f);
+        c.Light("Lights", 13f, -314f, 3.4f);
+        c.Light("Lights", -9f, -325f, 3.0f);
+    });
 }
