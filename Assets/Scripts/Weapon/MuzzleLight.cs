@@ -19,13 +19,22 @@ using UnityEngine.InputSystem;
 ///     cullingMask에서 지면(Default·Ground)·물·플레이어 제외 → 바닥에 원이 안 생기고, 근처 벽·나무·차(Occludable 레이어)만 번쩍.
 ///     (좀비도 Default 레이어라 섬광 조명은 안 받음 - 섬광 스프라이트로만). 별 모양 섬광 스프라이트·조준등(Spot 28°/6m)은 그대로
 /// </summary>
+///  (2026-11-20 4차) 피드백 "조준등이 어색하게 빛남" → Intensity 2 → 1.2, Spot Angle 28° → 22° (아래 가장자리 11°가 바닥에 닿는 곳 ≈ 6.7m > Range 6m → 바닥 원 없음),
+///     낮엔 0.3배(거의 안 보임) ~ 밤·실내 1.0배 (DayNightCycle 단계·진행률로 자동, 0.5초에 걸쳐 바뀜). 섬광은 그대로.
+///     프리팹에 예전 값(spotIntensity 2 / spotAngle 28)이 저장돼 있어서 새 이름(aimLight*)으로 씀
 [RequireComponent(typeof(Light))]
 public class MuzzleLight : MonoBehaviour
 {
     [Header("조준등 (Spot, 상시)")]
     public float spotRange = 6f;
-    public float spotAngle = 28f;
-    public float spotIntensity = 2f;
+    public float spotAngle = 28f;      // (2026-11-20부터 안 씀 → aimLightAngle)
+    public float spotIntensity = 2f;   // (2026-11-20부터 안 씀 → aimLightIntensity)
+    [Header("조준등 (2026-11-20)")]
+    public float aimLightIntensity = 1.2f;
+    public float aimLightAngle = 22f;
+    [Tooltip("밝은 낮의 조준등 배율 (밤·실내 = 1)")]
+    [Range(0f, 1f)] public float dayLightWeight = 0.3f;
+    float baseIntensity, lightWeight = -1f;
 
     [Header("섬광 스프라이트")]
     public float flashForward = 0.1f;
@@ -68,8 +77,10 @@ public class MuzzleLight : MonoBehaviour
     {
         lightComp = GetComponent<Light>();
         lightComp.type = LightType.Spot;
-        lightComp.spotAngle = spotAngle;
-        lightComp.innerSpotAngle = spotAngle * 0.5f;
+        // lightComp.spotAngle = spotAngle; // (이전 28°)
+        // lightComp.innerSpotAngle = spotAngle * 0.5f;
+        lightComp.spotAngle = aimLightAngle;            // (2026-11-20) 22°
+        lightComp.innerSpotAngle = aimLightAngle * 0.5f;
         lightComp.range = spotRange;
         lightComp.shadows = LightShadows.None;
         transform.localRotation = Quaternion.identity; // 총구 forward 그대로
@@ -83,9 +94,15 @@ public class MuzzleLight : MonoBehaviour
         Color c = data != null ? data.lightColor : (Color)new Color32(0xFF, 0xD0, 0x70, 0xFF);
         kind = data != null ? data.specialKind : SpecialWeaponKind.None;
         lightComp.color = c;
-        lightComp.intensity = data != null && data.lightIntensity > spotIntensity ? data.lightIntensity : spotIntensity;
+        // lightComp.intensity = data != null && data.lightIntensity > spotIntensity ? data.lightIntensity : spotIntensity; // (이전) 2, 화염방사기 2.0
+        // (2026-11-20) 모든 총 1.2 (무기 색은 그대로), 실제 밝기 = 1.2 × 낮/밤 배율 (LateUpdate)
+        baseIntensity = aimLightIntensity;
+        if (lightWeight < 0f) lightWeight = TargetLightWeight();
+        lightComp.intensity = baseIntensity * lightWeight;
         lightComp.range = spotRange;
-        lightComp.spotAngle = spotAngle;
+        // lightComp.spotAngle = spotAngle; // (이전)
+        lightComp.spotAngle = aimLightAngle;
+        lightComp.innerSpotAngle = aimLightAngle * 0.5f;
         // 섬광 색: 일반 총·미니건 = 텍스처 그대로 (흰·노랑·주황), 화염·RPG·레이저 = 무기 색으로 물들임
         bool tinted = kind == SpecialWeaponKind.Flamethrower || kind == SpecialWeaponKind.RPG || kind == SpecialWeaponKind.Laser;
         flashTint = tinted ? Color.Lerp(c, Color.white, 0.25f) : Color.white;
@@ -132,8 +149,34 @@ public class MuzzleLight : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// (2026-11-20) 조준등 낮/밤 배율: 낮 = dayLightWeight(0.3), 노을 = 0.3→1, 밤 = 1, 새벽 = 1→0.3, 실내 = 1
+    /// </summary>
+    float TargetLightWeight()
+    {
+        if (BuildingInterior.IsAnyoneIndoors) return 1f;
+        var dn = DayNightCycle.Instance;
+        if (dn == null) return 1f;
+        float p = Mathf.Clamp01(dn.GetPhaseProgress());
+        float night = dn.CurrentPhase switch
+        {
+            DayNightCycle.Phase.Day => 0f,
+            DayNightCycle.Phase.Dusk => p,
+            DayNightCycle.Phase.Night => 1f,
+            _ => 1f - p, // Dawn
+        };
+        return Mathf.Lerp(dayLightWeight, 1f, night);
+    }
+
     void LateUpdate()
     {
+        // (2026-11-20) 조준등 밝기 = 1.2 × 낮/밤 배율 (실내 출입 시 0.5초에 걸쳐 바뀜)
+        if (active && lightComp != null && lightComp.enabled)
+        {
+            float w = TargetLightWeight();
+            lightWeight = lightWeight < 0f ? w : Mathf.MoveTowards(lightWeight, w, Time.deltaTime * 2f);
+            lightComp.intensity = baseIntensity * lightWeight;
+        }
         if (flashRenderer != null && flashRenderer.enabled) UpdateFlash();
         if (flashLight != null && flashLight.enabled)
         {
