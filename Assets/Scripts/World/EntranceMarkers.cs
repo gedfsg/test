@@ -10,7 +10,10 @@ using UnityEngine;
 /// </summary>
 public class EntranceMarkers : MonoBehaviour
 {
-    const float MatWidth = 3.2f, MatDepth = 2.2f; // 매트 크기 (문 폭 방향 × 바깥 방향, m)
+    // const float MatWidth = 3.2f, MatDepth = 2.2f; // (이전) 매트 크기 (문 폭 방향 × 바깥 방향, m)
+    const float MatWidth = 5.0f, MatDepth = 3.0f; // (2026-11-20) 맵 축척(도로 38m)에 비해 작아서 탑뷰에서 잘 안 보였음 → 키움
+    const float MatAlpha = 0.55f;                  // (2026-11-20) 0.45 → 0.55
+    const float JambHeight = 3.2f, JambGap = 4.2f; // (2026-11-20) 문 양옆 색 기둥 (높이, 두 기둥 간격)
     const float MatOffset = 1.4f;                 // 문에서 바깥으로 (m)
     const float ExitMatAlpha = 0.3f;              // 실내 출구 매트 (더 연하게)
     const float LabelHeight = 3.4f;               // 라벨 높이 = 지면 + 문 위쪽 2.9m + 0.5m
@@ -50,7 +53,10 @@ public class EntranceMarkers : MonoBehaviour
             var kind = LootDatabase.Classify(b);
             bool landmark = Colors.TryGetValue(kind, out Color color);
             if (!landmark) color = NeutralColor;
+            // (2026-11-20) 자동 꾸민 건물: 테마 이름·색 (상점·식당·사무실·창고·야영지)
+            if (b.markerColor.a > 0f) color = b.markerColor;
             string label = MissionManager.BuildingLabel(kind);
+            if (!string.IsNullOrEmpty(b.markerLabel)) label = b.markerLabel;
             // 미션 장소로 지정된 민가/창고 (주유소/카페/서점/발전소): 그 이름 + 색, 문 위 조명
             if (MissionPlaces.TryGetByBuilding(b, out var place)) { label = place.label; color = place.color; landmark = true; }
             var trig = LootWorldSpawner.FindTrigger(b);
@@ -82,8 +88,10 @@ public class EntranceMarkers : MonoBehaviour
         mat.transform.localScale = new Vector3(MatWidth, 0.02f, MatDepth);
         var r = mat.GetComponent<Renderer>();
         r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        r.sharedMaterial = new Material(MarkerMaterial) { color = new Color(color.r, color.g, color.b, 0.45f) };
+        // r.sharedMaterial = new Material(MarkerMaterial) { color = new Color(color.r, color.g, color.b, 0.45f) }; // (이전)
+        r.sharedMaterial = new Material(MarkerMaterial) { color = new Color(color.r, color.g, color.b, MatAlpha) };
         mats.Add(r.sharedMaterial);
+        AddArrowAndJambs(root.transform, door, color);
 
         if (!withLight) return;
 
@@ -97,6 +105,48 @@ public class EntranceMarkers : MonoBehaviour
         l.range = 6f;
         l.intensity = 1.6f;
         l.shadows = LightShadows.None;
+    }
+
+    /// <summary>
+    /// (2026-11-20) 입구 표시 보강: 매트 위 안쪽을 가리키는 화살표(V자) + 문 양옆 색 기둥.
+    /// 같은 2패스 재질이라 건물 뒤쪽 문도 기둥이 벽 너머로 연하게 보여서 위치를 찾을 수 있음.
+    /// root = 매트 기준 (로컬 +Z = 바깥, 문은 로컬 -Z × MatOffset)
+    /// </summary>
+    void AddArrowAndJambs(Transform root, Vector3 door, Color color)
+    {
+        var mat = new Material(MarkerMaterial) { color = new Color(Mathf.Lerp(color.r, 1f, 0.35f), Mathf.Lerp(color.g, 1f, 0.35f), Mathf.Lerp(color.b, 1f, 0.35f), 0.85f) };
+        mats.Add(mat);
+
+        // 화살표 (V자, 안쪽 = 로컬 -Z를 가리킴)
+        var arrow = new GameObject("Arrow");
+        arrow.transform.SetParent(root, false);
+        arrow.transform.localPosition = new Vector3(0f, 0.03f, -0.1f);
+        var mesh = new Mesh { name = "EntranceArrow" };
+        mesh.vertices = new[]
+        {
+            new Vector3(0f, 0f, -1.1f), new Vector3(1.0f, 0f, 0.4f), new Vector3(0.6f, 0f, 0.7f),
+            new Vector3(0f, 0f, -0.35f), new Vector3(-0.6f, 0f, 0.7f), new Vector3(-1.0f, 0f, 0.4f),
+        };
+        mesh.triangles = new[] { 0, 2, 1, 0, 3, 2, 0, 4, 3, 0, 5, 4 };
+        mesh.RecalculateBounds();
+        arrow.AddComponent<MeshFilter>().sharedMesh = mesh;
+        var ar = arrow.AddComponent<MeshRenderer>();
+        ar.sharedMaterial = mat;
+        ar.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+        // 문 양옆 기둥 (바닥 → JambHeight)
+        for (int s = -1; s <= 1; s += 2)
+        {
+            var jamb = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            jamb.name = s < 0 ? "JambL" : "JambR";
+            Destroy(jamb.GetComponent<Collider>());
+            jamb.transform.SetParent(root, false);
+            jamb.transform.localScale = new Vector3(0.18f, JambHeight, 0.18f);
+            jamb.transform.localPosition = new Vector3(s * JambGap * 0.5f, JambHeight * 0.5f - 0.3f, -MatOffset + 0.25f);
+            var jr = jamb.GetComponent<Renderer>();
+            jr.sharedMaterial = mat;
+            jr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        }
     }
 
     // 실내 출구 매트: 문 안쪽 트리거 안 바닥. 그 건물에 들어가 있을 때만 켬 (2패스 재질이라 켜두면 밖에서 지붕 너머로 비침)
@@ -187,6 +237,8 @@ public class EntranceMarkers : MonoBehaviour
         door = outDir = Vector3.zero;
         var trig = LootWorldSpawner.FindTrigger(b);
         // 문 찾기: 건물 자식의 벽 콜라이더 중 문 있는 것 전부 (병원은 정문이 벽 조각 3개에 걸쳐 있음) → 문 중심 평균
+        // (2026-11-20) 수동 문 (학교처럼 벽 콜라이더가 없는 건물)
+        if (b.useManualDoor) { door = b.manualDoorWorld; outDir = b.manualDoorOut; outDir.y = 0f; outDir.Normalize(); return trig != null && outDir.sqrMagnitude > 0.01f; }
         var doors = DoorCenters(b.GetComponentsInChildren<BuildingWallCollider>(true));
         if (doors.Count == 0 && b.transform.parent != null) doors = DoorCenters(b.transform.parent.GetComponentsInChildren<BuildingWallCollider>(true));
         if (trig == null || doors.Count == 0) return false;

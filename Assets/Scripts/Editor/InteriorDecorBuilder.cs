@@ -81,6 +81,11 @@ public static class InteriorDecorBuilder
         { "sideTable",     KFur("sideTableDrawers", true) },
         { "table",         KFur("table", true, true) },
         { "tableCoffee",   KFur("tableCoffee", true) },
+        { "tableRound",    KFur("tableRound", true, true) },
+        { "kitchenBar",    KFur("kitchenBar", true, true) },
+        { "bookcaseClosed", KFur("bookcaseClosed", true, true) },
+        { "washer",        KFur("washer", true) },
+        { "plantSmall",    KFur("plantSmall1", false) },
         { "chair",         KFur("chair", true) },
         { "chairDesk",     KFur("chairDesk", true) },
         { "desk",          KFur("desk", true, true) },
@@ -125,6 +130,7 @@ public static class InteriorDecorBuilder
         { "planks",        KSur("resource-planks", false) },
         { "barricade",     KSur("fence-fortified", true, true) },
         { "bedroll",       KSur("bedroll", false) },
+        { "campfire",      KSur("campfire-pit", false) },
         { "chest",         KSur("chest", true) },
         { "workbench",     KSur("workbench", true, true) },
         { "bucket",        KSur("bucket", false) },
@@ -254,7 +260,7 @@ public static class InteriorDecorBuilder
     // ───────────────────────── 배치 핵심 ─────────────────────────
 
     /// <summary>이 툴이 만들고 다시 실행 시 지우는 구역 그룹 이름</summary>
-    static readonly string[] GroupNames = { "Living", "Bedroom", "Kitchen", "Bathroom", "Clutter", "Lights", "Nave", "Altar", "Ward", "Reception", "Corridor", "Office", "Cells", "Armory", "Aisles", "Checkout", "Storage", "Classroom", "Staffroom", "Hallway", "Exterior", "Partitions", "Cars", "CityProps", "Ruins", "MissionProps", "GasStation" };
+    static readonly string[] GroupNames = { "Living", "Bedroom", "Kitchen", "Bathroom", "Clutter", "Lights", "Nave", "Altar", "Ward", "Reception", "Corridor", "Office", "Cells", "Armory", "Aisles", "Checkout", "Storage", "Classroom", "Staffroom", "Hallway", "Exterior", "Partitions", "Cars", "CityProps", "Ruins", "MissionProps", "GasStation", "Wall", "Center" };
 
     /// <summary>씬 루트의 Building_Interior_[name] (없으면 생성)</summary>
     public static Transform Root(string name) => RootFull("Building_Interior_" + name);
@@ -553,6 +559,7 @@ public static class InteriorDecorBuilder
 
     static bool IsInteriorObject(Transform t)
     {
+        // 루트 자체(Building_Interior_House 등) 또는 묶음 루트(Building_Interior_Auto) 아래면 이 툴이 놓은 것
         for (; t != null; t = t.parent) if (t.parent == null && t.name.StartsWith("Building_Interior_")) return true;
         return false;
     }
@@ -767,6 +774,7 @@ public static class InteriorDecorBuilder
         var bgo = GameObject.Find(buildingPath);
         var bi = bgo != null ? bgo.GetComponent<BuildingInterior>() : null;
         if (bi == null) { Debug.LogError($"[Interior] 건물 '{buildingPath}' (BuildingInterior) 없음"); return; }
+        if (name == "House") SetMarkerTheme(bi, "home"); else if (name == "Warehouse") SetMarkerTheme(bi, "warehouse"); // (2026-11-20) 회색 대신 테마 색 입구
 
         BeginSession();
         try
@@ -1133,7 +1141,7 @@ public static class InteriorDecorBuilder
     public static BuildingInterior EnsureSchoolEnterable()
     {
         var existing = GameObject.Find("Buildings/Enterable_School");
-        if (existing != null) return existing.GetComponent<BuildingInterior>();
+        if (existing != null) { var eb = existing.GetComponent<BuildingInterior>(); SetSchoolDoor(eb); return eb; }
         var school = GameObject.Find("scene (2)");
         var buildings = GameObject.Find("Buildings");
         if (school == null || buildings == null) { Debug.LogError("[Interior] 학교(scene (2)) 또는 Buildings 없음"); return null; }
@@ -1144,7 +1152,7 @@ public static class InteriorDecorBuilder
         var bc = wrap.AddComponent<BoxCollider>();
         bc.isTrigger = true;
         bc.size = new Vector3(66f, 5f, 11f);   // 교실 줄 (x -316~-250, z 140~151, y 16.3~21.3)
-        wrap.AddComponent<BuildingInterior>();
+        SetSchoolDoor(wrap.AddComponent<BuildingInterior>());
         Undo.SetTransformParent(school.transform, wrap.transform, "Make School Enterable");
         EditorSceneManager.MarkSceneDirty(wrap.scene);
         Debug.Log("[Interior] 학교를 Enterable_School 아래로 옮기고 교실 트리거를 붙였습니다 (콜라이더는 그대로)");
@@ -1175,6 +1183,19 @@ public static class InteriorDecorBuilder
             }
         }
         if (opened > 0) Debug.Log($"[Interior] 교실 문짝 {opened}개를 열었음(끔) → Tools/Map/Rebake NavMesh With Building Walls 필요");
+    }
+
+    /// <summary>(2026-11-20) 학교는 벽 콜라이더(BuildingWallCollider)가 없어 부모(Buildings)의 다른 건물 문을 가져왔음 → 실제 정문(마당 계단, 가운데 홀 앞) 수동 지정</summary>
+    static void SetSchoolDoor(BuildingInterior b)
+    {
+        if (b == null) return;
+        Undo.RecordObject(b, "School Door");
+        b.useManualDoor = true;
+        b.manualDoorWorld = new Vector3(-279f, 16.5f, 128.5f);
+        b.manualDoorOut = Vector3.back;
+        b.markerLabel = "학교";
+        b.markerColor = new Color(0.3f, 0.9f, 0.75f);
+        EditorUtility.SetDirty(b);
     }
 
     [MenuItem("Tools/Interior/Build 5. School (학교)")]
@@ -1830,5 +1851,368 @@ public static class InteriorDecorBuilder
         BuildHouse(); BuildChurch(); BuildHospital(); BuildPolice(); BuildSchool(); BuildMart(); BuildWarehouse(); BuildStreet();
         AuditAll();
         RebakeNavMeshWithWalls.Run();
+    }
+
+    // ───────────────────────── 9. 나머지 건물 전부 (자동 테마) ─────────────────────────
+    // 위 7곳(손으로 꾸민 건물)을 뺀 들어갈 수 있는 건물 전부(약 91채)를 테마별로 자동 배치. 씬 루트 Building_Interior_Auto 아래
+    // Building_Interior_[건물 이름]으로 묶음. 고정 시드(건물 이름)라 다시 실행해도 같은 배치, 툴이 만든 구역 그룹만 지우고 새로 만듦.
+    //  - 방 크기: 게임이 런타임에 벽에 맞춰 줄이는 트리거(BuildingInterior.FitTriggerToWalls)를 에디터에서 같은 방식으로 재고 원래대로 되돌림
+    //  - 벽 가구: 벽을 따라 차례로 놓고 벽에 밀착(문 3.2m 안은 비움), 가운데: 테마별 그리드, 잡동사니: 빈 바닥 무작위(겹치면 다른 자리)
+    //  - 테마: 민가(home) / 상점(shop) / 식당(cafe) / 사무실(office) / 창고(storage) / 야영(camp, 벽 없는 헛간) / 큰 창고(warehouse)
+
+    static readonly HashSet<string> HandBuilt = new HashSet<string>
+    {
+        "building-a (4)", "Enterable_Church by Poly by Google - 2-J0Y-8AQOG", "Enterable_scene (3)", "Enterable_scene (4)",
+        "Enterable_School", "Building by Kay Lousberg - bbH2Bg73qM", "Enterable_Structure by Quaternius - ilWoURnbZW",
+    };
+
+    [MenuItem("Tools/Interior/Build 9. All Other Buildings (나머지 건물 전부)")]
+    public static void BuildAllOthers()
+    {
+        if (EditorApplication.isPlaying) { Debug.LogWarning("[Interior] Play 모드에서는 실행 불가"); return; }
+        var auto = RootFull("Building_Interior_Auto");
+        var log = new System.Text.StringBuilder();
+        int total = 0, built = 0, issues = 0;
+        BeginSession();
+        try
+        {
+            var list = new List<BuildingInterior>(Object.FindObjectsByType<BuildingInterior>(FindObjectsSortMode.None));
+            list.Sort((a, b) => string.CompareOrdinal(a.name, b.name));
+            foreach (var bi in list)
+            {
+                if (HandBuilt.Contains(bi.name)) continue;
+                if (!FittedRoom(bi, out var c, out float hx, out float hz, out float fyaw)) { log.AppendLine($"  - {bi.name}: 방 크기를 못 잼 (건너뜀)"); continue; }
+                string rootName = "Building_Interior_" + bi.name;
+                var rt = auto.Find(rootName);
+                if (rt == null) { rt = new GameObject(rootName).transform; rt.SetParent(auto, false); Undo.RegisterCreatedObjectUndo(rt.gameObject, "Build Interior"); }
+                ClearGenerated(rt);
+                Physics.SyncTransforms();
+                var ctx = new Ctx { root = rt, building = bi, frameYaw = fyaw, frameCenter = c };
+                ctx.floorGuess = FloorAt(c.x, c.z, 15.3f);
+                string theme = ThemeFor(bi, hx, hz);
+                SetMarkerTheme(bi, theme);
+                var rng = new System.Random(StableHash(bi.name));
+                FurnishRoom(ctx, theme, c, hx, hz, rng);
+                Physics.SyncTransforms();
+                string rep = Validate(rt, bi, true, ctx.doors);
+                if (!rep.StartsWith("검사: 문제 0건")) issues++;
+                total += ctx.count; built++;
+                log.AppendLine($"  {bi.name}: {theme} {hx * 2:F0}x{hz * 2:F0}m → {ctx.count}개 ({rep.Split('\n')[0]})");
+            }
+        }
+        finally { EndSession(); }
+        Debug.Log($"[Interior] 나머지 건물 {built}채 자동 배치, 소품 {total}개 (검사에서 고친 건물 {issues}채)\n{log}");
+        EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+    }
+
+    /// <summary>(2026-11-20) 입구 표시(EntranceMarkers) 이름·색을 테마에 맞춤 — 회색 매트만 있던 일반 건물도 무슨 건물인지 보이게</summary>
+    static void SetMarkerTheme(BuildingInterior bi, string theme)
+    {
+        (string label, Color col) = theme switch
+        {
+            "shop" => ("상점", new Color(1f, 0.52f, 0.12f)),
+            "cafe" => ("식당", new Color(1f, 0.42f, 0.35f)),
+            "office" => ("사무실", new Color(0.35f, 0.8f, 1f)),
+            "storage" => ("창고", new Color(0.8f, 0.58f, 0.32f)),
+            "warehouse" => ("창고", new Color(0.8f, 0.58f, 0.32f)),
+            "camp" => ("야영지", new Color(0.45f, 0.9f, 0.4f)),
+            _ => ("민가", new Color(1f, 0.8f, 0.4f)),   // 호박색 (연한 베이지는 흰 인도와 구분이 안 됨)
+        };
+        Undo.RecordObject(bi, "Marker Theme");
+        bi.markerLabel = label;
+        bi.markerColor = col;
+        EditorUtility.SetDirty(bi);
+    }
+
+    static int StableHash(string s) { unchecked { int h = 17; foreach (char ch in s) h = h * 31 + ch; return h & 0x7fffffff; } }
+
+    /// <summary>
+    /// 런타임과 같은 방식(BuildingInterior.FitTriggerToWalls, 벽 콜라이더 기준)으로 트리거를 벽 안쪽에 맞춘 상자 = 방.
+    /// 씬의 트리거 값은 재고 나서 원래대로 되돌림. 프레임 = 트리거 회전을 90° 단위로 뺀 나머지 (-45~45°)
+    /// </summary>
+    static bool FittedRoom(BuildingInterior bi, out Vector3 center, out float hx, out float hz, out float frameYaw)
+    {
+        center = Vector3.zero; hx = hz = frameYaw = 0f;
+        var bc = bi.GetComponent<BoxCollider>();
+        if (bc == null) return false;
+        Vector3 size0 = bc.size, center0 = bc.center;
+        var fit = typeof(BuildingInterior).GetMethod("FitTriggerToWalls", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        try { fit?.Invoke(bi, null); } catch { }
+        var t = bc.transform;
+        Vector3 c = t.TransformPoint(bc.center);
+        Vector3 s = Vector3.Scale(bc.size, t.lossyScale);
+        bc.size = size0; bc.center = center0;   // 되돌림 (씬 저장값 그대로)
+        float rot = t.eulerAngles.y;
+        int k = Mathf.RoundToInt(rot / 90f);
+        frameYaw = rot - k * 90f;
+        bool swap = (k & 1) == 1;
+        hx = Mathf.Abs(swap ? s.z : s.x) * 0.5f;
+        hz = Mathf.Abs(swap ? s.x : s.z) * 0.5f;
+        center = new Vector3(c.x, 0f, c.z);
+        return hx > 2f && hz > 2f;
+    }
+
+    static string ThemeFor(BuildingInterior bi, float hx, float hz)
+    {
+        string n = bi.name;
+        int h = StableHash(n);
+        if (n.Contains("Houses_FirstAge")) return "camp";
+        if (n.Contains("Structure")) return "warehouse";
+        if (n.Contains("skyscraper") || n.Contains("low-detail") || n.StartsWith("building-l") || n.StartsWith("building-m")) return "office";
+        if (n.StartsWith("building-a") || n.StartsWith("building-b") || n.StartsWith("building-f") || n.StartsWith("building-h") || n.StartsWith("building-i") || n.StartsWith("building-j")) return "home";
+        if (n.StartsWith("building-k")) return "shop";
+        if (n.StartsWith("building-c") || n.StartsWith("building-e") || n.StartsWith("building-g")) return (h % 2 == 0) ? "shop" : "cafe";
+        string[] mix = { "home", "office", "shop", "cafe", "storage" };
+        return mix[h % mix.Length];
+    }
+
+    // 테마별 벽 가구 순서 (벽을 따라 차례로, 공간이 남으면 처음부터 다시)
+    static readonly Dictionary<string, string[]> WallSets = new Dictionary<string, string[]>
+    {
+        { "home",      new[] { "bedDouble", "sideTable", "closet", "sofa", "tvStand", "bookShelfOld", "fridge", "kitchenCab", "kitchenSink", "kitchenStove", "kitchenDrawer", "washer" } },   // 한 번씩 (반복은 WallFillers)
+        { "shop",      new[] { "martWallShelf", "martFridge", "martWallShelf", "martTall2", "martWallShelf", "martTall", "martFridge", "martWallShelf" } },
+        { "cafe",      new[] { "kitchenCab", "kitchenSink", "kitchenStove", "kitchenDrawer", "fridge", "kitchenBar", "kitchenBar", "bookcase", "plant", "trashcan" } },
+        { "office",    new[] { "officeDrawer", "bookcaseClosed", "waterCooler", "printer", "bookcaseWide", "plant", "officeDrawer", "bookcaseClosed" } },
+        { "storage",   new[] { "rackSmall", "rackSmall", "workbench", "rackSmall", "drum", "rackSmall", "chest" } },
+        { "warehouse", new[] { "rack", "rack", "container", "rack", "rackSmall", "rackSmall" } },
+        { "camp",      new string[0] },
+    };
+
+    const int MaxPerBuilding = 46;
+
+    // 테마별 벽 가구: 주 가구(한 번씩) → 남는 벽은 채움 가구로
+    static readonly Dictionary<string, string[]> WallFillers = new Dictionary<string, string[]>
+    {
+        { "home",      new[] { "bookcase", "plant", "lowCabinet", "box", "bookcaseClosed", "coatRack", "kBoxClosed" } },
+        { "shop",      new[] { "martWallShelf", "martFridge", "martWallShelf", "martTall" } },
+        { "cafe",      new[] { "plant", "bookcase", "kitchenBar", "trashcan", "kitchenCab" } },
+        { "office",    new[] { "officeDrawer", "bookcaseClosed", "plant", "printer" } },
+        { "storage",   new[] { "rackSmall", "drum", "boxLarge", "rackSmall" } },
+        { "warehouse", new[] { "rackSmall", "rack", "drum" } },
+        { "camp",      new string[0] },
+    };
+
+    const int WallBudget = 22, CenterBudget = 17;
+
+    /// <summary>
+    /// (프레임 좌표) 이 지점 위에 이 건물의 천장·지붕이 있는지 = 실내인지.
+    /// ㄱ자·ㄷ자 건물은 방 상자(트리거)가 건물 밖 빈 땅까지 덮어서, 지붕 없는 곳엔 안 놓음
+    /// </summary>
+    static bool Indoor(Ctx c, float x, float z)
+    {
+        var w = c.W(x, z);
+        float fy = FloorAt(w.x, w.z, c.floorGuess);
+        bool prev = Physics.queriesHitBackfaces;
+        try
+        {
+            Physics.queriesHitBackfaces = true;
+            foreach (var h in Physics.RaycastAll(new Vector3(w.x, fy + 1.2f, w.z), Vector3.up, 80f, ~0, QueryTriggerInteraction.Ignore))
+                if (h.collider.transform.IsChildOf(c.building.transform)) return true;
+        }
+        finally { Physics.queriesHitBackfaces = prev; }
+        return false;
+    }
+
+    /// <summary>
+    /// 실내 가구 겹침: 바닥에서 0.45m 위부터만 검사 (벽 콜라이더의 두께용 안쪽 면이 바닥 바로 위에 생겨서 바닥까지 재면 늘 겹침으로 나옴).
+    /// 낮은 물건(0.45m 미만)은 이 툴이 놓은 다른 가구와만 비교
+    /// </summary>
+    static bool InteriorBlocked(GameObject go, float floorY)
+    {
+        Physics.SyncTransforms();
+        if (!WorldBounds(go, out var b)) return false;
+        float bottom = Mathf.Max(b.min.y, floorY + 0.45f), top = b.max.y - 0.05f;
+        if (top <= bottom) return OverlapsFurniture(go);
+        var bc = go.GetComponent<BoxCollider>();
+        Vector3 half; Quaternion rot; Vector3 cxz;
+        if (bc != null) { cxz = go.transform.TransformPoint(bc.center); var hs = Vector3.Scale(bc.size * 0.5f, go.transform.lossyScale); half = new Vector3(Mathf.Abs(hs.x) * 0.92f, 0f, Mathf.Abs(hs.z) * 0.92f); rot = go.transform.rotation; }
+        else { cxz = b.center; half = new Vector3(b.extents.x * 0.92f, 0f, b.extents.z * 0.92f); rot = Quaternion.identity; }
+        // 회전이 기울어진(넘어진) 물건은 AABB로
+        if (Vector3.Dot(go.transform.up, Vector3.up) < 0.9f) { cxz = b.center; half = new Vector3(b.extents.x * 0.92f, 0f, b.extents.z * 0.92f); rot = Quaternion.identity; }
+        half.y = (top - bottom) * 0.5f;
+        var center = new Vector3(cxz.x, (top + bottom) * 0.5f, cxz.z);
+        foreach (var col in Physics.OverlapBox(center, half, rot, ~0, QueryTriggerInteraction.Ignore))
+        {
+            if (col.transform.IsChildOf(go.transform) || col is TerrainCollider || sessionPlates.Contains(col as MeshCollider)) continue;
+            return true;
+        }
+        return false;
+    }
+
+    static void FurnishRoom(Ctx c, string theme, Vector3 ctr, float hx, float hz, System.Random rng)
+    {
+        float x0 = ctr.x - hx, x1 = ctr.x + hx, z0 = ctr.z - hz, z1 = ctr.z + hz;
+        float floorY = c.floorGuess;
+        Vector2 doorF = new Vector2(float.NaN, float.NaN);
+        if (c.building.TryGetDoor(out var door, out _))
+        {
+            var d = Quaternion.Euler(0, -c.frameYaw, 0) * new Vector3(door.x - ctr.x, 0, door.z - ctr.z);
+            doorF = new Vector2(ctr.x + d.x, ctr.z + d.z);
+            c.doors.Add(new Vector3(door.x, FloorAt(door.x, door.z, c.floorGuess), door.z));
+        }
+        bool NearDoor(float x, float z, float r) => !float.IsNaN(doorF.x) && (new Vector2(x, z) - doorF).sqrMagnitude < r * r;
+
+        // ── 벽 가구: 벽 길이 비례로 예산을 나눠 네 벽에 고르게 ──
+        var sides = new List<(string dir, float yaw)> { ("N", 180f), ("S", 0f), ("E", 270f), ("W", 90f) };
+        if (!float.IsNaN(doorF.x))
+            sides.Sort((a, b) => DistToSide(b.dir, doorF, x0, x1, z0, z1).CompareTo(DistToSide(a.dir, doorF, x0, x1, z0, z1)));
+        var main = new List<string>(WallSets[theme]);
+        if (theme == "home" && hx * hz * 4f > 320f) main.AddRange(new[] { "bedSingle", "closet", "sideTable", "sofa", "bookShelfOld" }); // 큰 집: 방이 더 있는 느낌
+        var fill = WallFillers[theme];
+        int mi = 0, fi = rng.Next(Mathf.Max(1, fill.Length));
+        float perim = 2f * (hx + hz) * 2f;
+        foreach (var (dir, yaw) in sides)
+        {
+            if (main.Count == 0 && fill.Length == 0) break;
+            bool alongX = dir == "N" || dir == "S";
+            float a0 = (alongX ? x0 : z0) + 0.9f, a1 = (alongX ? x1 : z1) - 0.9f;
+            int quota = Mathf.Max(2, Mathf.RoundToInt(WallBudget * (a1 - a0 + 1.8f) / perim));
+            float wallLine = dir == "N" ? z1 - 0.6f : dir == "S" ? z0 + 0.6f : dir == "E" ? x1 - 0.6f : x0 + 0.6f;
+            float cursor = a0;
+            int placed = 0, guard = 0;
+            while (cursor < a1 - 0.6f && placed < quota && guard++ < 30)
+            {
+                float px = alongX ? cursor + 0.5f : wallLine, pz = alongX ? wallLine : cursor + 0.5f;
+                if (NearDoor(px, pz, 3.4f) || !Indoor(c, px, pz)) { cursor += 1.0f; continue; }
+                string key = mi < main.Count ? main[mi] : (fill.Length > 0 ? fill[fi++ % fill.Length] : null);
+                if (key == null) break;
+                var go = c.P("Wall", key, px, pz, yaw, default, 1f, null, dir);
+                if (go == null) { mi++; cursor += 1f; continue; }
+                WorldBounds(go, out var wb);
+                Vector3 wdir = c.Dir(alongX ? "E" : "N");
+                float half = Mathf.Abs(wb.extents.x * wdir.x) + Mathf.Abs(wb.extents.z * wdir.z);
+                go.transform.position += wdir * (half - 0.5f);
+                float end = cursor + half * 2f;
+                float midA = cursor + half;
+                bool bad = end > a1 || NearDoor(alongX ? midA : wallLine, alongX ? wallLine : midA, 3.2f) || !Indoor(c, alongX ? midA : wallLine, alongX ? wallLine : midA);
+                if (bad) { Object.DestroyImmediate(go); c.count--; cursor += 1f; continue; }
+                if (mi < main.Count) mi++;
+                placed++;
+                cursor = end + 0.35f + (float)rng.NextDouble() * 0.5f;
+                if (key == "tvStand") c.OnTopOf("Wall", "tvVintage", go, yaw);
+                if (key == "sideTable") c.OnTopOf("Wall", "lampTable", go, yaw);
+            }
+        }
+
+        // ── 가운데: 테마별 그리드 (실내 + 문 4m 밖) ──
+        float cx0 = x0 + 2.8f, cx1 = x1 - 2.8f, cz0 = z0 + 2.8f, cz1 = z1 - 2.8f;
+        int centerStart = c.count;
+        if (cx1 > cx0 && cz1 > cz0)
+        {
+            float stepX = theme == "shop" ? 3.4f : theme == "office" ? 3.0f : theme == "warehouse" ? 5.0f : 4.2f;
+            float stepZ = theme == "shop" ? 3.4f : theme == "office" ? 3.2f : theme == "warehouse" ? 5.0f : 4.2f;
+            int nx = Mathf.Max(1, Mathf.FloorToInt((cx1 - cx0) / stepX) + 1), nz = Mathf.Max(1, Mathf.FloorToInt((cz1 - cz0) / stepZ) + 1);
+            float ox = (cx0 + cx1) * 0.5f - (nx - 1) * stepX * 0.5f, oz = (cz0 + cz1) * 0.5f - (nz - 1) * stepZ * 0.5f;
+            // 가운데부터 바깥으로 (예산이 모자라면 가운데가 먼저 참)
+            var cells = new List<Vector2>();
+            for (int ix = 0; ix < nx; ix++) for (int iz = 0; iz < nz; iz++) cells.Add(new Vector2(ox + ix * stepX, oz + iz * stepZ));
+            var mid = new Vector2(ctr.x, ctr.z);
+            cells.Sort((p, q) => (p - mid).sqrMagnitude.CompareTo((q - mid).sqrMagnitude));
+            int cell = 0;
+            foreach (var p in cells)
+            {
+                if (c.count - centerStart >= CenterBudget) break;
+                if (NearDoor(p.x, p.y, 4.0f) || !Indoor(c, p.x, p.y)) continue;
+                CenterCell(c, theme, p.x, p.y, cell++, rng, floorY);
+            }
+        }
+
+        // ── 잡동사니 ──
+        string[] clutter = theme switch
+        {
+            "home" => new[] { "box", "kBoxOpen", "chair:fallen", "blood", "books", "planks", "rugB", "trashcan" },
+            "shop" => new[] { "foodCan", "foodBag", "foodCarton", "boxOpen", "blood", "foodBottle", "barrel", "foodCandy" },
+            "cafe" => new[] { "chair:fallen", "chair:fallen", "trashcan", "blood", "kBoxOpen", "bottle" },
+            "office" => new[] { "books", "retroChair:fallen", "kBoxClosed", "blood", "books", "trashcan" },
+            "storage" => new[] { "box", "boxLarge", "barrel", "pallet", "blood", "planks" },
+            "warehouse" => new[] { "drum", "drum", "pallet", "wBarrel", "blood", "boxOpen" },
+            _ => new[] { "planks", "box", "barrel", "blood", "bucket" },
+        };
+        int want = Mathf.Clamp(Mathf.RoundToInt(hx * hz * 4f / 60f), 4, 7);
+        for (int i = 0, tries = 0; i < want && tries < want * 8 && c.count < MaxPerBuilding; tries++)
+        {
+            float px = Mathf.Lerp(x0 + 1.2f, x1 - 1.2f, (float)rng.NextDouble());
+            float pz = Mathf.Lerp(z0 + 1.2f, z1 - 1.2f, (float)rng.NextDouble());
+            if (NearDoor(px, pz, 3.0f) || !Indoor(c, px, pz)) continue;
+            string entry = clutter[(i + rng.Next(clutter.Length)) % clutter.Length];
+            bool fallen = entry.EndsWith(":fallen");
+            string key = fallen ? entry.Substring(0, entry.Length - 7) : entry;
+            var go = c.P("Clutter", key, px, pz, (float)rng.NextDouble() * 360f, fallen ? new Vector3(0, 0, 90) : default);
+            if (go == null) continue;
+            if (InteriorBlocked(go, floorY) || OverlapsFurniture(go)) { Object.DestroyImmediate(go); c.count--; continue; }
+            i++;
+        }
+
+        // ── 조명 (넓으면 2개, 실내 지점에) ──
+        if (hx * hz * 4f > 450f)
+        {
+            bool longX = hx >= hz;
+            for (int s = -1; s <= 1; s += 2)
+            {
+                float lx = ctr.x + (longX ? hx * 0.45f * s : 0f), lz = ctr.z + (longX ? 0f : hz * 0.45f * s);
+                if (!Indoor(c, lx, lz)) { lx = Mathf.Lerp(lx, ctr.x, 0.6f); lz = Mathf.Lerp(lz, ctr.z, 0.6f); }
+                c.Light("Lights", lx, lz, 2.8f);
+            }
+        }
+        else c.Light("Lights", ctr.x, ctr.z, 2.7f);
+    }
+
+    static float DistToSide(string dir, Vector2 p, float x0, float x1, float z0, float z1) =>
+        dir == "N" ? Mathf.Abs(z1 - p.y) : dir == "S" ? Mathf.Abs(p.y - z0) : dir == "E" ? Mathf.Abs(x1 - p.x) : Mathf.Abs(p.x - x0);
+
+    /// <summary>콜라이더 없는 소품(데칼·작은 물건)이 다른 가구 바운드 안에 박히는지</summary>
+    static bool OverlapsFurniture(GameObject go)
+    {
+        if (!WorldBounds(go, out var b)) return false;
+        b.Expand(new Vector3(-0.05f, 0f, -0.05f));
+        foreach (var col in Physics.OverlapBox(b.center, new Vector3(b.extents.x, Mathf.Max(0.3f, b.extents.y), b.extents.z), Quaternion.identity, ~0, QueryTriggerInteraction.Ignore))
+            if (IsInteriorObject(col.transform) && !col.transform.IsChildOf(go.transform)) return true;
+        return false;
+    }
+
+    /// <summary>가운데 칸 하나 (테마별 세트)</summary>
+    static void CenterCell(Ctx c, string theme, float x, float z, int cell, System.Random rng, float floorY)
+    {
+        GameObject Try(string key, float px, float pz, float yaw, Vector3 tilt = default)
+        {
+            var go = c.P("Center", key, px, pz, yaw, tilt);
+            if (go != null && InteriorBlocked(go, floorY)) { Object.DestroyImmediate(go); c.count--; return null; }
+            return go;
+        }
+        switch (theme)
+        {
+            case "home":
+                if (cell == 0) { c.P("Center", rng.Next(2) == 0 ? "rugA" : "rugC", x, z, 0f); Try("table", x, z, 0f); Try("chair", x, z - 0.85f, 0f); Try("chair", x, z + 0.85f, 180f); }
+                else if (cell == 1) { c.P("Center", "rugD", x, z, 90f); Try("tableCoffee", x, z, 0f); Try("armchair", x + 1.4f, z, 270f); }
+                else if (cell % 3 == 2) { var p = c.P("Center", "rugB", x, z, rng.Next(2) * 90f); if (p != null && OverlapsFurniture(p)) { Object.DestroyImmediate(p); c.count--; } Try(rng.Next(2) == 0 ? "armchair" : "lampFloor", x + 0.8f, z, rng.Next(4) * 90f); }   // 소파 반복 대신 러그 + 안락의자/스탠드
+                break;
+            case "shop":
+                if (cell == 0) Try("martCounter", x, z, 0f);
+                else Try(cell % 4 == 3 ? "snackShelf" : "martGondola", x, z, 0f);
+                break;
+            case "cafe":
+                Try("tableRound", x, z, 0f);
+                Try("chair", x, z - 0.95f, 0f);
+                Try("chair", x, z + 0.95f, 180f);
+                if (cell % 2 == 0) Try("chair", x + 0.95f, z, 270f, rng.Next(3) == 0 ? new Vector3(0, 0, 90) : default);
+                break;
+            case "office":
+                if (cell % 4 == 3) { Try("pcDesk", x, z, 180f); }
+                else { Try("officeDesk", x, z, 0f); Try("retroChair", x, z - 1.05f, 0f); }
+                break;
+            case "storage":
+                { var pal = Try("pallet", x, z, rng.Next(4) * 90f); if (pal != null) { var b1 = c.OnTopOf("Center", "wBox", pal, 0f, -0.25f, 0f); c.OnTopOf("Center", "wBox", pal, 20f, 0.25f, 0.1f); if (b1 != null && rng.Next(2) == 0) c.OnTopOf("Center", "wBox", b1, -10f); } }
+                break;
+            case "warehouse":
+                if (cell == 1) Try("forklift", x, z, rng.Next(360));
+                else { var pal = Try("pallet", x, z, 0f); if (pal != null) { c.OnTopOf("Center", "wBox", pal, 0f, -0.25f, 0f); c.OnTopOf("Center", "wBox", pal, 15f, 0.25f, 0f); } }
+                break;
+            case "camp":
+                if (cell == 0) { c.P("Center", "campfire", x, z, 0f); c.P("Center", "bedroll", x + 1.6f, z + 0.4f, 80f); c.P("Center", "bedroll", x - 1.6f, z - 0.3f, 260f); }
+                else if (cell == 1) { Try("chest", x, z, 0f); Try("barrel", x + 1.0f, z + 0.3f, 0f); Try("box", x - 0.9f, z, 20f); }
+                else if (cell == 2) { Try("workbench", x, z, 0f); c.P("Center", "planks", x + 1.2f, z - 0.6f, 40f); }
+                else Try(rng.Next(2) == 0 ? "boxLarge" : "barrelOpen", x, z, rng.Next(360));
+                break;
+        }
     }
 }

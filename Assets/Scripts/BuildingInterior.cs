@@ -25,6 +25,18 @@ public class BuildingInterior : MonoBehaviour
 
     public string playerTag = "Player";
 
+    [Header("수동 문 (2026-11-20) - 벽 콜라이더(BuildingWallCollider)가 없는 건물 (학교)")]
+    [Tooltip("켜면 문 위치를 아래 값으로 씀. 꺼져 있고 자기 벽 콜라이더도 없으면 부모(Buildings) 아래 다른 건물 문을 잘못 가져왔음")]
+    public bool useManualDoor;
+    public Vector3 manualDoorWorld;
+    public Vector3 manualDoorOut = Vector3.back;
+
+    [Header("입구 표시 (2026-11-20) - InteriorDecorBuilder가 테마별로 설정")]
+    [Tooltip("비우면 건물 종류 이름(민가 등). 상점·식당·사무실·창고·야영지")]
+    public string markerLabel = "";
+    [Tooltip("알파 0이면 종류별 기본 색")]
+    public Color markerColor = new Color(0f, 0f, 0f, 0f);
+
     [Header("실내 시야 제한 (좀보이드 스타일 - 안에 들어가면 주변이 어두워짐)")]
     public bool darkenSurroundings = true;
     public float indoorFogStartDistance = 2f;
@@ -406,6 +418,7 @@ public class BuildingInterior : MonoBehaviour
     // 이 건물 벽 콜라이더의 문 구멍(doorSlot)마다 중심·바깥 방향·폭 (EntranceMarkers.TryGetDoor와 같은 벽 찾기)
     void BuildDoorGates()
     {
+        if (useManualDoor) { doorGates = new System.Collections.Generic.List<DoorGate>(); wallRoot = transform; return; } // (2026-11-20) 수동 문 건물: 문 구멍 판정 없이 트리거로 (부모의 다른 건물 문을 가져오지 않게)
         doorGates = new System.Collections.Generic.List<DoorGate>();
         wallRoot = transform;
         var walls = GetComponentsInChildren<BuildingWallCollider>(true);
