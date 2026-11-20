@@ -787,6 +787,7 @@ public static class InteriorDecorBuilder
             content(ctx);
             Physics.SyncTransforms();
             var report = Validate(root, bi, true, ctx.doors);
+            InteriorShadowsOff(); // (2026-11-20) 성능
             Debug.Log($"[Interior] {name}: 가구/소품 {ctx.count}개 배치 (조명 {root.GetComponentsInChildren<Light>().Length}개)\n{report}");
         }
         finally { EndSession(); }
@@ -1051,6 +1052,18 @@ public static class InteriorDecorBuilder
         c.P("Corridor", "blood2", -321.0f, -21.5f, 100f);
         c.P("Corridor", "blood", -295.0f, -8.0f, -70f);
         c.P("Corridor", "deadBody", -308.0f, -22.5f, 15f);
+        // (2026-11-20) 가운데 큰 홀 대기실: 벤치 3줄 + 화분 + 쓰레기통 + 넘어진 트롤리 + 서류 상자
+        foreach (var bz in new[] { 14.0f, 16.6f, 19.2f }) { c.P("Corridor", "cityBench", -276f, bz, 180f); c.P("Corridor", "cityBench", -272f, bz, 180f); }
+        c.PW("Corridor", "plant", -254.9f, 12.0f, 270f, "E");
+        c.PW("Corridor", "plant", -254.9f, 20.5f, 270f, "E");
+        c.P("Corridor", "trashcan", -268.5f, 12.5f, 0f);
+        c.P("Corridor", "officeDesk", -263.0f, 2.5f, 90f);
+        c.P("Corridor", "retroChair", -261.9f, 2.5f, 270f);
+        c.P("Corridor", "kBoxClosed", -265.0f, -4.0f, 20f);
+        c.P("Corridor", "medCart", -300.0f, -5.0f, 60f);
+        c.P("Corridor", "bedSingle", -290.0f, -3.0f, 75f);                  // 복도에 끌어낸 침대
+        c.P("Corridor", "blood2", -289.0f, -5.5f, 30f);
+        c.Light("Lights", -273f, 16f, 3.0f);
 
         // 조명: 접수대 / 병실 A 2 / 병실 B 2 / 가운데 홀 2
         c.Light("Reception", -300f, 24f);
@@ -1168,7 +1181,8 @@ public static class InteriorDecorBuilder
         var school = GameObject.Find("scene (2)");
         if (school == null) return;
         int opened = 0;
-        foreach (var id in new[] { "Component_43_15", "Component_43_13", "Component_43_10" })   // 교실 A, E, F 문
+        // foreach (var id in new[] { "Component_43_15", "Component_43_13", "Component_43_10" })   // (이전) 교실 A, E, F 문
+        foreach (var id in new[] { "Component_43_15", "Component_43_13", "Component_43_10", "Component_43_14", "Component_43_16", "Component_43_11" })   // (2026-11-20) + B, C, G (D는 원래 문 없음)
         {
             foreach (var t in school.GetComponentsInChildren<Transform>(true))
             {
@@ -1206,6 +1220,30 @@ public static class InteriorDecorBuilder
         Run("School", "Buildings/Enterable_School", 16.4f, 0f, c =>
         {
             c.Door(-305.5f, 140.0f); c.Door(-269.5f, 140.0f); c.Door(-260.5f, 140.0f);
+            c.Door(-297.5f, 140.0f); c.Door(-288.5f, 140.0f); c.Door(-252.5f, 140.0f); c.Door(-278.5f, 140.0f);   // (2026-11-20) B·C·G 문 + D 입구
+
+            // (2026-11-20) 나머지 교실도 전부: B·C = 교실 (책상 2x2·칠판·교탁), D = 보건실 (침대·트롤리·정수기), G = 도서실 (책장·책상)
+            ClassroomGrid(c, new[] { -296.3f, -293.8f }, new[] { 144.3f, 146.6f });
+            c.OnWall("Classroom", "blackboard", -295f, 148f, "N", 1f, 0.9f, new Vector3(1.4f, 0.5f, 1f), 1.0f);
+            c.P("Classroom", "officeDesk", -295f, 149.3f, 180f);
+            c.P("Classroom", "chair", -292.6f, 142.2f, 120f, new Vector3(0, 0, 90));
+            ClassroomGrid(c, new[] { -288.3f, -285.8f }, new[] { 144.3f, 146.6f });
+            c.OnWall("Classroom", "blackboard", -287f, 148f, "N", 1f, 0.9f, new Vector3(1.4f, 0.5f, 1f), 1.0f);
+            c.P("Classroom", "officeDesk", -287f, 149.3f, 180f);
+            c.P("Classroom", "books", -284.6f, 142.0f, 30f);
+            c.PW("Classroom", "bedSingle", -280.3f, 148.6f, 180f, "N");          // D 보건실
+            c.P("Classroom", "medCart", -278.6f, 149.6f, 180f);
+            c.PW("Classroom", "waterCooler", -276.2f, 150.0f, 225f, "NE");
+            c.P("Classroom", "blood", -279.0f, 145.0f, 20f);
+            c.PW("Classroom", "bookcaseWide", -255.5f, 150.0f, 180f, "N");        // G 도서실
+            c.PW("Classroom", "bookcaseWide", -252.6f, 150.0f, 180f, "N");
+            c.PW("Classroom", "bookcase", -250.9f, 146.5f, 270f, "E");
+            c.PW("Classroom", "bookcase", -257.1f, 146.5f, 90f, "W");
+            c.P("Classroom", "table", -254.0f, 145.6f, 0f);
+            c.P("Classroom", "chair", -254.0f, 144.7f, 0f);
+            c.P("Classroom", "chair", -254.0f, 146.5f, 180f, new Vector3(0, 0, 90));
+            c.P("Classroom", "books", -255.6f, 143.2f, 70f);
+            c.Light("Lights", -295f, 145.5f); c.Light("Lights", -287f, 145.5f); c.Light("Lights", -278.5f, 145.5f); c.Light("Lights", -254f, 145.5f);
 
             // 교실 A: 칠판 = 북쪽 벽, 학생 책상 3x2 (의자 남쪽, 북쪽을 봄), 교탁 = 칠판 앞
             ClassroomGrid(c, new[] { -305.2f, -303.3f, -301.4f }, new[] { 144.3f, 146.6f });
@@ -1901,6 +1939,7 @@ public static class InteriorDecorBuilder
             }
         }
         finally { EndSession(); }
+        InteriorShadowsOff(); // (2026-11-20) 성능
         Debug.Log($"[Interior] 나머지 건물 {built}채 자동 배치, 소품 {total}개 (검사에서 고친 건물 {issues}채)\n{log}");
         EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
     }
@@ -1992,7 +2031,9 @@ public static class InteriorDecorBuilder
         { "camp",      new string[0] },
     };
 
-    const int WallBudget = 22, CenterBudget = 17;
+    // const int WallBudget = 22, CenterBudget = 17; // (이전) 고정 → 큰 건물(400m² 이상)은 가장자리·옆방이 비었음
+    // (2026-11-20) 넓이 비례 예산: 전체 = 넓이/8 (46~110), 벽 45% / 가운데 40% / 나머지 잡동사니
+    static int Budget(float hx, float hz) => Mathf.Clamp(Mathf.RoundToInt(hx * hz * 4f / 8f), 46, 110);
 
     /// <summary>
     /// (프레임 좌표) 이 지점 위에 이 건물의 천장·지붕이 있는지 = 실내인지.
@@ -2066,11 +2107,11 @@ public static class InteriorDecorBuilder
             if (main.Count == 0 && fill.Length == 0) break;
             bool alongX = dir == "N" || dir == "S";
             float a0 = (alongX ? x0 : z0) + 0.9f, a1 = (alongX ? x1 : z1) - 0.9f;
-            int quota = Mathf.Max(2, Mathf.RoundToInt(WallBudget * (a1 - a0 + 1.8f) / perim));
+            int quota = Mathf.Max(2, Mathf.RoundToInt(Budget(hx, hz) * 0.45f * (a1 - a0 + 1.8f) / perim));
             float wallLine = dir == "N" ? z1 - 0.6f : dir == "S" ? z0 + 0.6f : dir == "E" ? x1 - 0.6f : x0 + 0.6f;
             float cursor = a0;
             int placed = 0, guard = 0;
-            while (cursor < a1 - 0.6f && placed < quota && guard++ < 30)
+            while (cursor < a1 - 0.6f && placed < quota && guard++ < 60)
             {
                 float px = alongX ? cursor + 0.5f : wallLine, pz = alongX ? wallLine : cursor + 0.5f;
                 if (NearDoor(px, pz, 3.4f) || !Indoor(c, px, pz)) { cursor += 1.0f; continue; }
@@ -2108,10 +2149,12 @@ public static class InteriorDecorBuilder
             for (int ix = 0; ix < nx; ix++) for (int iz = 0; iz < nz; iz++) cells.Add(new Vector2(ox + ix * stepX, oz + iz * stepZ));
             var mid = new Vector2(ctr.x, ctr.z);
             cells.Sort((p, q) => (p - mid).sqrMagnitude.CompareTo((q - mid).sqrMagnitude));
+            // (2026-11-20) 가운데 2칸(식탁·계산대 등)만 중앙 우선, 나머지는 섞어서 옆방·가장자리까지 고르게
+            for (int k = cells.Count - 1; k > 2; k--) { int j = 2 + rng.Next(k - 1); var tmp = cells[k]; cells[k] = cells[j]; cells[j] = tmp; }
             int cell = 0;
             foreach (var p in cells)
             {
-                if (c.count - centerStart >= CenterBudget) break;
+                if (c.count - centerStart >= Mathf.RoundToInt(Budget(hx, hz) * 0.4f)) break;
                 if (NearDoor(p.x, p.y, 4.0f) || !Indoor(c, p.x, p.y)) continue;
                 CenterCell(c, theme, p.x, p.y, cell++, rng, floorY);
             }
@@ -2128,8 +2171,8 @@ public static class InteriorDecorBuilder
             "warehouse" => new[] { "drum", "drum", "pallet", "wBarrel", "blood", "boxOpen" },
             _ => new[] { "planks", "box", "barrel", "blood", "bucket" },
         };
-        int want = Mathf.Clamp(Mathf.RoundToInt(hx * hz * 4f / 60f), 4, 7);
-        for (int i = 0, tries = 0; i < want && tries < want * 8 && c.count < MaxPerBuilding; tries++)
+        int want = Mathf.Clamp(Mathf.RoundToInt(hx * hz * 4f / 50f), 4, 16);   // (2026-11-20) 큰 건물은 잡동사니도 더 (최대 7 → 16)
+        for (int i = 0, tries = 0; i < want && tries < want * 8 && c.count < Budget(hx, hz); tries++)
         {
             float px = Mathf.Lerp(x0 + 1.2f, x1 - 1.2f, (float)rng.NextDouble());
             float pz = Mathf.Lerp(z0 + 1.2f, z1 - 1.2f, (float)rng.NextDouble());
@@ -2214,5 +2257,32 @@ public static class InteriorDecorBuilder
                 else Try(rng.Next(2) == 0 ? "boxLarge" : "barrelOpen", x, z, rng.Next(360));
                 break;
         }
+    }
+
+    // ───────────────────────── 실내 그림자 끄기 (성능, 2026-11-20) ─────────────────────────
+    /// <summary>
+    /// 건물 안 가구는 지붕 아래라 햇빛 그림자가 의미 없는데 그림자 패스 비용만 큼 → 실내 소품 그림자 끔 (바깥 Exterior 그룹은 그대로).
+    /// 건물 꾸미기(Run / Build 9) 끝에 자동 실행. 메뉴로 따로 실행 가능
+    /// </summary>
+    [MenuItem("Tools/Interior/Turn Off Interior Shadows (성능)")]
+    public static void InteriorShadowsOff()
+    {
+        int n = 0;
+        foreach (var g in EditorSceneManager.GetActiveScene().GetRootGameObjects())
+        {
+            if (!g.name.StartsWith("Building_Interior_")) continue;
+            foreach (var r in g.GetComponentsInChildren<Renderer>(true))
+            {
+                if (r is ParticleSystemRenderer) continue;
+                bool exterior = false;
+                for (var t = r.transform; t != null; t = t.parent) if (t.name == "Exterior") { exterior = true; break; }
+                if (exterior || r.shadowCastingMode == UnityEngine.Rendering.ShadowCastingMode.Off) continue;
+                Undo.RecordObject(r, "Interior Shadows Off");
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                n++;
+            }
+        }
+        Debug.Log($"[Interior] 실내 소품 그림자 끔: {n}개");
+        EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
     }
 }
