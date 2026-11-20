@@ -103,8 +103,9 @@ public static class OccludableMarker
             fader = go.AddComponent<OccluderFader>();
             Undo.RegisterCreatedObjectUndo(go, "OccluderFader");
         }
-        foreach (var x in Object.FindObjectsByType<PlayerXRay>(FindObjectsInactive.Include, FindObjectsSortMode.None))
-            if (x.enabled) { Undo.RecordObject(x, "Disable PlayerXRay"); x.enabled = false; EditorUtility.SetDirty(x); }
+        // (2026-11-20) Fade 되돌림 → 컷어웨이·X-Ray 다시 사용. 이 툴을 다시 돌려도 X-Ray를 끄지 않음
+        //         foreach (var x in Object.FindObjectsByType<PlayerXRay>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+        //             if (x.enabled) { Undo.RecordObject(x, "Disable PlayerXRay"); x.enabled = false; EditorUtility.SetDirty(x); }
 
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene);

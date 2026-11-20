@@ -64,7 +64,9 @@ public class BuildingInterior : MonoBehaviour
     /// 들어가도 지붕 잘라내기·바깥 검정 마스크·화면 마스크·옆 건물 숨김을 하지 않음. 실내 안개(darkenSurroundings)·문 소리·카메라 줌은 그대로.
     /// 코드는 지우지 않음: true로 바꾸면 예전 컷어웨이로 돌아감.
     /// </summary>
-    public static bool CutawayEnabled = false;
+    // public static bool CutawayEnabled = false; // (2026-11-18) Fade 방식 시도
+    // (2026-11-20) Fade 방식 되돌림: 들어가면 반투명 벽·가구가 어수선해서 → 다시 컷어웨이(지붕만 잘라냄). OccluderFader는 씬에서 enabled=false
+    public static bool CutawayEnabled = true;
 
     static readonly int CutHeightId = Shader.PropertyToID("_CutHeight");
     static readonly int CutEnabledId = Shader.PropertyToID("_CutEnabled");
