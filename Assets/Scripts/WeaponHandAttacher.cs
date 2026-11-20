@@ -119,6 +119,30 @@ public class WeaponHandAttacher : MonoBehaviour
     float aim01;    // 조준 자세 섞는 정도 0~1
     Vector3 lastAimDir = Vector3.forward;
 
+    [Header("떨림 방지 (2026-11-20)")]
+    [Tooltip("오른손 IK 목표(위치·회전)를 캐릭터 루트 기준으로 이 시간 상수(초)만큼 부드럽게 따라감 → 애니메이션 미세 흔들림 흡수")]
+    public float gripSmoothTime = 0.15f;
+    [Tooltip("가만히 서 있거나 걸을 때(조준·발사·달리기 아님) 총 방향 데드존(도): 커서가 이 각도 안에서 움직이면 총 방향을 안 바꿈")]
+    public float idleAimDeadZone = 5f;
+    [Tooltip("총 방향을 부드럽게 따라가는 시간(초): 평상시 / 조준·발사 중")]
+    public float aimDirSmoothTime = 0.15f, aimDirSmoothTimeAiming = 0.04f;
+    Vector3 aimDirSmoothed = Vector3.forward;   // 실제 총·손이 쓰는 방향 (lastAimDir을 부드럽게 따라감)
+    int dirFrame = -1;
+    Vector3 smGripLocalPos; Quaternion smGripLocalRot = Quaternion.identity; bool smGripInit; // 오른손 목표 (루트 로컬, 부드럽게)
+
+    [Header("손목·손바닥 (2026-11-20)")]
+    [Tooltip("오른손 손목 굽힘(도, 엄지 축): 음수 = 손바닥 쪽으로 굽힘")]
+    public float rightWristBend = -15f;
+    [Tooltip("오른손 손바닥 회전(도, 손가락 축): 손바닥이 손잡이 옆면을 감싸게")]
+    public float rightPalmRoll = -5f;
+    [Tooltip("왼손 손목 굽힘(도, LeftHandPoint 기준 엄지 축)")]
+    public float leftWristBend = -10f;
+    [Tooltip("왼손 손바닥 법선의 손 뼈 로컬 축 (오른손 hand.R = +X의 거울)")]
+    public Vector3 leftPalmLocalAxis = new Vector3(-1f, 0f, 0f);
+    [Tooltip("왼손 손바닥과 손잡이 지점 사이 간격(m) (손바닥이 총 표면에 닿게)")]
+    public float leftPalmGap = 0.035f;
+    Vector3 leftFingerLocal; Transform leftHandBone; bool leftChainFixed;
+
     /// <summary>지금 든 총 (근접 무기/맨손이면 null) - PlayerController.RefreshIKAndAim이 매 프레임 설정</summary>
     [System.NonSerialized] public WeaponData gripWeapon;
     /// <summary>달리는 중 → Low Ready (PlayerController가 설정)</summary>
@@ -172,6 +196,37 @@ public class WeaponHandAttacher : MonoBehaviour
     /// 오른팔 Two Bone IK를 기존 왼손 IK와 같은 Rig에 런타임으로 추가 (upper_arm.R → forearm.R → hand.R).
     /// 평소엔 weight 0이라 아무 영향 없음. Rig/RigBuilder를 못 찾으면 조용히 끔 (예전 자세 유지).
     /// </summary>
+    /// <summary>
+    /// (2026-11-20) 씬의 왼손 IK(Rig 1 > LeftHandIK)는 root = shoulder.L(쇄골), tip = hand.L_end(손가락 끝)으로 잡혀 있어서
+    /// 위팔은 애니메이션 그대로 두고 쇄골이 꺾이고, 손가락 끝만 앞 손잡이에 닿는 어색한 자세였음 (Play 실측: 손목이 목표에서 항상 0.24m = 손 길이).
+    /// → 런타임에 upper_arm.L → forearm.L → hand.L로 바로잡고, 손목 목표는 SyncLeftHandIK에서 "손바닥 가운데가 손잡이에 오도록" 계산.
+    /// 씬 파일은 안 건드림 (RigBuilder.Build는 SetupPistolGripIK에서 같이)
+    /// </summary>
+    void FixLeftHandChain()
+    {
+        if (leftHandIKTarget == null || bodyAnimator == null) return;
+        Transform upper = bodyAnimator.GetBoneTransform(HumanBodyBones.LeftUpperArm);
+        Transform lower = bodyAnimator.GetBoneTransform(HumanBodyBones.LeftLowerArm);
+        Transform hand = bodyAnimator.GetBoneTransform(HumanBodyBones.LeftHand);
+        if (upper == null || lower == null || hand == null) return;
+        foreach (var c in GetComponentsInChildren<TwoBoneIKConstraint>(true))
+        {
+            if (c.data.target != leftHandIKTarget) continue;
+            Transform end = c.data.tip;
+            if (end != null && end != hand && end.IsChildOf(hand)) leftFingerLocal = hand.InverseTransformPoint(end.position); // 손목 → 손가락 끝 (손 로컬)
+            c.data.root = upper;
+            c.data.mid = lower;
+            c.data.tip = hand;
+            leftHandBone = hand;
+            leftChainFixed = true;
+        }
+        if (leftFingerLocal == Vector3.zero)
+        {
+            var e = hand.childCount > 0 ? hand.GetChild(0) : null;
+            if (e != null) leftFingerLocal = hand.InverseTransformPoint(e.position);
+        }
+    }
+
     void SetupPistolGripIK()
     {
         if (!pistolCenterGrip || leftHandIKTarget == null) return;
@@ -179,6 +234,7 @@ public class WeaponHandAttacher : MonoBehaviour
         var rig = leftHandIKTarget.GetComponentInParent<Rig>();
         var builder = GetComponentInChildren<RigBuilder>();
         if (bodyAnimator == null || !bodyAnimator.isHuman || rig == null || builder == null) return;
+        FixLeftHandChain(); // (2026-11-20) 아래 builder.Build()에 같이 반영
         Transform upper = bodyAnimator.GetBoneTransform(HumanBodyBones.RightUpperArm);
         Transform lower = bodyAnimator.GetBoneTransform(HumanBodyBones.RightLowerArm);
         Transform hand = bodyAnimator.GetBoneTransform(HumanBodyBones.RightHand);
@@ -240,7 +296,8 @@ public class WeaponHandAttacher : MonoBehaviour
         Vector3 idle = g - Vector3.up * idleLowerBy;
         Vector3 aimed = g + new Vector3(0f, aimRaiseBy, aimPushForward);
         g = Vector3.Lerp(Vector3.Lerp(idle, aimed, aim01), sprintHoldOffset, lowReady01);
-        rightHandIKTarget.position = c + r * g.x + f * g.z + Vector3.up * g.y;
+        // rightHandIKTarget.position = c + r * g.x + f * g.z + Vector3.up * g.y; // (이전) 바로 적용 → 아래에서 부드럽게
+        Vector3 desiredPos = c + r * g.x + f * g.z + Vector3.up * g.y;
 
         Vector3 palm = -r;                                              // +X
         // 손가락은 총구가 향할 방향(MuzzleDirection)을 따라감 → 총이 손 안에서 비틀려 보이지 않게
@@ -249,7 +306,19 @@ public class WeaponHandAttacher : MonoBehaviour
         palm = Vector3.Cross(Vector3.up, md).sqrMagnitude > 1e-4f ? -Vector3.Cross(Vector3.up, md).normalized : palm;
         Vector3 z = -fingers;
         Vector3 y = Vector3.Cross(z, palm);                              // +Y (엄지: 위·앞)
-        rightHandIKTarget.rotation = Quaternion.LookRotation(z, y);
+        // rightHandIKTarget.rotation = Quaternion.LookRotation(z, y); // (이전)
+        // (2026-11-20) 손목 굽힘(엄지 축 Y) + 손바닥 감싸기(손가락 축 Z) → 손바닥이 손잡이 옆면을 감쌈
+        Quaternion desiredRot = Quaternion.LookRotation(z, y) * Quaternion.Euler(0f, rightWristBend, rightPalmRoll);
+
+        // (2026-11-20) 떨림 방지: 목표를 캐릭터 루트 로컬에서 gripSmoothTime으로 부드럽게 따라감.
+        // 루트 로컬이라 걷거나 몸을 돌릴 때는 지연 없이 같이 움직이고, 가슴 뼈의 애니메이션 미세 흔들림만 흡수됨
+        Vector3 lp = transform.InverseTransformPoint(desiredPos);
+        Quaternion lr = Quaternion.Inverse(transform.rotation) * desiredRot;
+        if (!smGripInit) { smGripLocalPos = lp; smGripLocalRot = lr; smGripInit = true; }
+        float k = 1f - Mathf.Exp(-Time.deltaTime / Mathf.Max(0.01f, gripSmoothTime));
+        smGripLocalPos = Vector3.Lerp(smGripLocalPos, lp, k);
+        smGripLocalRot = Quaternion.Slerp(smGripLocalRot, lr, k);
+        rightHandIKTarget.SetPositionAndRotation(transform.TransformPoint(smGripLocalPos), transform.rotation * smGripLocalRot);
 
         // 팔꿈치는 오른쪽 아래로 (안쪽으로 접혀 몸을 파고들지 않게)
         rightHandIKHint.position = c + r * 0.45f - Vector3.up * 0.35f - f * 0.05f;
@@ -425,12 +494,30 @@ public class WeaponHandAttacher : MonoBehaviour
     /// </summary>
     Vector3 MuzzleDirection(Vector3 bodyFwd)
     {
-        if (aimTarget != null && currentMuzzlePoint != null)
+        if (aimTarget != null && currentMuzzlePoint != null && dirFrame != Time.frameCount)   // (2026-11-20) 한 프레임에 두 번 불려도 갱신은 1번
         {
-            Vector3 t = aimTarget.position - currentMuzzlePoint.position; t.y = 0f;
-            if (t.magnitude >= minAimHorizontalDistance) lastAimDir = t.normalized; // 너무 가까우면 마지막 방향 유지
+            // Vector3 t = aimTarget.position - currentMuzzlePoint.position; t.y = 0f; // (이전) 총구 기준
+            // (2026-11-20) 떨림 원인: 총구 기준으로 방향을 재면 "총을 돌림 → 총구가 옆으로 움직임 → 방향이 다시 바뀜" 되먹임이 생겨
+            // 커서가 가까울수록 좌우로 왔다갔다함 → 움직이지 않는 캐릭터 루트 기준으로 잼 (총알은 Weapon이 aimTarget으로 따로 쏨)
+            Vector3 t = aimTarget.position - transform.position; t.y = 0f;
+            if (t.magnitude >= minAimHorizontalDistance) // 너무 가까우면 마지막 방향 유지
+            {
+                Vector3 nd = t.normalized;
+                // 데드존: 가만히/걷기(조준·발사·달리기 아님)일 땐 커서가 idleAimDeadZone 안에서 움직이면 방향 유지
+                bool precise = gripAiming || lowReady01 > 0f;
+                if (precise || Vector3.Angle(lastAimDir, nd) > idleAimDeadZone) lastAimDir = nd;
+            }
         }
-        Vector3 aimDir = lastAimDir;
+        // 실제로 쓰는 방향은 부드럽게 (데드존을 넘을 때 툭 튀지 않게)
+        if (dirFrame != Time.frameCount)
+        {
+            dirFrame = Time.frameCount;
+            float st = gripAiming ? aimDirSmoothTimeAiming : aimDirSmoothTime;
+            aimDirSmoothed = Vector3.Slerp(aimDirSmoothed, lastAimDir, 1f - Mathf.Exp(-Time.deltaTime / Mathf.Max(0.01f, st)));
+            aimDirSmoothed.y = 0f; aimDirSmoothed = aimDirSmoothed.sqrMagnitude > 1e-6f ? aimDirSmoothed.normalized : lastAimDir;
+        }
+        // Vector3 aimDir = lastAimDir; // (이전)
+        Vector3 aimDir = aimDirSmoothed;
         float down = idlePitch * (1f - aim01);
         Vector3 aimPose = Quaternion.AngleAxis(down, Vector3.Cross(Vector3.up, aimDir)) * aimDir;
         Vector3 sprintFlat = Quaternion.AngleAxis(sprintYaw, Vector3.up) * bodyFwd;
@@ -446,7 +533,8 @@ public class WeaponHandAttacher : MonoBehaviour
         Transform parentBone = currentWeaponVisualRoot.parent;
         if (parentBone == null) return;
 
-        Vector3 toTarget = aimTarget.position - currentMuzzlePoint.position;
+        // Vector3 toTarget = aimTarget.position - currentMuzzlePoint.position; // (이전) 총구 기준 → 되먹임 떨림
+        Vector3 toTarget = aimTarget.position - transform.position; // (2026-11-20) 루트 기준
         toTarget.y = 0f;
 
         // 너무 가까우면 이번 프레임은 그냥 아무것도 하지 않는다 (마지막 방향 유지).
@@ -476,8 +564,36 @@ public class WeaponHandAttacher : MonoBehaviour
     {
         if (currentLeftHandPoint == null || leftHandIKTarget == null) return;
 
-        leftHandIKTarget.position = currentLeftHandPoint.position;
-        leftHandIKTarget.rotation = currentLeftHandPoint.rotation;
+        // leftHandIKTarget.position = currentLeftHandPoint.position; // (이전)
+        // leftHandIKTarget.rotation = currentLeftHandPoint.rotation;
+        // (2026-11-20) 무기별 ForeGrip 보정(WeaponData.foreGripOffset, 무기 로컬 m) + 왼손 손목 굽힘
+        Vector3 off = gripWeapon != null ? gripWeapon.foreGripOffset : Vector3.zero;
+        Quaternion wr = currentWeaponVisualRoot != null ? currentWeaponVisualRoot.rotation : currentLeftHandPoint.rotation;
+        Vector3 grip = currentLeftHandPoint.position + wr * off;
+        if (!leftChainFixed || leftFingerLocal == Vector3.zero || currentMuzzlePoint == null)
+        {
+            leftHandIKTarget.position = grip;
+            leftHandIKTarget.rotation = currentLeftHandPoint.rotation * Quaternion.Euler(0f, leftWristBend, 0f);
+            return;
+        }
+        // 손목 목표 = "손바닥 가운데가 손잡이에 닿는" 위치. 손가락 뼈가 없는 모델이라 손을 펴서 받치는 모양으로:
+        //  소총류 = 손바닥이 위를 보며 총열 아래를 받침, 손가락은 총을 가로질러 오른쪽 앞 / 권총 = 손바닥이 오른쪽(오른손 쪽)을 보며 손잡이를 옆에서 감쌈
+        Vector3 md = currentMuzzlePoint.forward;
+        Vector3 rgt = Vector3.Cross(Vector3.up, md); rgt = rgt.sqrMagnitude > 1e-4f ? rgt.normalized : transform.right;
+        bool pistol = pistolHeld || (gripWeapon != null && gripWeapon.type == WeaponType.Pistol);
+        Vector3 palmW, fingW;
+        if (pistol) { palmW = rgt; fingW = (md * 0.75f - Vector3.up * 0.6f).normalized; }   // 앞·아래로 비스듬히 → 오른손 손가락 위를 감쌈
+        else { palmW = Vector3.up; fingW = (rgt * 0.85f + md * 0.5f).normalized; }
+        // 손목 굽힘: 손가락을 손바닥 쪽으로 leftWristBend° (음수 = 손바닥 쪽)
+        Vector3 bendAxis = Vector3.Cross(palmW, fingW);
+        fingW = Quaternion.AngleAxis(-leftWristBend, bendAxis) * fingW;
+        palmW = Vector3.ProjectOnPlane(palmW, fingW).normalized;
+        Vector3 fl = leftFingerLocal.normalized;
+        Vector3 pl = Vector3.ProjectOnPlane(leftPalmLocalAxis, fl).normalized;
+        Quaternion rot = Quaternion.LookRotation(fingW, palmW) * Quaternion.Inverse(Quaternion.LookRotation(fl, pl));
+        float len = leftFingerLocal.magnitude * (leftHandBone != null ? leftHandBone.lossyScale.x : 1f);
+        leftHandIKTarget.rotation = rot;
+        leftHandIKTarget.position = grip - palmW * leftPalmGap - fingW * len * 0.45f;
     }
 
     void SyncFirePoint()

@@ -23,6 +23,12 @@ public class WeaponData : ItemData
              "권총 = 가슴 중앙 양손 / AR·소총·샷건 = 오른쪽 어깨 견착 + 왼손은 무기의 LeftHandPoint(앞 손잡이)")]
     public Vector3 handGripOffset = Vector3.zero;
 
+    [Header("그립 보정 (2026-11-20) - 무기별 손 쥐는 자리")]
+    [Tooltip("오른손(Grip): 손 뼈 로컬 기준으로 총을 더 옮기는 양(m). Hand Offset의 positionOffset에 더해짐 → 손바닥이 손잡이 옆면을 감싸게 미세 조정")]
+    public Vector3 gripOffset = Vector3.zero;
+    [Tooltip("왼손(ForeGrip): 무기 프리팹의 LeftHandPoint 기준(무기 로컬) 왼손 목표를 옮기는 양(m). 총열 아래 지지 위치를 무기마다 맞춤")]
+    public Vector3 foreGripOffset = Vector3.zero;
+
     [Header("Shotgun Only")]
     public int pelletCount = 8;
     public float spreadAngle = 15f;

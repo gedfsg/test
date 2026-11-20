@@ -16,6 +16,7 @@ MonoBehaviour:
   icon: {fileID: 21300000, guid: 6129f5a1588b1ef45bd921d4608fe072, type: 3}
   itemType: 0
   rarity: 1
+  worldModel: {fileID: 0}
   isStackable: 0
   maxStackSize: 1
   weaponPrefab: {fileID: 2305860093417010625, guid: 2542e10f42677f142a1988b147b728d7, type: 3}
@@ -27,10 +28,34 @@ MonoBehaviour:
   bulletSpeed: 150
   recoil: 2
   effectiveRange: 40
+  handGripOffset: {x: 0, y: 0, z: 0}
+  gripOffset: {x: 0, y: 0, z: 0}
+  foreGripOffset: {x: -0.0000000014992159, y: -0.000000014245552, z: -0.18478617}
   pelletCount: 8
   spreadAngle: 15
   penetrating: 0
+  penetrationCount: 0
+  specialKind: 0
+  splashDamage: 0
+  splashRadius: 0
+  knockback: 0
+  burnDps: 0
+  burnDuration: 0
+  spinUpTime: 0
+  fuelCapacity: 0
+  fuelPerSecond: 0
+  lightColor: {r: 1, g: 0.8156863, b: 0.4392157, a: 1}
+  lightIntensity: 0.8
+  lightRange: 2.5
+  noiseRadius: 0
   autoFire: 1
+  fireSound: {fileID: 0}
+  reloadSound: {fileID: 0}
   positionOffset: {x: 0.01, y: 0.06, z: -0.2}
   rotationOffset: {x: 30, y: 170, z: 0}
+  carryRotationOffset: {x: 0, y: 0, z: 0}
+  carryMoveRotationOffset: {x: 0, y: 0, z: 0}
+  swingPositionOffset: {x: 0, y: 0, z: 0}
+  staminaCost: 0
+  rigidGrip: 0
   holsterRotation: {x: 306.8699, y: 270, z: 90}

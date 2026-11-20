@@ -29,6 +29,8 @@ MonoBehaviour:
   recoil: 0
   effectiveRange: 60
   handGripOffset: {x: 0, y: 0, z: 0}
+  gripOffset: {x: 0, y: 0, z: 0}
+  foreGripOffset: {x: 5.5452304e-10, y: -0.000000009630362, z: -0.034328625}
   pelletCount: 8
   spreadAngle: 15
   penetrating: 0

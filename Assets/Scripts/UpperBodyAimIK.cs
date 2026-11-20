@@ -33,7 +33,10 @@ public class UpperBodyAimIK : MonoBehaviour
     [Tooltip("조준 가중치 전환 시간(초)")]
     public float aimBlendTime = 0.15f;
     [Tooltip("총 들고 달릴 때 전체 가중치")]
-    [Range(0f, 1f)] public float gunSprintWeight = 0.2f;
+    // [Range(0f, 1f)] public float gunSprintWeight = 0.2f; // (이전)
+    [Range(0f, 1f)] public float gunSprintWeight = 0.3f; // (2026-11-20) 몸이 자연스럽게 움직이도록 0.3
+    [Tooltip("(2026-11-20) 가만히 서 있을 때(조준 아님) 전체 가중치 - 1보다 살짝 낮춰 미세 떨림 흡수")]
+    [Range(0f, 1f)] public float idleWeight = 0.9f;
 
     [Header("각도 제한 (±도)")]
     public float spineLimit = 60f;
@@ -195,7 +198,9 @@ public class UpperBodyAimIK : MonoBehaviour
         bool sprinting = locomotion != null && locomotion.IsSprinting && planar > 2f;
         // float target = off ? 0f : sprinting ? sprintWeight : 1f; // (이전)
         bool gunSprint = player != null && player.IsGunSprinting;
-        float target = off ? 0f : gunSprint ? gunSprintWeight : sprinting ? sprintWeight : 1f;
+        // float target = off ? 0f : gunSprint ? gunSprintWeight : sprinting ? sprintWeight : 1f; // (이전)
+        bool still = planar < 0.3f && !(player != null && player.IsGunAiming);
+        float target = off ? 0f : gunSprint ? gunSprintWeight : sprinting ? sprintWeight : still ? idleWeight : 1f; // (2026-11-20) 정지 0.9
         // 조준 중: 가슴·머리 가중치 (0.15초 전환)
         aimBlend = Mathf.MoveTowards(aimBlend, player != null && player.IsGunAiming ? 1f : 0f, Time.deltaTime / Mathf.Max(0.01f, aimBlendTime));
         if (chestAim != null) chestAim.weight = Mathf.Lerp(chestWeight, aimChestWeight, aimBlend);

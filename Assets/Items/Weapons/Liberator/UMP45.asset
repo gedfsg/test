@@ -28,9 +28,26 @@ MonoBehaviour:
   bulletSpeed: 120
   recoil: 3
   effectiveRange: 25
+  handGripOffset: {x: 0, y: 0, z: 0}
+  gripOffset: {x: 0, y: 0, z: 0}
+  foreGripOffset: {x: 0.0000000019822952, y: -0.000000029690678, z: -0.21600053}
   pelletCount: 8
   spreadAngle: 15
   penetrating: 0
+  penetrationCount: 0
+  specialKind: 0
+  splashDamage: 0
+  splashRadius: 0
+  knockback: 0
+  burnDps: 0
+  burnDuration: 0
+  spinUpTime: 0
+  fuelCapacity: 0
+  fuelPerSecond: 0
+  lightColor: {r: 1, g: 0.8156863, b: 0.4392157, a: 1}
+  lightIntensity: 0.8
+  lightRange: 2.5
+  noiseRadius: 0
   autoFire: 1
   fireSound: {fileID: 8300000, guid: d6fcf1b31d69cbe42b52dd7be0432c50, type: 3}
   reloadSound: {fileID: 0}

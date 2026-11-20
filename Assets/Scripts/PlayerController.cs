@@ -907,7 +907,7 @@ public class PlayerController : MonoBehaviour
             EquipWeapon(WeaponMode.Melee);
             if (meleeWeapon != null) meleeWeapon.ChangeWeaponData(newData);
             if (weaponHandAttacher != null && newData.weaponPrefab != null)
-                weaponHandAttacher.SwapVisual(newData.weaponPrefab, newData.positionOffset, newData.rotationOffset);
+                weaponHandAttacher.SwapVisual(newData.weaponPrefab, newData.positionOffset + newData.gripOffset, newData.rotationOffset); // (2026-11-20) + 무기별 그립 보정
         }
         else
         {
@@ -916,7 +916,7 @@ public class PlayerController : MonoBehaviour
             if (EnsureAnimRefs()) animator.SetInteger(WeaponPoseHash, newData.type == WeaponType.Pistol ? 1 : 2);
             if (rangedWeapon != null) rangedWeapon.ChangeWeaponData(newData, savedAmmo);
             if (weaponHandAttacher != null && newData.weaponPrefab != null)
-                weaponHandAttacher.SwapVisual(newData.weaponPrefab, newData.positionOffset, newData.rotationOffset);
+                weaponHandAttacher.SwapVisual(newData.weaponPrefab, newData.positionOffset + newData.gripOffset, newData.rotationOffset); // (2026-11-20) + 무기별 그립 보정
         }
     }
 
@@ -989,6 +989,9 @@ public class PlayerController : MonoBehaviour
         if (rb != null) rb.rotation = transform.rotation;
     }
 
+    // (2026-11-20) 조준점 떨림 방지용 (AimAtMouse)
+    Vector2 lastAimMousePos; Vector3 lastAimCamPos, lastAimRootPos, lastAimPoint; bool hasLastAimPoint;
+
     void AimAtMouse()
     {
         if (Mouse.current == null || mainCamera == null) return;
@@ -1000,7 +1003,32 @@ public class PlayerController : MonoBehaviour
         // 흔들리지 않는 고정값을 써야 한다.
         float aimY = transform.position.y + aimHeightOffset;
 
-        if (GameUtils.GetMouseWorldPosition(mainCamera, aimY, out Vector3 targetPoint))
+        // (2026-11-20) 커서가 0.5px 이하로만 움직였고 카메라·캐릭터도 그대로면 조준점을 안 바꿈 →
+        // 마우스 센서의 미세한 떨림이 몸·총 방향 떨림으로 번지지 않게
+        Vector2 mp = Mouse.current.position.ReadValue();
+        Vector3 camPos = mainCamera.transform.position;
+        bool mouseStill = (mp - lastAimMousePos).sqrMagnitude <= 0.5f * 0.5f
+                          && (camPos - lastAimCamPos).sqrMagnitude < 1e-6f
+                          && (transform.position - lastAimRootPos).sqrMagnitude < 1e-6f;
+        if (!mouseStill) { lastAimMousePos = mp; lastAimCamPos = camPos; lastAimRootPos = transform.position; }
+
+        bool hit = GameUtils.GetMouseWorldPosition(mainCamera, aimY, out Vector3 targetPoint);
+        if (mouseStill && hasLastAimPoint) { targetPoint = lastAimPoint; hit = true; }
+        if (hit) { lastAimPoint = targetPoint; hasLastAimPoint = true; }
+
+        // (2026-11-20) 총 들고 달릴 때는 몸을 이동 방향으로 → 옆·뒤로 달려도 앞으로 달리는 동작(전방 숙임)이 나옴.
+        // 예전엔 달리는 중에도 몸이 커서를 봐서, 커서 반대쪽으로 달리면 뒷걸음 달리기 동작 때문에 상체가 뒤로 젖혀졌음 (Play 실측 가슴 -21°)
+        // 발사 버튼을 누르면 IsGunSprinting이 꺼져 바로 커서 쪽으로 돌아감
+        Vector3 runDir = moveInput.sqrMagnitude > 0.01f ? moveInput : (rb != null ? rb.linearVelocity : Vector3.zero); // 입력 없으면 지금 달리는 방향
+        runDir.y = 0f;
+        if (IsGunSprinting && runDir.sqrMagnitude > 0.01f && !(meleeHeld && Time.time < meleeSwingUntil))
+        {
+            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(runDir.normalized), rotationSpeed * Time.deltaTime);
+            if (hit && aimTarget != null) aimTarget.position = targetPoint;
+            return;
+        }
+
+        if (hit)
         {
             Vector3 lookDir = (targetPoint - transform.position).normalized;
             lookDir.y = 0f;
