@@ -16,6 +16,13 @@ using UnityEngine.UI;
 ///   체력 = Health, 에너지 = Locomotion 스태미나, 수분/포만감 = SurvivalNeeds.
 /// 좌표는 레퍼런스 이미지(1681x936) 픽셀을 패널 중심(242.5, 775) 기준으로 환산한 값.
 /// Canvas 밑 StatusPanelHUD 오브젝트(좌하단 앵커)에 붙임 → Tools/HUD/Apply Layout/3.
+///
+/// (2026-11-22) 아포칼립스 리디자인 (Assets/UI/변경할 ui.png): 위치·크기 그대로, 모양만
+///   ❤ ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░  100 / 100   (빨강 그라데이션)
+///   ⚡ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░  100 / 100   (노랑)
+///   💧 ▓▓▓▓▓▓▓▓▓▓▓▓░░░░        95%   (파랑)
+///   🍴 ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░        97%   (초록)
+///   원형 게이지·라벨·테두리 없음, 반투명 검정 배경(모서리 작게), 숫자 bold. 예전 Build()는 BuildLegacy()로 남김
 /// </summary>
 public class StatusPanelHUD : MonoBehaviour
 {
@@ -46,6 +53,9 @@ public class StatusPanelHUD : MonoBehaviour
     RectTransform hpFill, enFill;
     TextMeshProUGUI hpText, enText, waterText, foodText;
     Image waterFill, foodFill;
+    // (2026-11-22) 새 레이아웃: 4줄 모두 Filled 그라데이션 바
+    bool apoc;
+    Image hpBar, enBar, waterBar, foodBar;
 
     void Start()
     {
@@ -60,7 +70,38 @@ public class StatusPanelHUD : MonoBehaviour
         Update();
     }
 
+    // (2026-11-22) 아포칼립스 리디자인 레이아웃 (패널 크기 431x228 그대로 → 화면 위치·크기 같음)
+    const float RowGap = 52f, BarLeft = -158f, BarRight = 76f, ApocBarH = 22f; // 오른쪽 값 칸 확보 (바 끝과 숫자가 붙어 보였음)
     void Build()
+    {
+        apoc = true;
+        Transform root = transform;
+        Sliced(HudStyle.NewImage(root, "Bg", HudStyle.RoundedRect, HudStyle.ApocPanel, Vector2.zero, new Vector2(431f, 228f)), 4f); // 모서리 작게
+        float y0 = RowGap * 1.5f;
+        hpBar = BuildApocRow(root, "Health", y0, HudStyle.Heart, HudStyle.HealthB, new Vector2(30f, 27f), HudStyle.HealthA, HudStyle.HealthB, out hpText);
+        enBar = BuildApocRow(root, "Energy", y0 - RowGap, HudStyle.Bolt, HudStyle.EnergyB, new Vector2(28f, 30f), HudStyle.EnergyA, HudStyle.EnergyB, out enText);
+        waterBar = BuildApocRow(root, "Water", y0 - RowGap * 2f, HudStyle.Drop, HudStyle.WaterB, new Vector2(26f, 30f), HudStyle.WaterA, HudStyle.WaterB, out waterText);
+        foodBar = BuildApocRow(root, "Food", y0 - RowGap * 3f, HudStyle.ForkKnife, HudStyle.FoodB, new Vector2(30f, 29f), HudStyle.FoodA, HudStyle.FoodB, out foodText);
+    }
+
+    // 왼쪽 아이콘 + 긴 바(어두운 홈 + 그라데이션 Filled) + 오른쪽 bold 값
+    Image BuildApocRow(Transform root, string name, float y, Sprite icon, Color iconColor, Vector2 iconSize,
+        Color gradA, Color gradB, out TextMeshProUGUI valueText)
+    {
+        HudStyle.NewImage(root, name + "Icon", icon, iconColor, new Vector2(-188f, y), iconSize).preserveAspect = true;
+        float w = BarRight - BarLeft, cx = (BarLeft + BarRight) / 2f;
+        HudStyle.NewImage(root, name + "Track", null, HudStyle.ApocTrack, new Vector2(cx, y), new Vector2(w, ApocBarH));
+        var fill = HudStyle.NewImage(root, name + "Fill", HudStyle.HorizontalGradient(gradA, gradB), Color.white, new Vector2(cx, y), new Vector2(w, ApocBarH));
+        fill.type = Image.Type.Filled;
+        fill.fillMethod = Image.FillMethod.Horizontal;
+        fill.fillOrigin = (int)Image.OriginHorizontal.Left;
+        valueText = HudStyle.NewText(root, name + "Value", "100 / 100", HudStyle.Bold, 22f, Color.white,
+            TextAlignmentOptions.Right, new Vector2(202f - 58f, y), new Vector2(116f, 30f));
+        return fill;
+    }
+
+    // (이전 ~2026-11-21) 체력·에너지 바 + 수분·포만감 원형 게이지 레이아웃
+    void BuildLegacy()
     {
         Transform root = transform;
 
@@ -138,6 +179,7 @@ public class StatusPanelHUD : MonoBehaviour
 
     void Update()
     {
+        if (apoc) { UpdateApoc(); return; } // (2026-11-22)
         if (hpFill == null) return;
 
         if (health != null)
@@ -153,6 +195,25 @@ public class StatusPanelHUD : MonoBehaviour
             waterText.text = $"{Mathf.CeilToInt(needs.water)}%";
             foodText.text = $"{Mathf.CeilToInt(needs.food)}%";
         }
+    }
+
+    // (2026-11-22) 새 레이아웃 갱신
+    void UpdateApoc()
+    {
+        if (hpBar == null) return;
+        if (health != null) SetApocBar(hpBar, hpText, health.GetCurrentHealth(), health.GetMaxHealth(), false);
+        if (locomotion != null) SetApocBar(enBar, enText, locomotion.GetStaminaNormalized() * locomotion.maxStamina, locomotion.maxStamina, false);
+        if (needs != null)
+        {
+            SetApocBar(waterBar, waterText, needs.water, 100f, true);
+            SetApocBar(foodBar, foodText, needs.food, 100f, true);
+        }
+    }
+
+    static void SetApocBar(Image bar, TextMeshProUGUI text, float current, float max, bool percent)
+    {
+        bar.fillAmount = max > 0f ? Mathf.Clamp01(current / max) : 0f;
+        text.text = percent ? $"{Mathf.CeilToInt(Mathf.Max(current, 0f))}%" : $"{Mathf.CeilToInt(Mathf.Max(current, 0f))} / {Mathf.RoundToInt(max)}";
     }
 
     static void SetBar(RectTransform fill, TextMeshProUGUI text, float current, float max)

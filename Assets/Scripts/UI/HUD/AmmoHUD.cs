@@ -27,6 +27,9 @@ public class AmmoHUD : MonoBehaviour
     void Start()
     {
         HideLegacyAmmoHud();
+        // (2026-11-22) 아포칼립스 리디자인: 반투명 검정 + 얇은 흰 선 (씬에 저장된 색 대신)
+        panelBg = HudStyle.ApocPanel;
+        panelBorder = HudStyle.ApocLine;
         Transform root = transform;
         var bg = HudStyle.NewImage(root, "Bg", HudStyle.RoundedRect, panelBg, Vector2.zero, new Vector2(222f, 97f));
         bg.pixelsPerUnitMultiplier = 2f;

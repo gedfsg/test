@@ -40,7 +40,8 @@ public class MissionHUD : MonoBehaviour
     static readonly Color Green = new Color32(0x5C, 0xE6, 0x73, 0xFF);    // 완료 ✓
     static readonly Color PanelFill = new Color(0.06f, 0.07f, 0.09f, 0.84f);
     static readonly Color Gold = new Color32(0xC9, 0xA2, 0x55, 0xE6);      // 테두리
-    static readonly Color Divider = new Color(1f, 1f, 1f, 0.12f);
+    // static readonly Color Divider = new Color(1f, 1f, 1f, 0.12f); // (이전)
+    static readonly Color Divider = new Color(1f, 1f, 1f, 0.22f);    // (2026-11-22) 레퍼런스처럼 조금 밝은 회색 선
     static readonly Color Cyan = new Color32(0x4F, 0xC3, 0xF7, 0xFF);      // 발견 토스트
 
     MissionManager mm;
@@ -84,23 +85,37 @@ public class MissionHUD : MonoBehaviour
         scaler.matchWidthOrHeight = 0.5f;
 
         // 패널: 오른쪽 위 고정 (높이는 발견된 서브 미션 수에 맞춰 Update에서 조절)
-        var bg = HudStyle.NewImage(canvasGo.transform, "Panel", PanelSprite, PanelFill, Vector2.zero, new Vector2(Width, 300f));
+        // var bg = HudStyle.NewImage(canvasGo.transform, "Panel", PanelSprite, PanelFill, Vector2.zero, new Vector2(Width, 300f)); // (이전) 금색 테두리 패널
+        // (2026-11-22) 아포칼립스 리디자인: 반투명 검정 + 얇은 흰 선, 모서리 작게 (Assets/UI/변경할 ui.png)
+        var bg = HudStyle.NewImage(canvasGo.transform, "Panel", HudStyle.RoundedRect, HudStyle.ApocPanel, Vector2.zero, new Vector2(Width, 300f));
+        bg.type = Image.Type.Sliced;
         panel = bg.rectTransform;
         panel.anchorMin = panel.anchorMax = panel.pivot = new Vector2(1f, 1f);
         panel.anchoredPosition = new Vector2(-20f, -20f);
-        panelFrame = HudStyle.NewImage(panel, "Frame", FrameSprite, Gold, Vector2.zero, Vector2.zero);
-        bg.pixelsPerUnitMultiplier = panelFrame.pixelsPerUnitMultiplier = FrameScale; // 테두리를 레퍼런스처럼 얇게
+        // panelFrame = HudStyle.NewImage(panel, "Frame", FrameSprite, Gold, Vector2.zero, Vector2.zero); // (이전)
+        // bg.pixelsPerUnitMultiplier = panelFrame.pixelsPerUnitMultiplier = FrameScale; // 테두리를 레퍼런스처럼 얇게
+        panelFrame = HudStyle.NewImage(panel, "Frame", HudStyle.RoundedFrame, HudStyle.ApocLine, Vector2.zero, Vector2.zero);
+        panelFrame.type = Image.Type.Sliced;
+        bg.pixelsPerUnitMultiplier = panelFrame.pixelsPerUnitMultiplier = 4f; // 모서리 4px, 선 얇게
         Stretch(panelFrame.rectTransform);
 
         // 진행률 + 큰 %
-        Text(panel, "ProgressLabel", "진행률", HudStyle.Bold, 18f, Orange, TextAlignmentOptions.MidlineLeft, Pad, -30f, 150f);
-        percentText = Text(panel, "Percent", "0%", HudStyle.Bold, 32f, Orange, TextAlignmentOptions.MidlineRight, Width - Pad - 150f, -30f, 150f);
+        // Text(panel, "ProgressLabel", "진행률", HudStyle.Bold, 18f, Orange, TextAlignmentOptions.MidlineLeft, Pad, -30f, 150f); // (이전) 주황
+        // percentText = Text(panel, "Percent", "0%", HudStyle.Bold, 32f, Orange, TextAlignmentOptions.MidlineRight, Width - Pad - 150f, -30f, 150f);
+        // (2026-11-22) 빨간 원 "!" + 흰 "진행률" + 빨간 큰 %
+        var warn = HudStyle.NewImage(panel, "WarnIcon", HudStyle.Circle, HudStyle.ApocRed, Vector2.zero, new Vector2(26f, 26f));
+        TopLeft(warn.rectTransform, Pad, -30f);
+        var warnMark = HudStyle.NewText(warn.transform, "Mark", "!", HudStyle.Bold, 20f, Color.white, TextAlignmentOptions.Center, Vector2.zero, new Vector2(26f, 26f));
+        warnMark.rectTransform.anchoredPosition = new Vector2(0f, 1f);
+        Text(panel, "ProgressLabel", "진행률", HudStyle.Bold, 20f, Color.white, TextAlignmentOptions.MidlineLeft, Pad + 34f, -30f, 150f);
+        percentText = Text(panel, "Percent", "0%", HudStyle.Bold, 34f, HudStyle.ApocRed, TextAlignmentOptions.MidlineRight, Width - Pad - 150f, -30f, 150f);
         // 진행 바 (어두운 홈 + 주황 그라데이션 채움)
         var track = HudStyle.NewImage(panel, "BarTrack", HudStyle.RoundedRect, new Color(1f, 1f, 1f, 0.1f), Vector2.zero, new Vector2(Width - Pad * 2f, 10f));
         TopLeft(track.rectTransform, Pad, -60f);
         track.pixelsPerUnitMultiplier = 3f;
-        barFill = HudStyle.NewImage(track.rectTransform, "Fill", HudStyle.BarOrange, Color.white, Vector2.zero, Vector2.zero);
-        if (barFill.sprite == null) barFill.color = Orange;
+        // barFill = HudStyle.NewImage(track.rectTransform, "Fill", HudStyle.BarOrange, Color.white, Vector2.zero, Vector2.zero); // (이전) 주황
+        // if (barFill.sprite == null) barFill.color = Orange;
+        barFill = HudStyle.NewImage(track.rectTransform, "Fill", HudStyle.HorizontalGradient(HudStyle.HealthA, HudStyle.ApocRed), Color.white, Vector2.zero, Vector2.zero); // (2026-11-22) 빨강 그라데이션
         var f = barFill.rectTransform;
         f.anchorMin = Vector2.zero; f.anchorMax = new Vector2(0f, 1f); f.pivot = new Vector2(0f, 0.5f);
         f.anchoredPosition = Vector2.zero; f.sizeDelta = Vector2.zero;

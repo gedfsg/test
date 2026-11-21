@@ -524,10 +524,16 @@ public class WeaponHotbarUI : MonoBehaviour
     // static Vector2 SlotSizeFor(int i) => i == 0 ? new Vector2(120f, SlotHeight) : new Vector2(SlotHeight, SlotHeight); // (이전) 1번만 가로로 김
     // (2026-11-21) 1·2번(무기 칸) 가로 길이 같게 → 둘 다 120, 나머지 정사각
     static Vector2 SlotSizeFor(int i) => SlotTypeFilter.IsWeaponSlot(i) ? new Vector2(120f, SlotHeight) : new Vector2(SlotHeight, SlotHeight);
-    static readonly Color SlotBg = new Color(0f, 0f, 0f, 0.55f);
-    static readonly Color SlotBgActive = new Color(1f, 1f, 1f, 0.18f);
-    static readonly Color SlotNumberColor = new Color(1f, 1f, 1f, 0.6f);
+    // static readonly Color SlotBg = new Color(0f, 0f, 0f, 0.55f);       // (이전)
+    // static readonly Color SlotBgActive = new Color(1f, 1f, 1f, 0.18f);
+    // static readonly Color SlotNumberColor = new Color(1f, 1f, 1f, 0.6f);
+    // (2026-11-22) 아포칼립스 리디자인 (Assets/UI/변경할 ui.png): 칸은 더 어두운 검정, 선택 칸은 밝은 회색 + 얇은 흰 테두리, 숫자 흰 bold
+    static readonly Color SlotBg = new Color(0f, 0f, 0f, 0.72f);
+    static readonly Color SlotBgActive = new Color(0.78f, 0.78f, 0.78f, 0.42f);
+    static readonly Color SlotNumberColor = new Color(1f, 1f, 1f, 0.92f);
+    static readonly Color SlotActiveBorder = new Color(1f, 1f, 1f, 0.9f);
     private readonly UnityEngine.UI.Image[] underlines = new UnityEngine.UI.Image[SLOT_COUNT];
+    private readonly UnityEngine.UI.Image[] activeBorders = new UnityEngine.UI.Image[SLOT_COUNT]; // (2026-11-22)
 
     private void ApplyMinimalStyle(SlotView slot, int i)
     {
@@ -547,7 +553,7 @@ public class WeaponHotbarUI : MonoBehaviour
             num.anchorMin = num.anchorMax = new Vector2(0f, 1f); num.pivot = new Vector2(0f, 1f);
             num.anchoredPosition = new Vector2(6f, -3f); num.sizeDelta = new Vector2(20f, 16f);
             var t = num.GetComponent<TMPro.TextMeshProUGUI>();
-            if (t != null) { t.fontSize = 13f; t.alignment = TMPro.TextAlignmentOptions.TopLeft; t.raycastTarget = false; }
+            if (t != null) { t.fontSize = 13f; t.alignment = TMPro.TextAlignmentOptions.TopLeft; t.raycastTarget = false; t.fontStyle = TMPro.FontStyles.Bold; } // (2026-11-22) bold
         }
         // 아이콘: 직사각형 칸 안에 여백 두고 (가로로 긴 총이 꽉 차게)
         var icon = slot.transform.Find("Icon") as RectTransform;
@@ -570,6 +576,19 @@ public class WeaponHotbarUI : MonoBehaviour
         underlines[i].color = Color.white;
         underlines[i].raycastTarget = false;
         underlines[i].enabled = false;
+
+        // (2026-11-22) 선택 테두리 (얇은 흰 선) - 밑줄 대신
+        var ab = new GameObject("ActiveBorder", typeof(RectTransform), typeof(UnityEngine.UI.Image));
+        var abr = (RectTransform)ab.transform;
+        abr.SetParent(slot.transform, false);
+        abr.anchorMin = Vector2.zero; abr.anchorMax = Vector2.one; abr.offsetMin = abr.offsetMax = Vector2.zero;
+        activeBorders[i] = ab.GetComponent<UnityEngine.UI.Image>();
+        activeBorders[i].sprite = HudStyle.RoundedFrame;
+        activeBorders[i].type = UnityEngine.UI.Image.Type.Sliced;
+        activeBorders[i].pixelsPerUnitMultiplier = 2.7f; // 배경 모서리(6px)와 맞춤
+        activeBorders[i].color = SlotActiveBorder;
+        activeBorders[i].raycastTarget = false;
+        activeBorders[i].enabled = false;
     }
 
     // SlotView.SetItem/SetEmpty/SetNumber가 테마 색으로 덮어쓰므로 매번 마지막에 다시 칠함
@@ -578,7 +597,9 @@ public class WeaponHotbarUI : MonoBehaviour
         var slot = slots[i];
         var bg = slot.GetComponent<UnityEngine.UI.Image>();
         if (bg != null) bg.color = isActive ? SlotBgActive : SlotBg;
-        if (underlines[i] != null) underlines[i].enabled = isActive;
+        // if (underlines[i] != null) underlines[i].enabled = isActive; // (이전) 선택 밑줄
+        if (underlines[i] != null) underlines[i].enabled = false;
+        if (activeBorders[i] != null) activeBorders[i].enabled = isActive; // (2026-11-22) 얇은 흰 테두리
         var bar = slot.transform.Find("ActiveBar");
         if (bar != null && bar.gameObject.activeSelf) bar.gameObject.SetActive(false); // SetActiveBar가 다시 켬
         var num = slot.transform.Find("NumberLabel")?.GetComponent<TMPro.TextMeshProUGUI>();
