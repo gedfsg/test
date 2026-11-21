@@ -15,17 +15,22 @@ using UnityEngine;
 ///     (지형 경사로 서서히 내려가는 강둑은 낭떠러지가 아니라 제외 → 강가 도로 옆엔 벽이 안 생김)
 ///  3) 연속된 가장자리 점을 이어 높이 2.5m 투명 BoxCollider 벽(경사 따라 기울임) + InvisibleWall(총알 통과)
 ///  4) 씬 루트 "BridgeSafetyWalls"에 모아 저장. 이후 NavMesh 재굽기(Tools → Map → Rebake NavMesh With Building Walls) 필요
+/// (2026-11-21) 피드백 "다리에 통과하는 부분이 있음": 측정 결과 다리 3곳에 0.5~2m 틈 8개(주로 다리↔경사로 이음새, 경사로 끝)
+///  → 측정 간격 2m → 0.5m, 경사로 범위 45 → 60m
 /// </summary>
 public static class BridgeSafetyBuilder
 {
     const string RootName = "BridgeSafetyWalls";
-    const float Step = 2f;            // 중심선 측정 간격
-    const float Extend = 45f;         // 다리 끝에서 경사로 쪽으로 더 볼 거리
+    // const float Step = 2f;         // (이전) 중심선 측정 간격 - 한 지점에서 가장자리 검출이 빠지면 앞뒤 4m가 벽 없이 뚫렸음
+    // const float Extend = 45f;      // (이전) 경사로 끝부분이 범위 밖이라 벽이 끝에서 끊김
+    const float Step = 0.5f;          // (2026-11-21) 중심선 측정 간격 - 다리·경사로 이음새 틈(0.5~2m) 메움
+    const float Extend = 60f;         // (2026-11-21) 다리 끝에서 경사로 쪽으로 더 볼 거리
     const float Probe = 0.25f;        // 옆으로 나가는 간격
     const float MaxHalfWidth = 25f;   // 중심에서 가장자리까지 최대
     const float LedgeDrop = 0.6f;     // 이만큼 뚝 떨어지면 낭떠러지
     const float WallHeight = 2.5f, WallThickness = 0.3f, WallSink = 0.3f; // 벽은 면 아래 0.3m부터 2.2m 위까지
     const float MaxEdgeJump = 4f;     // 이웃 지점 가장자리가 이보다 멀면 벽을 잇지 않음
+    const int MaxMissedStations = 2;  // (2026-11-21) 이 수까지 연속으로 검출이 빠진 지점은 건너뛰고 이음
 
     [MenuItem("Tools/Map/Build Bridge Safety Walls")]
     public static void Run()
@@ -73,10 +78,18 @@ public static class BridgeSafetyBuilder
         foreach (float sgn in new[] { 1f, -1f })
         {
             Vector3? prev = null;
+            int misses = 0; // (2026-11-21) 연속으로 가장자리를 못 찾은 지점 수
             for (float s = -half; s <= half; s += Step)
             {
                 Vector3 c = c0 + dir * s;
                 Vector3? edge = FindLedge(c, side * sgn);
+                // (2026-11-21) 직전 가장자리에서 MaxEdgeJump 넘게 튄 점(다리↔경사로 이음새의 도로 안쪽 단차를 가장자리로 오인, 9m 안쪽)은
+                //  연속 MaxMissedStations까지 "빠진 점"으로 보고 건너뜀 → 앞뒤 정상 가장자리끼리 이어짐
+                if (edge != null && prev != null && misses < MaxMissedStations && Vector3.Distance(prev.Value, edge.Value) > MaxEdgeJump)
+                {
+                    misses++;
+                    continue;
+                }
                 if (edge != null)
                 {
                     ledgeStations++;
@@ -87,7 +100,10 @@ public static class BridgeSafetyBuilder
                         count++;
                     }
                 }
-                prev = edge;
+                // prev = edge; // (이전) 한 지점만 검출이 빠져도 앞뒤가 안 이어져 틈이 생김 (다리↔경사로 이음새 0.58m - 2026-11-21 측정)
+                // (2026-11-21) 연속 2지점(1m)까지는 빠져도 마지막 가장자리에서 다음 가장자리로 바로 이음 (MaxEdgeJump 안일 때만)
+                if (edge != null) { prev = edge; misses = 0; }
+                else if (++misses > MaxMissedStations) prev = null;
             }
         }
         info = ledgeStations > 0 ? $"(중심선 {minS:0}~{maxS:0}m 구간, 다리 길이 {(alongZ ? b.size.z : b.size.x):0}m)" : "(낭떠러지 없음)";
