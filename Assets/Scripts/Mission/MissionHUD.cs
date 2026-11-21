@@ -56,6 +56,7 @@ public class MissionHUD : MonoBehaviour
     MissionManager mm;
     RectTransform panel;
     Image panelFrame;
+    float shownProgress; // (2026-11-22) 진행 바 애니메이션용
     TextMeshProUGUI percentText, footerText, emptySubText;
     Image barFill;
     // (이전) 메인 미션 1줄: TextMeshProUGUI mainTitle; Image mainStatus;
@@ -134,7 +135,9 @@ public class MissionHUD : MonoBehaviour
         f.anchoredPosition = Vector2.zero; f.sizeDelta = Vector2.zero;
         var goalText = Text(panel, "Goal", "목표 100%", HudStyle.Regular, 12f, Gray, TextAlignmentOptions.MidlineRight, Width - Pad - 150f, -78f, 150f);
         // (2026-11-22 2차) 레퍼런스엔 진행 바·"목표 100%"가 없음 → 숨김 (진행률은 % 숫자로 그대로 보임, 갱신 코드는 그대로 둠)
-        track.gameObject.SetActive(false);
+        // track.gameObject.SetActive(false); // (2026-11-22 2차) 숨김 → 피드백 "0% 진행률 아래가 비어 보임" → 다시 표시 (얇고 어둡게)
+        track.color = new Color(1f, 1f, 1f, 0.08f);
+        track.rectTransform.sizeDelta = new Vector2(track.rectTransform.sizeDelta.x, 6f);
         goalText.gameObject.SetActive(false);
 
         Line(panel, "Div1", -94f);
@@ -256,7 +259,10 @@ public class MissionHUD : MonoBehaviour
         if (inventoryOpen) compactText.text = $"진행률 {Mathf.FloorToInt(p)}% · 메인 미션 {(openMains == 0 ? "완료" : $"{openMains}개 진행 중")}";
 
         percentText.text = $"{Mathf.FloorToInt(p)}%";
-        barFill.rectTransform.anchorMax = new Vector2(Mathf.Clamp01(p / 100f), 1f);
+        // barFill.rectTransform.anchorMax = new Vector2(Mathf.Clamp01(p / 100f), 1f); // (이전) 즉시
+        // (2026-11-22) 부드럽게 차오름 (초당 최대 40%p)
+        shownProgress = Mathf.MoveTowards(shownProgress, p, 40f * Time.unscaledDeltaTime);
+        barFill.rectTransform.anchorMax = new Vector2(Mathf.Clamp01(shownProgress / 100f), 1f);
 
         // 메인 미션: 미션명 (+ 진행 수) + ○/✓ / 아래 줄에 할 일 (진행 중인 것 최대 3개 - 탈출 → 오늘 → 이전 날)
         // (이전) var main = mm.CurrentMain; mainTitle.text = main.title + detail; SetStatus(mainStatus, mm.MainDone);
