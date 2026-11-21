@@ -74,6 +74,7 @@ public class OccluderFader : MonoBehaviour
         public Material[] ringSources; // 링 재질마다 컷 값을 복사해 올 원본(건물 인스턴스 재질)
         public BuildingInterior building; // (2026-11-21 3차) 속한 건물 (없으면 null) - 들어가 있지 않으면 내부 가림
         public bool decor;                // (2026-11-21 3차) 건물 자식이 아니라 실내 트리거 안에 놓인 가구·소품 (Building_Interior_* 아래)
+        public bool dither;               // (2026-11-22) 링 대신 디더링 (정적 배칭)
     }
 
     readonly Dictionary<Renderer, Entry> entries = new Dictionary<Renderer, Entry>();
@@ -104,6 +105,7 @@ public class OccluderFader : MonoBehaviour
     static readonly int CutHeightId = Shader.PropertyToID("_CutHeight");   // (2026-11-21 2차) 건물 링에 컷 값 복사
     static readonly int CutEnabledId = Shader.PropertyToID("_CutEnabled");
     static readonly int HoleFillId = Shader.PropertyToID("_HoleInteriorFill"); // (2026-11-21 3차)
+    static readonly int HoleDitherId = Shader.PropertyToID("_HoleDither");     // (2026-11-22)
     PlayerXRay xray; // (2026-11-21) 실외에서는 고스트 끔
     // (2026-11-21 3차) 건물별 실내 트리거 범위 - 건물 자식이 아닌 가구(InteriorDecorBuilder가 따로 둔 것)가 어느 건물 안인지
     readonly List<KeyValuePair<BuildingInterior, Bounds>> buildingTriggers = new List<KeyValuePair<BuildingInterior, Bounds>>();
@@ -264,6 +266,7 @@ public class OccluderFader : MonoBehaviour
             {
                 mpb.SetFloat(HoleAmountId, Mathf.SmoothStep(0f, 1f, e.amount)); // (2026-11-21) 구멍 크기
                 mpb.SetFloat(HoleFillId, InteriorFill(e)); // (2026-11-21 3차)
+                mpb.SetFloat(HoleDitherId, e.dither ? 1f : 0f); // (2026-11-22)
             }
             else
             {
@@ -346,6 +349,9 @@ public class OccluderFader : MonoBehaviour
     {
         var r = e.renderer;
         if (!(r is MeshRenderer) || ringShader == null) return;
+        // (2026-11-22) 정적 배칭된 렌더러는 MeshFilter.sharedMesh가 "Combined Mesh(root: scene)" (여러 오브젝트를 합친 메시)라
+        //  링이 엉뚱한 위치·크기로 거대하게 그려져 화면을 덮었음 (숲에서 밤에 화면이 까맣게) → 링 없이 셰이더 디더링으로
+        if (r.isPartOfStaticBatch) { e.dither = true; return; }
         var mf = r.GetComponent<MeshFilter>();
         if (mf == null || mf.sharedMesh == null) return;
         var src = e.originals;

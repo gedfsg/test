@@ -86,6 +86,16 @@ float OccluderHoleClipFill(float3 worldPos, float amount, float fill)
     return r;
 }
 
+// (2026-11-22) 링을 못 붙이는 렌더러(정적 배칭 - MeshFilter가 합쳐진 메시를 돌려줌)용: 페더 구간을 디더링으로 (1차 방식)
+float OccluderHoleClipFillDither(float3 worldPos, float2 pixel, float amount, float fill, float dither)
+{
+    float r = 1;
+    float th = dither < 0.5 ? 0.999 : OccHoleNoise(pixel) + 1e-4; // 링 있음 = 페더까지 전부 잘라냄 / 링 없음 = 디더링
+    if (fill > 0.5 && OccHoleIsLow(worldPos)) r = OccHoleKeepCone(worldPos, amount) < 0.999 ? 0 : 1;
+    else clip(OccHoleKeep(worldPos, amount) - th);
+    return r;
+}
+
 // (3차) 링용 + 내부 가림: 바닥 높이는 불투명 원본이 어둡게 칠하므로 안 그림, 가구·소품(fill 2)은 링 자체를 안 그림
 //  (가구 링이 반투명 지붕보다 먼저 그려져서 지붕 너머로 비치던 문제)
 float OccluderHoleRingFill(float3 worldPos, float amount, float fill)
