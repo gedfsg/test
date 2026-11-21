@@ -17,6 +17,16 @@ using UnityEngine;
 ///  - 플레이어·좀비·아이템·투사체 등 움직이는 것은 레이어와 상관없이 절대 대상 아님 (IsDynamic)
 ///  - 실외에서는 PlayerXRay 고스트(반투명 몸)를 끔(indoorOnly) → 몸은 항상 불투명, 대신 구멍으로 보임
 ///  - 씬에서 이 컴포넌트를 다시 켬 (2026-11-20 Fade 되돌릴 때 enabled=false였음)
+/// (2026-11-21 2차) 피드백 "구멍을 크게, 가장자리 디더링 말고 부드럽게, 실내에서도"
+///  - 반경 3.5 → 7m, 페더 1 → 2m (최대 MaxHoleRadius 20m로 제한)
+///  - 디더링 → 그라데이션: 원본은 페더 구간까지 잘라내고, 같은 메시를 반투명 "링"(_HoleRing 자식 렌더러)으로 한 번 더 그려
+///    페더 구간만 알파 0~1 그라데이션 (Custom/OccluderHoleRing, 건물은 Custom/BuildingCutawayHoleRing)
+///  - 실내에서도 구멍 적용 (지붕 컷어웨이와 같이) → 큰 건물 안에서도 주변 방이 보임
+///  - 감지 범위: SphereCast 반경 = 구멍 반경 (시선이 직접 안 가려져도 구멍 범위에 걸치는 것까지)
+/// (2026-11-21 3차) 피드백 "원 경계가 안 보이게, 원 더 크게" + "건물 내부가 보이면 안 됨"
+///  - 반경 7 → 14m, 페더 2 → 10m (원 테두리가 거의 안 보이게 넓게 흐림)
+///  - 플레이어가 들어가 있지 않은 건물: 구멍 안 바닥 높이(바닥·러그·벽 아래 띠)를 어두운 단색으로 칠함(_HoleInteriorFill)
+///    → 벽·지붕·가구는 잘려서 뒤의 플레이어가 보이지만 방 안 모습은 안 보임. 들어가 있는 건물은 그대로(실내가 보여야 하니)
 /// </summary>
 public class OccluderFader : MonoBehaviour
 {
@@ -36,10 +46,17 @@ public class OccluderFader : MonoBehaviour
 
     [Header("(2026-11-21) 구멍 모드 - 플레이어 근처만 잘라냄 (끄면 예전 Fade 반투명)")]
     public bool holeMode = true;
-    [Tooltip("구멍 반경(m) - 카메라→플레이어 시선에서 이 거리 안을 잘라냄")]
-    public float HoleRadius = 3.5f;
-    [Tooltip("구멍 가장자리 페더링(m) - 디더링으로 부드럽게")]
-    public float HoleFeather = 1f;
+    [Tooltip("구멍 반경(m) - 플레이어 위치 기준 이 반경 안을 잘라냄 (최대 MaxHoleRadius)")]
+    // public float HoleRadius = 3.5f; // (이전 1차)
+    // public float HoleRadius = 7f;   // (이전 2차)
+    public float HoleRadius = 14f;     // (2026-11-21 3차)
+    [Tooltip("구멍 가장자리 페더링(m) - 반투명 그라데이션")]
+    // public float HoleFeather = 1f;  // (이전 1차)
+    // public float HoleFeather = 2f;  // (이전 2차)
+    public float HoleFeather = 10f;    // (2026-11-21 3차) 넓게 흐려서 원 테두리가 안 보이게
+    [Tooltip("(2026-11-21 3차) 건물 내부 가림 색 밝기 (구멍 안 바닥 높이를 이 회색으로)")]
+    [Range(0f, 1f)] public float HoleFillBrightness = 0.12f;
+    public const float MaxHoleRadius = 20f; // (2026-11-21 2차) 성능: 감지 SphereCast·링 렌더러 수가 반경에 비례해서 늘어남
     [Tooltip("플레이어 발 위 이 높이(m)보다 낮은 부분은 안 뚫음 (바닥·벽 아래 띠 유지)")]
     public float HoleMinHeight = 0.3f;
 
@@ -53,17 +70,25 @@ public class OccluderFader : MonoBehaviour
         public Material[] fades;
         public float amount;
         public bool hit;
+        public MeshRenderer ring;      // (2026-11-21 2차) 페더 구간 반투명 링 (없으면 null)
+        public Material[] ringSources; // 링 재질마다 컷 값을 복사해 올 원본(건물 인스턴스 재질)
+        public BuildingInterior building; // (2026-11-21 3차) 속한 건물 (없으면 null) - 들어가 있지 않으면 내부 가림
+        public bool decor;                // (2026-11-21 3차) 건물 자식이 아니라 실내 트리거 안에 놓인 가구·소품 (Building_Interior_* 아래)
     }
 
     readonly Dictionary<Renderer, Entry> entries = new Dictionary<Renderer, Entry>();
     readonly Dictionary<Collider, Renderer[]> colliderCache = new Dictionary<Collider, Renderer[]>();
     readonly List<Renderer> removeList = new List<Renderer>();
-    readonly RaycastHit[] hitBuf = new RaycastHit[64];
+    // readonly RaycastHit[] hitBuf = new RaycastHit[64]; // (이전) 구멍 반경이 커져서 한 번에 걸리는 수가 늘어남
+    readonly RaycastHit[] hitBuf = new RaycastHit[256];
     static readonly Dictionary<Material, Material> fadeMats = new Dictionary<Material, Material>();
     static Shader fadeShader;
     static Shader holeShader;            // (2026-11-21)
     static Shader buildingCutawayShader; // (2026-11-21) 이 셰이더 재질은 교체 없이 MPB만
     static readonly Dictionary<Material, Material> holeMats = new Dictionary<Material, Material>();
+    static Shader ringShader, buildingRingShader; // (2026-11-21 2차)
+    static readonly Dictionary<Material, Material> ringMats = new Dictionary<Material, Material>();
+    readonly Dictionary<Renderer, MeshRenderer> ringCache = new Dictionary<Renderer, MeshRenderer>(); // 렌더러별 링 (한 번 만들어 켜고 끔)
     MaterialPropertyBlock mpb;
     int layer = -1, mask;
     // 건물이 아닌 Occludable 렌더러 (나무·차·간판·바위 등) → 렌더러 범위(Bounds)로도 검사.
@@ -76,7 +101,15 @@ public class OccluderFader : MonoBehaviour
     static readonly int HoleAmountId = Shader.PropertyToID("_HoleAmount");   // (2026-11-21)
     static readonly int HolePlayerId = Shader.PropertyToID("_OccHolePlayer");
     static readonly int HoleParamsId = Shader.PropertyToID("_OccHoleParams");
+    static readonly int CutHeightId = Shader.PropertyToID("_CutHeight");   // (2026-11-21 2차) 건물 링에 컷 값 복사
+    static readonly int CutEnabledId = Shader.PropertyToID("_CutEnabled");
+    static readonly int HoleFillId = Shader.PropertyToID("_HoleInteriorFill"); // (2026-11-21 3차)
     PlayerXRay xray; // (2026-11-21) 실외에서는 고스트 끔
+    // (2026-11-21 3차) 건물별 실내 트리거 범위 - 건물 자식이 아닌 가구(InteriorDecorBuilder가 따로 둔 것)가 어느 건물 안인지
+    readonly List<KeyValuePair<BuildingInterior, Bounds>> buildingTriggers = new List<KeyValuePair<BuildingInterior, Bounds>>();
+    // (2026-11-21 3차) 건물별 실내 가구·소품 렌더러 (레이어 무관 - 러그·의자처럼 낮아서 Occludable이 아닌 것도) → 건물이 구멍에 걸리면 같이 처리
+    readonly Dictionary<BuildingInterior, Renderer[]> decorByBuilding = new Dictionary<BuildingInterior, Renderer[]>();
+    readonly List<BuildingInterior> hitBuildings = new List<BuildingInterior>();
 
     void Start()
     {
@@ -96,6 +129,8 @@ public class OccluderFader : MonoBehaviour
             if (holeShader == null) holeShader = Shader.Find("Custom/OccluderHole");
             if (buildingCutawayShader == null) buildingCutawayShader = Shader.Find("Custom/BuildingCutaway");
             if (holeShader == null) { Debug.LogError("[OccluderFader] Custom/OccluderHole 셰이더 없음 (Assets/Resources/Shaders)"); enabled = false; return; }
+            if (ringShader == null) ringShader = Shader.Find("Custom/OccluderHoleRing");
+            if (buildingRingShader == null) buildingRingShader = Shader.Find("Custom/BuildingCutawayHoleRing");
         }
 
         var list = new List<Renderer>();
@@ -104,6 +139,24 @@ public class OccluderFader : MonoBehaviour
                 && Mathf.Max(r.bounds.size.x, r.bounds.size.z) < 40f // 땅째 붙은 큰 메시(농장 등)는 범위 검사 안 함
                 && !IsDynamic(r)) list.Add(r); // (2026-11-21) 플레이어·좀비·아이템·투사체는 레이어가 잘못 돼 있어도 제외
         boundsOnly = list.ToArray();
+
+        // (2026-11-21 3차) 실내 트리거 범위 (가구 → 건물 찾기용)
+        foreach (var b in FindObjectsByType<BuildingInterior>(FindObjectsSortMode.None))
+        {
+            var t = LootWorldSpawner.FindTrigger(b);
+            if (t != null) buildingTriggers.Add(new KeyValuePair<BuildingInterior, Bounds>(b, t.bounds));
+        }
+        var decor = new Dictionary<BuildingInterior, List<Renderer>>();
+        foreach (var r in FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
+        {
+            if (!r.enabled || r.GetComponentInParent<BuildingInterior>() != null || IsDynamic(r)) continue;
+            if (r.name == "_HoleRing" || r.name.StartsWith("_Rarity")) continue;
+            var b = BuildingContaining(r.bounds.center);
+            if (b == null) continue;
+            if (!decor.TryGetValue(b, out var l)) decor[b] = l = new List<Renderer>();
+            l.Add(r);
+        }
+        foreach (var kv in decor) decorByBuilding[kv.Key] = kv.Value.ToArray();
 
         // 예전 가림 처리는 지우지 않고 끔 (Fade로 대체)
         // (2026-11-21) 구멍 모드: X-Ray는 끄지 않고 실내 전용으로 (실내 컷어웨이는 그대로, 실외 몸 반투명 고스트만 없앰)
@@ -130,24 +183,28 @@ public class OccluderFader : MonoBehaviour
         float dist = dir.magnitude;
 
         // (2026-11-21) 구멍 모드: 셰이더 전역 값 (시선 끝 = 플레이어 가슴, w = 발 높이)
+        float holeR = Mathf.Clamp(HoleRadius, 0f, MaxHoleRadius);            // (2026-11-21 2차) 20m 제한
+        float holeF = Mathf.Clamp(HoleFeather, 0.01f, Mathf.Max(0.01f, holeR));
         if (holeMode)
         {
             Shader.SetGlobalVector(HolePlayerId, new Vector4(to.x, to.y, to.z, player.position.y));
-            Shader.SetGlobalVector(HoleParamsId, new Vector4(HoleRadius, HoleFeather, HoleMinHeight, 0f));
+            Shader.SetGlobalVector(HoleParamsId, new Vector4(holeR, holeF, HoleMinHeight, HoleFillBrightness)); // (3차) w = 내부 가림 밝기
             if (xray != null && !xray.indoorOnly) xray.indoorOnly = true; // 실외 고스트 끔
 
-            // 실내에서는 구멍 안 뚫음 → 기존 컷어웨이(지붕 잘라내기)만. 열려 있던 구멍은 바로 닫음
-            if (BuildingInterior.Current != null)
-            {
-                foreach (var e in entries.Values) End(e);
-                entries.Clear();
-                return;
-            }
+            // (이전 1차) 실내에서는 구멍 안 뚫음 → 2차: 실내에서도 구멍 (지붕 컷어웨이와 같이). 건물 재질은 안 바꾸니 컷어웨이 그대로
+            // if (BuildingInterior.Current != null)
+            // {
+            //     foreach (var e in entries.Values) End(e);
+            //     entries.Clear();
+            //     return;
+            // }
         }
+        // (2026-11-21 2차) 감지 반경: 구멍 모드면 구멍 반경만큼 (구멍에 걸치는 것까지 같이 뚫음)
+        float castR = holeMode ? Mathf.Max(RayRadius, holeR) : RayRadius;
 
         if (dist > 0.01f)
         {
-            int n = Physics.SphereCastNonAlloc(from, RayRadius, dir / dist, hitBuf, dist, mask, QueryTriggerInteraction.Collide);
+            int n = Physics.SphereCastNonAlloc(from, castR, dir / dist, hitBuf, dist, mask, QueryTriggerInteraction.Collide);
             for (int i = 0; i < n; i++)
             {
                 var col = hitBuf[i].collider;
@@ -169,10 +226,27 @@ public class OccluderFader : MonoBehaviour
                 Bounds b = r.bounds;
                 float dx = b.center.x - pp.x, dz = b.center.z - pp.z;
                 if (dx * dx + dz * dz > BoundsCheckRange * BoundsCheckRange) continue;
-                b.Expand(RayRadius * 2f);
+                b.Expand(castR * 2f); // (2026-11-21 2차) RayRadius → castR
                 if (!b.IntersectRay(ray, out float d) || d > dist) continue;
                 if (!entries.TryGetValue(r, out var e)) e = Begin(r);
                 e.hit = true;
+            }
+        }
+
+        // (2026-11-21 3차) 구멍에 걸린 건물의 실내 가구·소품도 같이 (내부 가림 / 실내면 같이 뚫림)
+        if (holeMode)
+        {
+            hitBuildings.Clear();
+            foreach (var e in entries.Values) if (e.hit && e.building != null && !e.decor && !hitBuildings.Contains(e.building)) hitBuildings.Add(e.building);
+            foreach (var b in hitBuildings)
+            {
+                if (!decorByBuilding.TryGetValue(b, out var list)) continue;
+                foreach (var r in list)
+                {
+                    if (r == null) continue;
+                    if (!entries.TryGetValue(r, out var e)) e = Begin(r);
+                    if (e != null) e.hit = true;
+                }
             }
         }
 
@@ -186,13 +260,18 @@ public class OccluderFader : MonoBehaviour
 
             if (!e.hit && e.amount <= 0f) { End(e); removeList.Add(e.renderer); continue; }
             e.renderer.GetPropertyBlock(mpb);
-            if (holeMode) mpb.SetFloat(HoleAmountId, Mathf.SmoothStep(0f, 1f, e.amount)); // (2026-11-21) 구멍 크기
+            if (holeMode)
+            {
+                mpb.SetFloat(HoleAmountId, Mathf.SmoothStep(0f, 1f, e.amount)); // (2026-11-21) 구멍 크기
+                mpb.SetFloat(HoleFillId, InteriorFill(e)); // (2026-11-21 3차)
+            }
             else
             {
                 mpb.SetFloat(FadeAmountId, Mathf.SmoothStep(0f, 1f, e.amount));
                 mpb.SetFloat(FadeAlphaId, FadeAlpha);
             }
             e.renderer.SetPropertyBlock(mpb);
+            if (holeMode && e.ring != null) UpdateRing(e); // (2026-11-21 2차)
         }
         foreach (var r in removeList) entries.Remove(r);
     }
@@ -254,9 +333,87 @@ public class OccluderFader : MonoBehaviour
             swap = true;
         }
         var e = new Entry { renderer = r, originals = originals, fades = swap ? holes : null, amount = 0f };
+        e.building = r.GetComponentInParent<BuildingInterior>(); // (2026-11-21 3차)
+        if (e.building == null) { e.building = BuildingContaining(r.bounds.center); e.decor = e.building != null; }
         if (swap) r.sharedMaterials = holes;
         entries[r] = e;
+        AttachRing(e); // (2026-11-21 2차)
         return e;
+    }
+
+    /// <summary>(2026-11-21 2차) 페더 구간 반투명 링: 원본 자식으로 같은 메시를 링 재질로 (MeshRenderer만, 한 번 만들어 재사용)</summary>
+    void AttachRing(Entry e)
+    {
+        var r = e.renderer;
+        if (!(r is MeshRenderer) || ringShader == null) return;
+        var mf = r.GetComponent<MeshFilter>();
+        if (mf == null || mf.sharedMesh == null) return;
+        var src = e.originals;
+        var mats = new Material[src.Length];
+        for (int i = 0; i < src.Length; i++) mats[i] = src[i] != null ? RingMaterialFor(src[i]) : null;
+
+        if (!ringCache.TryGetValue(r, out var ring) || ring == null)
+        {
+            var go = new GameObject("_HoleRing");
+            go.transform.SetParent(r.transform, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mf.sharedMesh;
+            ring = go.AddComponent<MeshRenderer>();
+            ring.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            ring.receiveShadows = false;
+            ringCache[r] = ring;
+        }
+        ring.sharedMaterials = mats;
+        ring.enabled = true;
+        e.ring = ring;
+        e.ringSources = src;
+    }
+
+    void UpdateRing(Entry e)
+    {
+        e.ring.enabled = e.renderer.enabled;
+        e.ring.GetPropertyBlock(mpb);
+        mpb.SetFloat(HoleAmountId, Mathf.SmoothStep(0f, 1f, e.amount));
+        mpb.SetFloat(HoleFillId, InteriorFill(e)); // (2026-11-21 3차)
+        // 건물: 컷어웨이 값(실내 들어가면 지붕 컷)을 원본 인스턴스 재질에서 그대로
+        var src = e.ringSources;
+        for (int i = 0; i < src.Length; i++)
+        {
+            var m = src[i];
+            if (m == null || buildingCutawayShader == null || m.shader != buildingCutawayShader) continue;
+            mpb.SetFloat(CutHeightId, m.GetFloat(CutHeightId));
+            mpb.SetFloat(CutEnabledId, m.GetFloat(CutEnabledId));
+            break; // 건물 렌더러 재질은 컷 값이 같음
+        }
+        e.ring.SetPropertyBlock(mpb);
+    }
+
+    /// <summary>(2026-11-21 3차) 건물 내부 가림: 플레이어가 안 들어간 건물이면 본체 1 / 가구·소품 2, 아니면 0</summary>
+    static float InteriorFill(Entry e)
+    {
+        if (e.building == null || e.building.IsPlayerInside) return 0f;
+        return e.decor ? 2f : 1f;
+    }
+
+    /// <summary>(2026-11-21 3차) 이 위치를 실내 트리거 범위 안에 둔 건물 (없으면 null)</summary>
+    BuildingInterior BuildingContaining(Vector3 p)
+    {
+        foreach (var kv in buildingTriggers)
+            if (kv.Key != null && kv.Value.Contains(p)) return kv.Key;
+        return null;
+    }
+
+    /// <summary>(2026-11-21 2차) 원본 재질 → 링 재질 (원본당 하나). 건물(BuildingCutaway)은 건물 링 셰이더로 속성 전부 복사</summary>
+    static Material RingMaterialFor(Material src)
+    {
+        if (ringMats.TryGetValue(src, out var m) && m != null) return m;
+        if (buildingCutawayShader != null && src.shader == buildingCutawayShader && buildingRingShader != null)
+        {
+            m = new Material(buildingRingShader) { name = src.name + " (HoleRing)" };
+            m.CopyPropertiesFromMaterial(src); // 같은 속성 이름 (_MainTex, _Color, _CutHeight, _WallThickness, _EdgeColor, _InnerShade)
+        }
+        else m = CopyProps(src, new Material(ringShader) { name = src.name + " (HoleRing)" });
+        ringMats[src] = m;
+        return m;
     }
 
     void End(Entry e)
@@ -266,8 +423,10 @@ public class OccluderFader : MonoBehaviour
         {
             // (2026-11-21) 구멍 닫고 원래 재질로 (건물은 재질을 안 바꿨으니 BuildingInterior 컷어웨이 재질 그대로)
             if (e.fades != null) e.renderer.sharedMaterials = e.originals;
+            if (e.ring != null) e.ring.enabled = false; // (2026-11-21 2차)
             e.renderer.GetPropertyBlock(mpb);
             mpb.SetFloat(HoleAmountId, 0f);
+            mpb.SetFloat(HoleFillId, 0f); // (2026-11-21 3차)
             e.renderer.SetPropertyBlock(mpb);
             return;
         }

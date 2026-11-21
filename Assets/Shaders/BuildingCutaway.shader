@@ -43,6 +43,7 @@ Shader "Custom/BuildingCutaway"
         fixed4 _EdgeColor;
         half _InnerShade;
         float _HoleAmount; // (2026-11-21)
+        float _HoleInteriorFill; // (2026-11-21 3차) 1 = 구멍 안 바닥 높이를 어둡게 (건물 내부 안 보이게, MPB)
 
         struct Input
         {
@@ -58,9 +59,11 @@ Shader "Custom/BuildingCutaway"
             bool backFace = IN.facing < 0;
 
             // (2026-11-21) 외부 가림 구멍 - 그림자 패스에서는 안 뚫음 (햇빛이 새지 않게)
+            float fillK = 1; // (2026-11-21 3차) 1 = 원래 색, 0 = 어두운 단색 (내부 가림)
             #ifndef UNITY_PASS_SHADOWCASTER
-            float2 holePixel = IN.screenPos.xy / max(IN.screenPos.w, 1e-5) * _ScreenParams.xy;
-            OccluderHoleClip(IN.worldPos, holePixel, _HoleAmount);
+            // float2 holePixel = IN.screenPos.xy / max(IN.screenPos.w, 1e-5) * _ScreenParams.xy; // (이전 1차) 디더용
+            // OccluderHoleClip(IN.worldPos, holePixel, _HoleAmount); // (이전 2차)
+            fillK = OccluderHoleClipFill(IN.worldPos, _HoleAmount, _HoleInteriorFill);
             #endif
 
             // _CutEnabled가 켜져 있을 때만 컷 높이 위쪽 픽셀을 잘라냄
@@ -86,6 +89,9 @@ Shader "Custom/BuildingCutaway"
                 // 벽 안쪽 면은 살짝 어둡게 해서 바깥 면과 구분
                 o.Albedo = backFace ? c.rgb * _InnerShade : c.rgb;
             }
+            // (2026-11-21 3차) 내부 가림: 구멍 안 바닥 높이는 어두운 단색으로 (가장자리는 그라데이션)
+            o.Emission = lerp(OccHoleFillColor(), o.Emission, fillK);
+            o.Albedo *= fillK;
             o.Alpha = c.a;
         }
         ENDCG

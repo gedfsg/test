@@ -39,6 +39,7 @@ Shader "Custom/OccluderHole"
         half4 _EmissionColor;
         half _UseVertexColor;
         float _HoleAmount;
+        float _HoleInteriorFill; // (2026-11-21 3차) 건물 안 가구 등: 구멍 안 바닥 높이를 어둡게 (MPB)
 
         struct Input
         {
@@ -51,7 +52,8 @@ Shader "Custom/OccluderHole"
         void surf (Input IN, inout SurfaceOutputStandard o)
         {
             float2 pixel = IN.screenPos.xy / max(IN.screenPos.w, 1e-5) * _ScreenParams.xy;
-            OccluderHoleClip(IN.worldPos, pixel, _HoleAmount);
+            // OccluderHoleClip(IN.worldPos, pixel, _HoleAmount); // (이전 2차)
+            float fillK = OccluderHoleClipFill(IN.worldPos, _HoleAmount, _HoleInteriorFill); // (3차) 1 = 원래 색, 0 = 어두운 단색
 
             fixed4 c = tex2D(_MainTex, IN.uv_MainTex) * _Color;
             if (_UseVertexColor > 0.5)
@@ -67,6 +69,11 @@ Shader "Custom/OccluderHole"
             o.Metallic = _Metallic;
             o.Smoothness = _Glossiness;
             o.Emission = tex2D(_EmissionMap, IN.uv_MainTex).rgb * _EmissionColor.rgb;
+            // (2026-11-21 3차) 내부 가림
+            o.Emission = lerp(OccHoleFillColor(), o.Emission, fillK);
+            o.Albedo *= fillK;
+            o.Metallic *= fillK;
+            o.Smoothness *= fillK;
             o.Alpha = 1;
         }
         ENDCG
