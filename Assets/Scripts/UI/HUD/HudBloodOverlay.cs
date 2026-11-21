@@ -13,10 +13,17 @@ using UnityEngine.UI;
 /// 피 튀김 텍스처는 코드로 생성 (가장자리 얼룩 + 방울 + 위에서 흐른 자국, 고정 시드라 매번 같은 모양).
 /// 게임 씬(StatusPanelHUD가 있는 씬)이 로드되면 자동 생성. 메뉴(order 1100)보다는 아래.
 /// 미니맵: 굵은 금속 링(MetalRing) → 얇은 어두운 빨강 링.
+/// (2026-11-22 2차) 레퍼런스 "똑같이" 재작업:
+///  - 피 튀김: 실제 스플래터 질감 (HudGrunge.BloodVignette - 큰 덩어리·방울·미세 점·흘러내림, 좌·하단·우상단 진하게, 색 농담 #2A0504~#C0101A)
+///    Resources/HUD/Blood/blood_vignette.png(CC0 이미지)가 있으면 그걸 씀. 1차의 #4A0A0A α0.4 단색은 BuildSplatterSprite로 남김
+///  - 미니맵 링: 흰 페인트가 벗겨진 어두운 빨강 링 (HudGrunge.PeeledRing), N 배지 검정 원
 /// </summary>
 public class HudBloodOverlay : MonoBehaviour
 {
     public const int SortingOrder = 50;
+    // (2026-11-22 2차) 레퍼런스처럼 상시 피 튀김은 HUD 패널 "아래" (패널이 피 위에 놓임). 피격 펄스는 그대로 맨 위(SortingOrder)
+    public const int StaticSortingOrder = -10;
+    static Canvas staticCanvas;
     public static readonly Color StaticColor = new Color(0x4A / 255f, 0x0A / 255f, 0x0A / 255f, 0.4f);
     static readonly Color MinimapRing = new Color(0.42f, 0.06f, 0.06f, 0.95f);
 
@@ -51,17 +58,35 @@ public class HudBloodOverlay : MonoBehaviour
         return canvas.transform;
     }
 
+    /// <summary>(2026-11-22 2차) 상시 피 튀김 전용 캔버스 - 메인 HUD(order 0)보다 아래</summary>
+    static Transform EnsureStaticCanvas()
+    {
+        if (staticCanvas != null) return staticCanvas.transform;
+        var go = new GameObject("HudBloodStaticCanvas", typeof(RectTransform));
+        staticCanvas = go.AddComponent<Canvas>();
+        staticCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        staticCanvas.sortingOrder = StaticSortingOrder;
+        var scaler = go.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1681f, 936f);
+        scaler.matchWidthOrHeight = 0.5f;
+        return staticCanvas.transform;
+    }
+
     void Start()
     {
         // ── 상시 피 튀김 (맨 아래) ──
-        var root = EnsureCanvas();
+        // var root = EnsureCanvas(); // (1차) 피격 펄스와 같은 캔버스(HUD 위)
+        var root = EnsureStaticCanvas(); // (2차) HUD 아래 캔버스
         var go = new GameObject("StaticBloodSplatter", typeof(RectTransform), typeof(Image));
         var rt = (RectTransform)go.transform;
         rt.SetParent(root, false);
         rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one; rt.offsetMin = rt.offsetMax = Vector2.zero;
         var img = go.GetComponent<Image>();
-        img.sprite = BuildSplatterSprite();
-        img.color = StaticColor;
+        // img.sprite = BuildSplatterSprite(); // (2026-11-22 1차) 단색 얼룩
+        // img.color = StaticColor;
+        img.sprite = HudGrunge.BloodVignette();  // (2차) 색까지 구운 스플래터
+        img.color = new Color(1f, 1f, 1f, 0.88f);
         img.raycastTarget = false;
         rt.SetAsFirstSibling(); // 피격 펄스보다 아래
 
@@ -72,17 +97,22 @@ public class HudBloodOverlay : MonoBehaviour
     {
         var panel = GameObject.Find("MinimapPanel");
         if (panel == null) return;
+        // (2026-11-22 2차) 레퍼런스: 지도 화면이 어둡고 탁한 톤 → 곱하기 틴트
+        foreach (var raw in panel.GetComponentsInChildren<RawImage>(true))
+            if (raw.name == "MinimapRawImage") raw.color = new Color(0.66f, 0.64f, 0.58f, 1f);
         foreach (var im in panel.GetComponentsInChildren<Image>(true))
         {
             if (im.name == "OuterRing")
             {
-                // (이전) MetalRing 188px 굵은 금속 링 → 얇은 어두운 빨강 링
-                im.sprite = HudStyle.Ring != null ? HudStyle.Ring : im.sprite;
-                im.color = MinimapRing;
-                im.rectTransform.sizeDelta = new Vector2(180f, 180f);
+                // (이전) MetalRing 188px 굵은 금속 링 → (1차) 얇은 어두운 빨강 링 → (2차) 페인트 벗겨진 어두운 빨강 링
+                // im.sprite = HudStyle.Ring != null ? HudStyle.Ring : im.sprite; im.color = MinimapRing; im.rectTransform.sizeDelta = new Vector2(180f, 180f);
+                im.sprite = HudGrunge.PeeledRing();
+                im.color = Color.white;
+                im.rectTransform.sizeDelta = new Vector2(186f, 186f);
             }
-            else if (im.name == "NorthBadge") im.color = MinimapRing;
-            else if (im.name == "Fill" && im.transform.parent != null && im.transform.parent.name == "NorthBadge") im.color = new Color(0.08f, 0.06f, 0.06f, 1f);
+            else if (im.name == "MinimapRawImage") { } // RawImage라 여기 안 옴 (아래에서 처리)
+            else if (im.name == "NorthBadge") { im.sprite = HudGrunge.RoughCircle(); im.color = new Color32(0x2A, 0x06, 0x08, 0xFF); }
+            else if (im.name == "Fill" && im.transform.parent != null && im.transform.parent.name == "NorthBadge") im.color = new Color32(0x0C, 0x09, 0x08, 0xFF);
         }
     }
 

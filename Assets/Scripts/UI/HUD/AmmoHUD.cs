@@ -35,6 +35,10 @@ public class AmmoHUD : MonoBehaviour
         bg.pixelsPerUnitMultiplier = 2f;
         var border = HudStyle.NewImage(root, "Border", HudStyle.RoundedFrame, panelBorder, Vector2.zero, new Vector2(222f, 97f));
         border.pixelsPerUnitMultiplier = 2f;
+        // (2026-11-22 2차) 레퍼런스 질감: 얼룩·긁힘 검붉은 바탕(#160000 계열) + 긁힌 금속 테두리
+        bg.sprite = HudGrunge.Panel(new Color32(0x18, 0x04, 0x03, 0xFF), 0.9f, "ammo"); bg.type = Image.Type.Simple; bg.color = Color.white;
+        border.sprite = HudGrunge.Frame(3f); border.type = Image.Type.Sliced; border.pixelsPerUnitMultiplier = 1.6f;
+        border.color = new Color32(0x9A, 0x92, 0x8C, 0xF0);
 
         // 탄 아이콘 스프라이트에 2색이 구워져 있으므로 틴트는 흰색
         icon = HudStyle.NewImage(root, "Icon", HudStyle.BulletAR, Color.white, new Vector2(-77.5f, 16.5f), new Vector2(41f, 47f));

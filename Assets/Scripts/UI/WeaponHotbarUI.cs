@@ -551,9 +551,9 @@ public class WeaponHotbarUI : MonoBehaviour
         if (num != null)
         {
             num.anchorMin = num.anchorMax = new Vector2(0f, 1f); num.pivot = new Vector2(0f, 1f);
-            num.anchoredPosition = new Vector2(6f, -3f); num.sizeDelta = new Vector2(20f, 16f);
+            num.anchoredPosition = new Vector2(7f, -4f); num.sizeDelta = new Vector2(24f, 22f); // (2026-11-22 2차) 글자 커짐
             var t = num.GetComponent<TMPro.TextMeshProUGUI>();
-            if (t != null) { t.fontSize = 13f; t.alignment = TMPro.TextAlignmentOptions.TopLeft; t.raycastTarget = false; t.fontStyle = TMPro.FontStyles.Bold; } // (2026-11-22) bold
+            if (t != null) { t.fontSize = 17f; t.alignment = TMPro.TextAlignmentOptions.TopLeft; t.raycastTarget = false; t.fontStyle = TMPro.FontStyles.Bold; } // (2026-11-22 2차) 레퍼런스처럼 크고 굵게
         }
         // 아이콘: 직사각형 칸 안에 여백 두고 (가로로 긴 총이 꽉 차게)
         var icon = slot.transform.Find("Icon") as RectTransform;
@@ -596,10 +596,13 @@ public class WeaponHotbarUI : MonoBehaviour
     {
         var slot = slots[i];
         var bg = slot.GetComponent<UnityEngine.UI.Image>();
-        if (bg != null) bg.color = isActive ? SlotBgActive : SlotBg;
+        // if (bg != null) bg.color = isActive ? SlotBgActive : SlotBg; // (2026-11-22 1차)
+        // (2026-11-22 2차) 레퍼런스 질감: 흙먼지·긁힘 검정 칸 / 선택 칸 금속 회색 + 밝은 테두리 (텍스처에 색까지 구움)
+        if (bg != null) { bg.sprite = HudGrunge.Slot(isActive); bg.type = UnityEngine.UI.Image.Type.Simple; bg.color = Color.white; }
         // if (underlines[i] != null) underlines[i].enabled = isActive; // (이전) 선택 밑줄
         if (underlines[i] != null) underlines[i].enabled = false;
-        if (activeBorders[i] != null) activeBorders[i].enabled = isActive; // (2026-11-22) 얇은 흰 테두리
+        // if (activeBorders[i] != null) activeBorders[i].enabled = isActive; // (2026-11-22 1차) 얇은 흰 테두리
+        if (activeBorders[i] != null) activeBorders[i].enabled = false;     // (2차) 선택 칸 테두리는 칸 텍스처에 포함
         var bar = slot.transform.Find("ActiveBar");
         if (bar != null && bar.gameObject.activeSelf) bar.gameObject.SetActive(false); // SetActiveBar가 다시 켬
         var num = slot.transform.Find("NumberLabel")?.GetComponent<TMPro.TextMeshProUGUI>();

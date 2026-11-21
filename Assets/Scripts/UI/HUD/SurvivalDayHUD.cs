@@ -99,10 +99,14 @@ public class SurvivalDayHUD : MonoBehaviour
         //     TextAlignmentOptions.Center, new Vector2(0f, TitleY), new Vector2(200f, 30f));
 
         // ── (2026-11-22) 반투명 검정 패널 (테두리 없음, 모서리 작게) ──
-        var frame = HudStyle.NewImage(root, "Frame", HudStyle.RoundedRect, HudStyle.ApocPanel, new Vector2(0f, FrameY), new Vector2(FrameW, FrameH));
-        frame.type = Image.Type.Sliced; frame.pixelsPerUnitMultiplier = 4f;
+        // var frame = HudStyle.NewImage(root, "Frame", HudStyle.RoundedRect, HudStyle.ApocPanel, new Vector2(0f, FrameY), new Vector2(FrameW, FrameH)); // (1차)
+        // frame.type = Image.Type.Sliced; frame.pixelsPerUnitMultiplier = 4f;
+        // (2026-11-22 2차) 레퍼런스: 붓질 검정 띠 2줄(제목 / 시각) + 뒤에 번진 검붉은 피 얼룩
+        HudStyle.NewImage(root, "BloodSmear", HudGrunge.Brush("smear"), new Color(0.42f, 0.03f, 0.03f, 0.75f), new Vector2(0f, FrameY), new Vector2(FrameW + 130f, FrameH + 34f));
+        HudStyle.NewImage(root, "TitleBand", HudGrunge.Brush("title"), new Color(0.03f, 0.012f, 0.008f, 1f), new Vector2(0f, ApocTitleY), new Vector2(FrameW + 40f, 42f));
+        HudStyle.NewImage(root, "ClockBand", HudGrunge.Brush("clock"), new Color(0.03f, 0.012f, 0.008f, 1f), new Vector2(0f, ApocBottomY), new Vector2(FrameW + 60f, 60f));
         // ── 제목 (일차 숫자 빨강 - Refresh에서 리치 텍스트) ──
-        titleText = HudStyle.NewText(root, "Title", "생존 1일차", HudStyle.Bold, 22f, Color.white,
+        titleText = HudStyle.NewText(root, "Title", "생존 1일차", HudStyle.Bold, 23f, new Color32(0xE6, 0xDE, 0xD6, 0xFF), // (2차) 레퍼런스 회색빛 흰
             TextAlignmentOptions.Center, new Vector2(0f, ApocTitleY), new Vector2(240f, 30f));
         titleText.richText = true;
         // 7일 초과: 테두리 아래에 "탈출 실패 횟수: N" (2026-11-12)
@@ -169,8 +173,8 @@ public class SurvivalDayHUD : MonoBehaviour
         //     TextAlignmentOptions.Left, new Vector2(-28f + 50f + GroupShift, BottomY), new Vector2(100f, 40f));
         // (2026-11-22) 패널 안 아래 줄, 굵은 흰 시각 크게
         phaseIcon = HudStyle.NewImage(root, "PhaseIcon", HudStyle.Sun, sunColor, new Vector2(-62f + GroupShift, ApocBottomY), new Vector2(32f, 32f));
-        phaseDivider = HudStyle.NewImage(root, "Divider1", null, HudStyle.ApocLine, new Vector2(-38f + GroupShift, ApocBottomY), new Vector2(1.5f, 24f));
-        clockText = HudStyle.NewText(root, "Clock", "12:51", HudStyle.Bold, 36f, Color.white,
+        phaseDivider = HudStyle.NewImage(root, "Divider1", null, Color.clear, new Vector2(-38f + GroupShift, ApocBottomY), new Vector2(1.5f, 24f)); // (2차) 레퍼런스엔 세로선 없음 (실내 전환용으로 오브젝트는 둠)
+        clockText = HudStyle.NewText(root, "Clock", "12:51", HudStyle.Bold, 40f, new Color32(0xF2, 0xEC, 0xE6, 0xFF), // (2차) 오프화이트
             TextAlignmentOptions.Left, new Vector2(-28f + 50f + GroupShift, ApocBottomY), new Vector2(100f, 44f));
     }
 
@@ -198,7 +202,8 @@ public class SurvivalDayHUD : MonoBehaviour
             // 2026-11-12: 7일 넘으면 "생존 7일+N일차" + 아래에 탈출 실패 횟수 (7일차 이후 하루 지날 때마다 1회)
             // titleText.text = extended ? $"생존 {totalDays}일+{realDay - totalDays}일차" : $"생존 {realDay}일차"; // (이전)
             // (2026-11-22) 일차 숫자 부분만 빨강 (레퍼런스)
-            string red = "#" + ColorUtility.ToHtmlStringRGB(HudStyle.ApocRed);
+            // string red = "#" + ColorUtility.ToHtmlStringRGB(HudStyle.ApocRed); // (1차)
+            string red = "#E8A09A"; // (2026-11-22 2차) 레퍼런스: "1일차"는 연한 빨강
             titleText.text = extended ? $"생존 <color={red}>{totalDays}일+{realDay - totalDays}일차</color>" : $"생존 <color={red}>{realDay}일차</color>";
             if (escapeFailText != null)
             {

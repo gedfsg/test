@@ -37,6 +37,10 @@ public class FlashlightHUD : MonoBehaviour
         bg.pixelsPerUnitMultiplier = 2f;
         var border = HudStyle.NewImage(root, "Border", HudStyle.RoundedFrame, panelBorder, Vector2.zero, new Vector2(222f, 45f));
         border.pixelsPerUnitMultiplier = 2f;
+        // (2026-11-22 2차) 레퍼런스 질감: 얼룩·긁힘 검붉은 바탕(#160000 계열) + 긁힌 금속 테두리
+        bg.sprite = HudGrunge.Panel(new Color32(0x18, 0x04, 0x03, 0xFF), 0.9f, "ammo"); bg.type = Image.Type.Simple; bg.color = Color.white;
+        border.sprite = HudGrunge.Frame(3f); border.type = Image.Type.Sliced; border.pixelsPerUnitMultiplier = 1.6f;
+        border.color = new Color32(0x9A, 0x92, 0x8C, 0xF0);
 
         icon = HudStyle.NewImage(root, "Icon", HudStyle.Flashlight, iconColor, new Vector2(-85.5f, -1.5f), new Vector2(30f, 32f));
         stateText = HudStyle.NewText(root, "State", "ON  [T]", HudStyle.Regular, 18f, onText,
