@@ -521,7 +521,9 @@ public class WeaponHotbarUI : MonoBehaviour
     // (2026-11-18) 세로를 패널에 꽉 채움(88 = 100 - 위아래 패딩 6), 슬롯 1(주력 무기)만 가로 1.4:1, 나머지 정사각
     const int PanelPadding = 6;
     const float SlotHeight = 88f;
-    static Vector2 SlotSizeFor(int i) => i == 0 ? new Vector2(120f, SlotHeight) : new Vector2(SlotHeight, SlotHeight);
+    // static Vector2 SlotSizeFor(int i) => i == 0 ? new Vector2(120f, SlotHeight) : new Vector2(SlotHeight, SlotHeight); // (이전) 1번만 가로로 김
+    // (2026-11-21) 1·2번(무기 칸) 가로 길이 같게 → 둘 다 120, 나머지 정사각
+    static Vector2 SlotSizeFor(int i) => SlotTypeFilter.IsWeaponSlot(i) ? new Vector2(120f, SlotHeight) : new Vector2(SlotHeight, SlotHeight);
     static readonly Color SlotBg = new Color(0f, 0f, 0f, 0.55f);
     static readonly Color SlotBgActive = new Color(1f, 1f, 1f, 0.18f);
     static readonly Color SlotNumberColor = new Color(1f, 1f, 1f, 0.6f);
