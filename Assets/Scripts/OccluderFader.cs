@@ -9,6 +9,14 @@ using UnityEngine;
 ///  - 원본 재질 에셋은 안 건드림: 원본마다 페이드용 복사본을 한 번 만들어 공유, 투명도는 MPB로만 조작
 ///  - 지면·플레이어·좀비·투사체·이펙트는 Occludable 레이어가 아니라서 영향 없음 (Tools/Utility/Mark Occludable Objects가 레이어 지정)
 /// 예전 방식: BuildingInterior.CutawayEnabled(컷어웨이 셰이더), PlayerXRay(가려진 몸 비침), CameraObstacleFader(렌더러 끄기) - 코드는 남기고 끔.
+/// (2026-11-21) 외부 가림 "구멍" 모드(holeMode, 기본 켬) - 피드백 "건물 밖에서 건물·벽 뒤로 가면 플레이어가 안 보이고, 몸이 반투명해짐"
+///  - 실내(BuildingInterior.Current)에서는 아무것도 안 함 → 기존 컷어웨이(지붕 잘라내기)·X-Ray 그대로
+///  - 실외에서 시선이 가려지면 오브젝트 전체를 흐리게 하지 않고 "플레이어 근처만" 잘라냄 (반경 HoleRadius 3.5m, 페더 HoleFeather 1m)
+///    · 건물(재질이 Custom/BuildingCutaway): 재질 교체 없이 렌더러 MPB _HoleAmount만 올림 (셰이더에 구멍 함수 추가)
+///    · 그 외 Prop: Custom/OccluderHole(불투명 + 구멍) 재질로 잠깐 바꿈 (예전 FadeOccluder 대신)
+///  - 플레이어·좀비·아이템·투사체 등 움직이는 것은 레이어와 상관없이 절대 대상 아님 (IsDynamic)
+///  - 실외에서는 PlayerXRay 고스트(반투명 몸)를 끔(indoorOnly) → 몸은 항상 불투명, 대신 구멍으로 보임
+///  - 씬에서 이 컴포넌트를 다시 켬 (2026-11-20 Fade 되돌릴 때 enabled=false였음)
 /// </summary>
 public class OccluderFader : MonoBehaviour
 {
@@ -25,6 +33,15 @@ public class OccluderFader : MonoBehaviour
     public float RayRadius = 0.6f;
     [Tooltip("플레이어 발 위치에서 이 높이(m)를 겨냥 (몸 가운데~머리)")]
     public float playerHeightOffset = 1.2f;
+
+    [Header("(2026-11-21) 구멍 모드 - 플레이어 근처만 잘라냄 (끄면 예전 Fade 반투명)")]
+    public bool holeMode = true;
+    [Tooltip("구멍 반경(m) - 카메라→플레이어 시선에서 이 거리 안을 잘라냄")]
+    public float HoleRadius = 3.5f;
+    [Tooltip("구멍 가장자리 페더링(m) - 디더링으로 부드럽게")]
+    public float HoleFeather = 1f;
+    [Tooltip("플레이어 발 위 이 높이(m)보다 낮은 부분은 안 뚫음 (바닥·벽 아래 띠 유지)")]
+    public float HoleMinHeight = 0.3f;
 
     [Header("대상 (비우면 Player 태그 / Camera.main)")]
     public Transform player;
@@ -44,6 +61,9 @@ public class OccluderFader : MonoBehaviour
     readonly RaycastHit[] hitBuf = new RaycastHit[64];
     static readonly Dictionary<Material, Material> fadeMats = new Dictionary<Material, Material>();
     static Shader fadeShader;
+    static Shader holeShader;            // (2026-11-21)
+    static Shader buildingCutawayShader; // (2026-11-21) 이 셰이더 재질은 교체 없이 MPB만
+    static readonly Dictionary<Material, Material> holeMats = new Dictionary<Material, Material>();
     MaterialPropertyBlock mpb;
     int layer = -1, mask;
     // 건물이 아닌 Occludable 렌더러 (나무·차·간판·바위 등) → 렌더러 범위(Bounds)로도 검사.
@@ -53,6 +73,10 @@ public class OccluderFader : MonoBehaviour
 
     static readonly int FadeAmountId = Shader.PropertyToID("_FadeAmount");
     static readonly int FadeAlphaId = Shader.PropertyToID("_FadeAlpha");
+    static readonly int HoleAmountId = Shader.PropertyToID("_HoleAmount");   // (2026-11-21)
+    static readonly int HolePlayerId = Shader.PropertyToID("_OccHolePlayer");
+    static readonly int HoleParamsId = Shader.PropertyToID("_OccHoleParams");
+    PlayerXRay xray; // (2026-11-21) 실외에서는 고스트 끔
 
     void Start()
     {
@@ -67,15 +91,28 @@ public class OccluderFader : MonoBehaviour
         if (fadeShader == null) fadeShader = Shader.Find("Custom/FadeOccluder");
         if (fadeShader == null) { Debug.LogError("[OccluderFader] Custom/FadeOccluder 셰이더 없음 (Assets/Resources/Shaders)"); enabled = false; return; }
         mpb = new MaterialPropertyBlock();
+        if (holeMode)
+        {
+            if (holeShader == null) holeShader = Shader.Find("Custom/OccluderHole");
+            if (buildingCutawayShader == null) buildingCutawayShader = Shader.Find("Custom/BuildingCutaway");
+            if (holeShader == null) { Debug.LogError("[OccluderFader] Custom/OccluderHole 셰이더 없음 (Assets/Resources/Shaders)"); enabled = false; return; }
+        }
 
         var list = new List<Renderer>();
         foreach (var r in FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
             if (r.gameObject.layer == layer && r.GetComponentInParent<BuildingInterior>() == null // 건물은 ㄱ자 등 범위가 실제보다 커서 콜라이더로만
-                && Mathf.Max(r.bounds.size.x, r.bounds.size.z) < 40f) list.Add(r); // 땅째 붙은 큰 메시(농장 등)는 범위 검사 안 함
+                && Mathf.Max(r.bounds.size.x, r.bounds.size.z) < 40f // 땅째 붙은 큰 메시(농장 등)는 범위 검사 안 함
+                && !IsDynamic(r)) list.Add(r); // (2026-11-21) 플레이어·좀비·아이템·투사체는 레이어가 잘못 돼 있어도 제외
         boundsOnly = list.ToArray();
 
         // 예전 가림 처리는 지우지 않고 끔 (Fade로 대체)
-        foreach (var x in FindObjectsByType<PlayerXRay>(FindObjectsInactive.Include, FindObjectsSortMode.None)) x.enabled = false;
+        // (2026-11-21) 구멍 모드: X-Ray는 끄지 않고 실내 전용으로 (실내 컷어웨이는 그대로, 실외 몸 반투명 고스트만 없앰)
+        // foreach (var x in FindObjectsByType<PlayerXRay>(FindObjectsInactive.Include, FindObjectsSortMode.None)) x.enabled = false;
+        foreach (var x in FindObjectsByType<PlayerXRay>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+        {
+            if (holeMode) { x.indoorOnly = true; xray = x; }
+            else x.enabled = false;
+        }
         foreach (var x in FindObjectsByType<CameraObstacleFader>(FindObjectsInactive.Include, FindObjectsSortMode.None)) x.enabled = false;
     }
 
@@ -91,6 +128,23 @@ public class OccluderFader : MonoBehaviour
         Vector3 to = player.position + Vector3.up * playerHeightOffset;
         Vector3 dir = to - from;
         float dist = dir.magnitude;
+
+        // (2026-11-21) 구멍 모드: 셰이더 전역 값 (시선 끝 = 플레이어 가슴, w = 발 높이)
+        if (holeMode)
+        {
+            Shader.SetGlobalVector(HolePlayerId, new Vector4(to.x, to.y, to.z, player.position.y));
+            Shader.SetGlobalVector(HoleParamsId, new Vector4(HoleRadius, HoleFeather, HoleMinHeight, 0f));
+            if (xray != null && !xray.indoorOnly) xray.indoorOnly = true; // 실외 고스트 끔
+
+            // 실내에서는 구멍 안 뚫음 → 기존 컷어웨이(지붕 잘라내기)만. 열려 있던 구멍은 바로 닫음
+            if (BuildingInterior.Current != null)
+            {
+                foreach (var e in entries.Values) End(e);
+                entries.Clear();
+                return;
+            }
+        }
+
         if (dist > 0.01f)
         {
             int n = Physics.SphereCastNonAlloc(from, RayRadius, dir / dist, hitBuf, dist, mask, QueryTriggerInteraction.Collide);
@@ -132,8 +186,12 @@ public class OccluderFader : MonoBehaviour
 
             if (!e.hit && e.amount <= 0f) { End(e); removeList.Add(e.renderer); continue; }
             e.renderer.GetPropertyBlock(mpb);
-            mpb.SetFloat(FadeAmountId, Mathf.SmoothStep(0f, 1f, e.amount));
-            mpb.SetFloat(FadeAlphaId, FadeAlpha);
+            if (holeMode) mpb.SetFloat(HoleAmountId, Mathf.SmoothStep(0f, 1f, e.amount)); // (2026-11-21) 구멍 크기
+            else
+            {
+                mpb.SetFloat(FadeAmountId, Mathf.SmoothStep(0f, 1f, e.amount));
+                mpb.SetFloat(FadeAlphaId, FadeAlpha);
+            }
             e.renderer.SetPropertyBlock(mpb);
         }
         foreach (var r in removeList) entries.Remove(r);
@@ -148,14 +206,30 @@ public class OccluderFader : MonoBehaviour
             if (t.gameObject.layer == layer) root = t;
         var found = new List<Renderer>();
         foreach (var r in root.GetComponentsInChildren<Renderer>(true))
-            if (r.gameObject.layer == layer && (r is MeshRenderer || r is SkinnedMeshRenderer)) found.Add(r);
+            if (r.gameObject.layer == layer && (r is MeshRenderer || r is SkinnedMeshRenderer) && !IsDynamic(r)) found.Add(r); // (2026-11-21) 움직이는 것 제외
         list = found.ToArray();
         colliderCache[col] = list;
         return list;
     }
 
+    /// <summary>(2026-11-21) 가림 처리 대상이 절대 아닌 것: 플레이어·좀비·떨어진 아이템·투사체·물리로 움직이는 것</summary>
+    static bool IsDynamic(Renderer r)
+    {
+        for (var t = r.transform; t != null; t = t.parent)
+        {
+            string ln = LayerMask.LayerToName(t.gameObject.layer);
+            if (ln == "Player" || ln == "Pickup") return true;
+            if (t.CompareTag("Player")) return true;
+        }
+        if (r.GetComponentInParent<PlayerController>() != null || r.GetComponentInParent<ZombieController>() != null
+            || r.GetComponentInParent<PickupItem>() != null) return true;
+        var rb = r.GetComponentInParent<Rigidbody>();
+        return rb != null && !rb.isKinematic; // 투사체·수류탄·튀는 탄약 상자 등
+    }
+
     Entry Begin(Renderer r)
     {
+        if (holeMode) return BeginHole(r); // (2026-11-21)
         var originals = r.sharedMaterials;
         var fades = new Material[originals.Length];
         for (int i = 0; i < originals.Length; i++)
@@ -166,9 +240,37 @@ public class OccluderFader : MonoBehaviour
         return e;
     }
 
+    /// <summary>(2026-11-21) 구멍 모드 시작: 건물(BuildingCutaway) 재질은 그대로(MPB만), 나머지는 OccluderHole 복사본으로</summary>
+    Entry BeginHole(Renderer r)
+    {
+        var originals = r.sharedMaterials;
+        var holes = new Material[originals.Length];
+        bool swap = false;
+        for (int i = 0; i < originals.Length; i++)
+        {
+            var m = originals[i];
+            if (m == null || (buildingCutawayShader != null && m.shader == buildingCutawayShader)) { holes[i] = m; continue; }
+            holes[i] = HoleMaterialFor(m);
+            swap = true;
+        }
+        var e = new Entry { renderer = r, originals = originals, fades = swap ? holes : null, amount = 0f };
+        if (swap) r.sharedMaterials = holes;
+        entries[r] = e;
+        return e;
+    }
+
     void End(Entry e)
     {
         if (e.renderer == null) return;
+        if (holeMode)
+        {
+            // (2026-11-21) 구멍 닫고 원래 재질로 (건물은 재질을 안 바꿨으니 BuildingInterior 컷어웨이 재질 그대로)
+            if (e.fades != null) e.renderer.sharedMaterials = e.originals;
+            e.renderer.GetPropertyBlock(mpb);
+            mpb.SetFloat(HoleAmountId, 0f);
+            e.renderer.SetPropertyBlock(mpb);
+            return;
+        }
         e.renderer.sharedMaterials = e.originals;
         // 페이드 값만 지움 (다른 스크립트가 쓴 MPB 값은 남김)
         e.renderer.GetPropertyBlock(mpb);
@@ -182,13 +284,31 @@ public class OccluderFader : MonoBehaviour
         entries.Clear();
     }
 
+    /// <summary>(2026-11-21) 원본 재질 속성을 복사한 구멍 재질 (원본당 하나, 공유). 복사 방식은 페이드 재질과 같음</summary>
+    static Material HoleMaterialFor(Material src)
+    {
+        if (holeMats.TryGetValue(src, out var m) && m != null) return m;
+        if (holeShader == null) holeShader = Shader.Find("Custom/OccluderHole");
+        if (holeShader == null) return src;
+        m = CopyProps(src, new Material(holeShader) { name = src.name + " (Hole)" });
+        holeMats[src] = m;
+        return m;
+    }
+
     /// <summary>원본 재질의 텍스처·색·노멀·금속/거칠기·발광을 복사한 페이드 재질 (원본당 하나, 공유)</summary>
     static Material FadeMaterialFor(Material src)
     {
         if (fadeMats.TryGetValue(src, out var m) && m != null) return m;
         if (fadeShader == null) fadeShader = Shader.Find("Custom/FadeOccluder"); // 아직 쓰는 재질이 없을 때 씬 로드의 UnloadUnusedAssets로 풀릴 수 있음
         if (fadeShader == null) return src;
-        m = new Material(fadeShader) { name = src.name + " (Fade)" };
+        m = CopyProps(src, new Material(fadeShader) { name = src.name + " (Fade)" });
+        fadeMats[src] = m;
+        return m;
+    }
+
+    /// <summary>(2026-11-21) 위 FadeMaterialFor의 속성 복사 부분을 구멍 재질과 같이 쓰려고 분리 (내용 그대로)</summary>
+    static Material CopyProps(Material src, Material m)
+    {
         bool gltf = src.shader != null && src.shader.name.StartsWith("glTF");
 
         // 텍스처·색: Standard(_MainTex/_Color)와 glTF(baseColorTexture/baseColorFactor) 둘 다 [MainTexture]/[MainColor]
@@ -217,7 +337,6 @@ public class OccluderFader : MonoBehaviour
             Texture em = src.HasProperty("_EmissionMap") ? src.GetTexture("_EmissionMap") : src.HasProperty("emissiveTexture") ? src.GetTexture("emissiveTexture") : null;
             if (em != null) m.SetTexture("_EmissionMap", em);
         }
-        fadeMats[src] = m;
         return m;
     }
 }

@@ -134,7 +134,7 @@ public static class OccludableMarker
         return true;
     }
 
-    static bool IsExcluded(Transform t)
+    internal static bool IsExcluded(Transform t) // (2026-11-21) Audit Occluder Coverage에서도 씀 (private → internal)
     {
         for (var p = t; p != null; p = p.parent)
         {
@@ -153,7 +153,7 @@ public static class OccludableMarker
         return false;
     }
 
-    static bool IsGroundLike(Renderer r)
+    internal static bool IsGroundLike(Renderer r) // (2026-11-21) Audit에서도 씀
     {
         string n = r.name.ToLowerInvariant();
         foreach (var w in GroundWords) if (n.Contains(w)) return true;
