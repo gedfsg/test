@@ -27,6 +27,12 @@ using UnityEngine;
 ///  - 반경 7 → 14m, 페더 2 → 10m (원 테두리가 거의 안 보이게 넓게 흐림)
 ///  - 플레이어가 들어가 있지 않은 건물: 구멍 안 바닥 높이(바닥·러그·벽 아래 띠)를 어두운 단색으로 칠함(_HoleInteriorFill)
 ///    → 벽·지붕·가구는 잘려서 뒤의 플레이어가 보이지만 방 안 모습은 안 보임. 들어가 있는 건물은 그대로(실내가 보여야 하니)
+/// (2026-11-22 C1) 피드백 "실내에서도 원이 생김 / 가려지지 않았는데 미리 생김 / 차·작은 소품에도 생김 / 경계가 보임"
+///  - 실내(BuildingInterior.Current)에서는 구멍 완전 비활성 (지붕 컷어웨이만). 내부 선반·기둥에 가려도 그냥 둠
+///  - 실외: 카메라 → 플레이어 몸 중심, 카메라 → 머리 두 레이가 "둘 다" 불투명 가림막(Occludable, 트리거 제외)에 막힐 때만 시작.
+///    이미 열린 구멍은 한 레이라도 막혀 있으면 유지 (깜빡임 방지). SphereCast(구멍 반경) 미리 감지 제거
+///  - 차량·높이 3.5m 미만 소품은 레이어와 상관없이 무시 (IsIgnoredOccluder)
+///  - 반경 14 → 5m, 페더 10 → 3m, 가장자리 곡선 smootherstep (경계 더 모호하게)
 /// </summary>
 public class OccluderFader : MonoBehaviour
 {
@@ -49,11 +55,13 @@ public class OccluderFader : MonoBehaviour
     [Tooltip("구멍 반경(m) - 플레이어 위치 기준 이 반경 안을 잘라냄 (최대 MaxHoleRadius)")]
     // public float HoleRadius = 3.5f; // (이전 1차)
     // public float HoleRadius = 7f;   // (이전 2차)
-    public float HoleRadius = 14f;     // (2026-11-21 3차)
+    // public float HoleRadius = 14f;  // (2026-11-21 3차)
+    public float HoleRadius = 5f;      // (2026-11-22 C1)
     [Tooltip("구멍 가장자리 페더링(m) - 반투명 그라데이션")]
     // public float HoleFeather = 1f;  // (이전 1차)
     // public float HoleFeather = 2f;  // (이전 2차)
-    public float HoleFeather = 10f;    // (2026-11-21 3차) 넓게 흐려서 원 테두리가 안 보이게
+    // public float HoleFeather = 10f; // (2026-11-21 3차)
+    public float HoleFeather = 3f;     // (2026-11-22 C1) 반경 5m 중 바깥 3m를 흐리게
     [Tooltip("(2026-11-21 3차) 건물 내부 가림 색 밝기 (구멍 안 바닥 높이를 이 회색으로)")]
     [Range(0f, 1f)] public float HoleFillBrightness = 0.12f;
     public const float MaxHoleRadius = 20f; // (2026-11-21 2차) 성능: 감지 SphereCast·링 렌더러 수가 반경에 비례해서 늘어남
@@ -193,18 +201,23 @@ public class OccluderFader : MonoBehaviour
             Shader.SetGlobalVector(HoleParamsId, new Vector4(holeR, holeF, HoleMinHeight, HoleFillBrightness)); // (3차) w = 내부 가림 밝기
             if (xray != null && !xray.indoorOnly) xray.indoorOnly = true; // 실외 고스트 끔
 
-            // (이전 1차) 실내에서는 구멍 안 뚫음 → 2차: 실내에서도 구멍 (지붕 컷어웨이와 같이). 건물 재질은 안 바꾸니 컷어웨이 그대로
-            // if (BuildingInterior.Current != null)
-            // {
-            //     foreach (var e in entries.Values) End(e);
-            //     entries.Clear();
-            //     return;
-            // }
+            // (이전 1차) 실내에서는 구멍 안 뚫음 → 2차: 실내에서도 구멍 → (2026-11-22 C1) 다시 실내 비활성 (사용자 요청)
+            if (BuildingInterior.Current != null)
+            {
+                foreach (var e in entries.Values) End(e);
+                entries.Clear();
+                return;
+            }
         }
         // (2026-11-21 2차) 감지 반경: 구멍 모드면 구멍 반경만큼 (구멍에 걸치는 것까지 같이 뚫음)
         float castR = holeMode ? Mathf.Max(RayRadius, holeR) : RayRadius;
 
-        if (dist > 0.01f)
+        if (holeMode && dist > 0.01f)
+        {
+            // (2026-11-22 C1) 몸 중심 + 머리 두 레이가 모두 막혀야 시작
+            DetectStrict(from);
+        }
+        else if (dist > 0.01f) // (이전) SphereCast 방식 - 페이드 모드에서만 사용
         {
             int n = Physics.SphereCastNonAlloc(from, castR, dir / dist, hitBuf, dist, mask, QueryTriggerInteraction.Collide);
             for (int i = 0; i < n; i++)
@@ -292,6 +305,94 @@ public class OccluderFader : MonoBehaviour
         list = found.ToArray();
         colliderCache[col] = list;
         return list;
+    }
+
+    // ── (2026-11-22 C1) 엄격한 감지 ──
+    readonly HashSet<Renderer> rayHitA = new HashSet<Renderer>(), rayHitB = new HashSet<Renderer>();
+    readonly RaycastHit[] rayBuf = new RaycastHit[64];
+    Collider playerCol;
+
+    void DetectStrict(Vector3 from)
+    {
+        // 플레이어 몸 중심·머리 (콜라이더 범위 기준, 없으면 발 + 1.2 / 2.4m)
+        if (playerCol == null) playerCol = player.GetComponent<Collider>();
+        Vector3 chest, head;
+        if (playerCol != null) { var b = playerCol.bounds; chest = b.center; head = new Vector3(b.center.x, b.max.y - 0.15f, b.center.z); }
+        else { chest = player.position + Vector3.up * 1.2f; head = player.position + Vector3.up * 2.4f; }
+
+        RayRenderers(from, chest, rayHitA);
+        RayRenderers(from, head, rayHitB);
+        bool bothBlocked = rayHitA.Count > 0 && rayHitB.Count > 0;
+
+        if (bothBlocked)
+        {
+            foreach (var r in rayHitA) Mark(r);
+            foreach (var r in rayHitB) Mark(r);
+        }
+        else
+        {
+            // 이미 열려 있는 구멍만 유지 (한 레이라도 그 오브젝트에 막혀 있으면)
+            foreach (var r in rayHitA) if (entries.TryGetValue(r, out var e)) e.hit = true;
+            foreach (var r in rayHitB) if (entries.TryGetValue(r, out var e)) e.hit = true;
+        }
+    }
+
+    void Mark(Renderer r)
+    {
+        if (!entries.TryGetValue(r, out var e)) e = Begin(r);
+        if (e != null) e.hit = true;
+    }
+
+    /// <summary>카메라 → target 선분을 막는 불투명 가림막의 렌더러 (트리거·차량·작은 소품 제외, 콜라이더 없는 큰 소품은 범위로)</summary>
+    void RayRenderers(Vector3 from, Vector3 to, HashSet<Renderer> outSet)
+    {
+        outSet.Clear();
+        Vector3 d = to - from; float len = d.magnitude;
+        if (len < 0.01f) return;
+        int n = Physics.RaycastNonAlloc(from, d / len, rayBuf, len - 0.3f, mask, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < n; i++)
+        {
+            var col = rayBuf[i].collider;
+            if (col == null) continue;
+            foreach (var r in RenderersFor(col)) if (r != null && !IsIgnoredOccluder(r)) outSet.Add(r);
+        }
+        // 콜라이더 없는 큰 소품(숲 나무 잎 등): 선분이 렌더러 범위를 지날 때
+        var ray = new Ray(from, d / len);
+        foreach (var r in boundsOnly)
+        {
+            if (r == null || !r.enabled || IsIgnoredOccluder(r)) continue;
+            Bounds b = r.bounds;
+            float dx = b.center.x - to.x, dz = b.center.z - to.z;
+            if (dx * dx + dz * dz > BoundsCheckRange * BoundsCheckRange) continue;
+            if (b.IntersectRay(ray, out float dd) && dd < len - 0.3f) outSet.Add(r);
+        }
+    }
+
+    static readonly Dictionary<Renderer, bool> ignoredCache = new Dictionary<Renderer, bool>();
+    /// <summary>(2026-11-22 C1) 차량·작은 소품(높이 3.5m 미만)은 가림 처리 대상 아님. 건물 본체는 항상 대상</summary>
+    public static bool IsIgnoredOccluder(Renderer r)
+    {
+        if (ignoredCache.TryGetValue(r, out bool v)) return v;
+        v = false;
+        if (r.GetComponentInParent<BuildingInterior>() == null)
+        {
+            if (IsVehicle(r.transform)) v = true;
+            else if (r.bounds.size.y < MinOccluderHeight) v = true;
+        }
+        ignoredCache[r] = v;
+        return v;
+    }
+    public const float MinOccluderHeight = 3.5f;
+
+    /// <summary>(2026-11-22 C1) 차량 이름 (Proop3 "car 2.RC", Street_Decor "streetCar6", truck/bus/van 등). "Cardboard" 같은 단어는 제외</summary>
+    public static bool IsVehicle(Transform t)
+    {
+        for (var p = t; p != null; p = p.parent)
+        {
+            string n = p.name.ToLowerInvariant();
+            if (System.Text.RegularExpressions.Regex.IsMatch(n, @"(^|[^a-z])(car|streetcar|truck|bus|van|taxi|sedan|suv|pickup|ambulance|vehicle|jeep|police_car)([^a-z]|$)|^streetcar")) return true;
+        }
+        return false;
     }
 
     /// <summary>(2026-11-21) 가림 처리 대상이 절대 아닌 것: 플레이어·좀비·떨어진 아이템·투사체·물리로 움직이는 것</summary>

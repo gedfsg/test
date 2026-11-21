@@ -48,7 +48,8 @@ float OccHoleKeepCone(float3 worldPos, float amount)
     float radius = _OccHoleParams.x * amount * tc;
     float feather = max(_OccHoleParams.y * amount * tc, 1e-3);
     float k = saturate((dist - (radius - feather)) / feather);
-    return k * k * (3 - 2 * k); // smoothstep - 가장자리가 딱딱하지 않게
+    // return k * k * (3 - 2 * k); // (이전) smoothstep
+    return k * k * k * (k * (k * 6 - 15) + 10); // (2026-11-22 C1) smootherstep - 시작·끝이 더 완만해 경계가 모호
 }
 
 // 1 = 그대로(구멍 밖), 0 = 완전히 뚫림 (발밑 높이는 항상 1)

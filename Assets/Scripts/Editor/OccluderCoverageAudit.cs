@@ -13,9 +13,12 @@ using UnityEngine;
 /// "Audit Occluder Coverage"는 보고 + 빠진 것 선택만, "(Fix)"는 1)의 Default/Obstacle 레이어를 Occludable로,
 /// 2)를 Default로 바꾸고 씬 저장. 판정 기준은 Mark Occludable Objects(OccludableMarker)와 같음.
 /// </summary>
+/// (2026-11-22 C1) 차량·높이 3.5m 미만 소품·실내 장식(Building_Interior_*)은 가림 대상 아님 (OccluderFader.IsIgnoredOccluder와 같은 기준)
+///  → "Prune Occluders" 메뉴로 Occludable에서 빼고 Default로. 빠짐 검사도 같은 기준이라 Fix가 도로 넣지 않음
 public static class OccluderCoverageAudit
 {
-    const float MinHeight = 2.0f;        // 이보다 낮으면 위에서 내려다보는 카메라 시선을 거의 안 가림
+    // const float MinHeight = 2.0f;     // (이전)
+    const float MinHeight = OccluderFader.MinOccluderHeight; // (2026-11-22 C1) 3.5m
     const float MaxFootprint = 40f;      // 땅째 붙은 큰 메시(농장 등)는 제외 (통째로 뚫리면 땅이 사라짐)
 
     [MenuItem("Tools/Utility/Audit Occluder Coverage")]
@@ -59,6 +62,7 @@ public static class OccluderCoverageAudit
                 }
 
                 if (dynamic || OccludableMarker.IsExcluded(go.transform) || OccludableMarker.IsGroundLike(r)) continue;
+                if (OccluderFader.IsVehicle(r.transform) || IsInteriorDecor(r.transform)) continue; // (2026-11-22 C1)
                 var s = r.bounds.size;
                 if (s.y < MinHeight || Mathf.Max(s.x, s.z) >= MaxFootprint) continue;
                 string ln = LayerMask.LayerToName(go.layer);
@@ -108,6 +112,41 @@ public static class OccluderCoverageAudit
             sel.AddRange(wrong.ConvertAll(r => (Object)r.gameObject));
             if (sel.Count > 0) Selection.objects = sel.ToArray();
         }
+    }
+
+    static bool IsInteriorDecor(Transform t) => t.root.name.StartsWith("Building_Interior");
+
+    /// <summary>(2026-11-22 C1) 차량·작은 소품·실내 장식을 Occludable에서 빼고 Default로 (건물 본체는 그대로)</summary>
+    [MenuItem("Tools/Utility/Prune Occluders (차량·작은 소품·실내 장식 제외)")]
+    public static void Prune()
+    {
+        if (Application.isPlaying) { Debug.LogWarning("[OccluderAudit] Play 중에는 실행 안 함"); return; }
+        int occ = LayerMask.NameToLayer(OccluderFader.LayerName);
+        var scene = EditorSceneManager.GetActiveScene();
+        int cars = 0, small = 0, decor = 0;
+        foreach (var root in scene.GetRootGameObjects())
+            foreach (var t in root.GetComponentsInChildren<Transform>(true))
+            {
+                if (t.gameObject.layer != occ) continue;
+                if (t.GetComponentInParent<BuildingInterior>(true) != null) continue; // 건물 본체는 유지
+                string why = null;
+                if (OccluderFader.IsVehicle(t)) why = "car";
+                else if (IsInteriorDecor(t)) why = "decor";
+                else
+                {
+                    // 렌더러가 있으면 렌더러 높이, 없으면(콜라이더만) 부모 쪽 렌더러 기준
+                    var r = t.GetComponent<Renderer>() ?? t.GetComponentInParent<Renderer>();
+                    if (r != null && r.bounds.size.y < OccluderFader.MinOccluderHeight) why = "small";
+                }
+                if (why == null) continue;
+                Undo.RecordObject(t.gameObject, "Prune Occluder");
+                t.gameObject.layer = 0;
+                EditorUtility.SetDirty(t.gameObject);
+                if (why == "car") cars++; else if (why == "decor") decor++; else small++;
+            }
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene);
+        Debug.Log($"[OccluderAudit] Prune: 차량 {cars} / 작은 소품 {small} / 실내 장식 {decor} 오브젝트를 Occludable → Default");
     }
 
     static bool HasColliderInBuilding(Renderer r)
