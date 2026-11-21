@@ -171,8 +171,11 @@ public class InventoryUI : MonoBehaviour
     private void DropItem(InventorySlot slot)
     {
         Debug.Log($"[인벤토리] '{slot.item.itemName}' 버림");
+        // (2026-11-21) 예전엔 지우기만 해서 아이템이 사라졌음 → 발밑 앞 바닥에 떨어뜨림 (F로 다시 주울 수 있음)
+        var player = GameObject.FindWithTag("Player");
+        if (player != null)
+            WorldItemDrop.Spawn(player.transform.position + player.transform.forward * 1.2f, slot.item, 1);
         inventoryManager.RemoveItemById(slot.slotId);
-        // TODO: 나중에 월드에 PickupItem 스폰 추가 가능
     }
 
     // ── 장착 로직 ─────────────────────────────────

@@ -149,10 +149,9 @@ public class ShopUI : MonoBehaviour
     {
         if (root == null || !root.activeSelf) return;
 
-        // 열려 있는 동안 사격·조준·휠 줌 막기 (인벤토리를 열고 닫아도 다시 막음). 이동은 그대로
+        // 열려 있는 동안 휠 줌 막기 (인벤토리를 열고 닫아도 다시 막음). 이동은 그대로
+        // (2026-11-21) 사격·조준은 막지 않음 — 인벤토리처럼 상점을 연 채로도 싸울 수 있게 (창 위 클릭은 PlayerController가 걸러냄)
         var player = GameObject.FindWithTag("Player");
-        var pc = player != null ? player.GetComponent<PlayerController>() : null;
-        if (pc != null) pc.SetCombatInputEnabled(false);
         var cam = Camera.main;
         if (cam != null)
         {
@@ -208,12 +207,12 @@ public class ShopUI : MonoBehaviour
         HudStyle.NewImage(win, "Sep", null, new Color(1f, 1f, 1f, 0.15f), new Vector2(0f, SepY), new Vector2(W - 40f, 1.5f));
 
         // 분류 칩
-        var cats = new int[] { -1, (int)ShopCategory.Ammo, (int)ShopCategory.Food, (int)ShopCategory.Medical, (int)ShopCategory.Weapon, (int)ShopCategory.Upgrade };
+        var cats = new int[] { -1, (int)ShopCategory.Ammo, (int)ShopCategory.Food, (int)ShopCategory.Medical, (int)ShopCategory.Weapon, (int)ShopCategory.Throwable, (int)ShopCategory.Upgrade };
         for (int i = 0; i < cats.Length; i++)
         {
             int c = cats[i];
             string label = c < 0 ? "전체" : ShopPricing.CategoryName((ShopCategory)c);
-            var b = NewButton(win, "Chip", label, new Vector2(-W / 2f + 20f + 50f + i * 108f, ChipY), new Vector2(100f, ChipH), ChipOff, 17f);
+            var b = NewButton(win, "Chip", label, new Vector2(-W / 2f + 20f + 45f + i * 96f, ChipY), new Vector2(90f, ChipH), ChipOff, 17f);   // 칩 7개 (2026-11-21 투척 추가)
             b.onClick.AddListener(() => { filter = c; Rebuild(); });
             chips.Add(new KeyValuePair<int, Image>(c, b.GetComponent<Image>()));
         }

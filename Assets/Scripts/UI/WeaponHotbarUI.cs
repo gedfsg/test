@@ -401,37 +401,55 @@ public class WeaponHotbarUI : MonoBehaviour
     }
 
     /// <summary>슬롯 아이템 버리기 — 월드에 스폰 후 슬롯 비움</summary>
+    /// <summary>
+    /// 핫바 칸 우클릭 (2026-11-21 변경): 인벤토리로 되돌림. 인벤토리에 자리가 없으면 발밑 앞 바닥에 떨어뜨림.
+    /// (이전엔 콜라이더만 있는 빈 오브젝트를 만들어서 아이템이 그냥 사라진 것처럼 보였음)
+    /// </summary>
     public void DropSlot(int index)
     {
         if (index < 0 || index >= SLOT_COUNT || items[index] == null) return;
 
-        ItemData dropped = items[index];
+        // 칸 비우기 — 들고 있던 총이면 현재 탄수 저장 + 손에서 내림 (드래그로 인벤토리에 내려놓을 때와 같은 처리)
+        var (item, count) = TakeSlot(index);
+        if (item == null) return;
 
-        GameObject player = GameObject.FindWithTag("Player");
-        if (player != null)
+        bool isWeapon = item is WeaponData;
+        int left = isWeapon ? 1 : Mathf.Max(1, count);   // 무기 = 1자루 (count는 탄창 탄수), 그 외 = 개수
+        var inv = FindFirstObjectByType<InventoryManager>();
+        if (inv != null)
         {
-            Vector3 pos = player.transform.position + player.transform.forward * 1.5f;
-            GameObject obj = new GameObject(dropped.itemName + "_Drop");
-            obj.transform.position = pos;
-            PickupItem pickup = obj.AddComponent<PickupItem>();
-            pickup.itemData = dropped;
-            pickup.amount = dropped is WeaponData ? 1 : ammos[index];
-            BoxCollider col = obj.AddComponent<BoxCollider>();
-            col.isTrigger = true;
-            col.size = Vector3.one * 0.5f;
+            // InventoryManager.AddItem은 투척물·소모품을 다시 핫바로 올려 보내므로 가방 목록에 직접 넣음
+            if (!isWeapon && item.isStackable)
+                foreach (var s in inv.inventory)
+                {
+                    if (left <= 0) break;
+                    if (s.item != item || s.amount >= item.maxStackSize) continue;
+                    int put = Mathf.Min(left, item.maxStackSize - s.amount);
+                    s.amount += put; left -= put;
+                }
+            while (left > 0 && inv.inventory.Count < inv.maxCapacity)
+            {
+                int put = isWeapon ? 1 : Mathf.Min(left, Mathf.Max(1, item.maxStackSize));
+                var slot = new InventorySlot(item, put);
+                if (isWeapon) slot.currentAmmo = count;
+                inv.inventory.Add(slot);
+                left -= put;
+            }
+            var ui = FindFirstObjectByType<InventoryUI>(FindObjectsInactive.Include);
+            if (ui != null && ui.isInventoryOpen) ui.UpdateUI();
         }
 
-        items[index] = null;
-        ammos[index] = 0;
-        RefreshAllSlots();
-
-        if (index == activeSlot && dropped is WeaponData)
+        if (left > 0)
         {
-            PlayerController pc = GameObject.FindWithTag("Player")?.GetComponent<PlayerController>();
-            pc?.HideCurrentWeapon();
+            // 가방이 꽉 참 → 바닥에 (상자·좀비 드랍과 같은 WorldItemDrop: 모델/아이콘 + F로 다시 주울 수 있음)
+            GameObject player = GameObject.FindWithTag("Player");
+            Vector3 pos = player != null ? player.transform.position + player.transform.forward * 1.2f : Vector3.zero;
+            WorldItemDrop.Spawn(pos, item, left);
+            PickupFeedbackUI.Instance?.ShowWarning("인벤토리가 가득 차서 바닥에 내려놓았습니다");
+            Debug.Log($"[핫바] '{item.itemName}' x{left} 인벤토리 가득 참 → 바닥에 떨어뜨림");
         }
-
-        Debug.Log($"[핫바] '{dropped.itemName}' 버림");
+        else
+            Debug.Log($"[핫바] '{item.itemName}' → 인벤토리로");
     }
 
     // ── 내부 헬퍼 ─────────────────────────────

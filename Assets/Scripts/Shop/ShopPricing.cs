@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>상점 분류 (구매 탭의 필터)</summary>
-public enum ShopCategory { Ammo, Food, Medical, Weapon, Other, Upgrade }
+public enum ShopCategory { Ammo, Food, Medical, Weapon, Other, Upgrade, Throwable }   // 새 값은 맨 뒤에
 
 /// <summary>
 /// 상점 가격·분류·설명 (상점 2단계). 아이템마다 가격을 입력하지 않고 종류·등급으로 정한다.
@@ -9,6 +9,8 @@ public enum ShopCategory { Ammo, Food, Medical, Weapon, Other, Upgrade }
 ///   - 탄약: 한 묶음(AmmoData.ammoAmount발) × 발당 가격  (권총탄 30발 ≈ $6)
 ///   - 음식·물 / 치료: 등급별 기본값 (일반 $4 ~ 전설 $30), 치료는 1.5배
 ///   - 총기: 등급별 (일반 $25 ~ 영웅 $110), 근접무기는 0.6배. 전설은 상점에서 안 팜 (팔기만 가능)
+///   - 상점 전용 특수 무기 (WeaponDatabase.shopWeapons): 종류별 $140 ~ $240, 특수 탄약 40발 $20
+///   - 투척: 수류탄 $20, 화염병 $15, 섬광탄 $15
 ///   - 판매가 = 구매가 × sellRatio (35%)
 /// 숫자를 바꾸려면 아래 표만 고치면 된다.
 /// </summary>
@@ -18,6 +20,30 @@ public static class ShopPricing
 
     // 발당 가격
     private const float PistolRound = 0.2f, ARRound = 0.25f, ShotgunShell = 0.6f, SniperRound = 1.0f;
+    private const float SpecialRound = 0.5f;   // 특수 무기 공용 탄약 (화염방사기 연료·미니건·레이저·RPG)
+
+    /// <summary>상점 전용 특수 무기 값</summary>
+    public static int SpecialWeaponPrice(SpecialWeaponKind k)
+    {
+        switch (k)
+        {
+            case SpecialWeaponKind.Chainsaw: return 140;
+            case SpecialWeaponKind.Flamethrower: return 180;
+            case SpecialWeaponKind.Laser: return 200;
+            case SpecialWeaponKind.Minigun: return 220;
+            case SpecialWeaponKind.RPG: return 240;
+            default: return 200;
+        }
+    }
+
+    public static int ThrowablePrice(ThrowableData t)
+    {
+        switch (t.throwableType)
+        {
+            case ThrowableType.Grenade: return 20;
+            default: return 15;   // 화염병·섬광탄
+        }
+    }
 
     private static int ByRarity(Rarity r, int common, int uncommon, int rare, int epic, int legendary)
     {
@@ -35,6 +61,7 @@ public static class ShopPricing
     public static ShopCategory CategoryOf(ItemData item)
     {
         if (item is UpgradeItemData) return ShopCategory.Upgrade;
+        if (item is ThrowableData) return ShopCategory.Throwable;
         if (item is AmmoData) return ShopCategory.Ammo;
         if (item is WeaponData) return ShopCategory.Weapon;
         if (item is ConsumableData c)
@@ -61,6 +88,7 @@ public static class ShopPricing
                 if (a.weaponType == WeaponType.Pistol || a.weaponType == WeaponType.SMG) per = PistolRound;
                 else if (a.weaponType == WeaponType.Shotgun) per = ShotgunShell;
                 else if (a.weaponType == WeaponType.Sniper) per = SniperRound;
+                else if (a.weaponType == WeaponType.Ranged) per = SpecialRound;
                 return Mathf.Max(1, Mathf.RoundToInt(per * Mathf.Max(1, a.ammoAmount)));
             }
             case ShopCategory.Food:
@@ -70,9 +98,12 @@ public static class ShopPricing
             case ShopCategory.Weapon:
             {
                 var w = (WeaponData)item;
+                if (w.specialKind != SpecialWeaponKind.None) return SpecialWeaponPrice(w.specialKind);
                 int p = ByRarity(item.rarity, 25, 40, 60, 110, 200);
                 return w.type == WeaponType.Melee ? Mathf.RoundToInt(p * 0.6f) : p;
             }
+            case ShopCategory.Throwable:
+                return ThrowablePrice((ThrowableData)item);
             default:
                 return ByRarity(item.rarity, 2, 3, 5, 9, 15);   // 재료·방어구 (팔기 기준용)
         }
@@ -116,6 +147,7 @@ public static class ShopPricing
             case ShopCategory.Medical: return "치료";
             case ShopCategory.Weapon: return "총기";
             case ShopCategory.Upgrade: return "강화";
+            case ShopCategory.Throwable: return "투척";
             default: return "기타";
         }
     }
@@ -143,6 +175,7 @@ public static class ShopPricing
             case WeaponType.Shotgun: return "산탄총";
             case WeaponType.Sniper: return "저격소총";
             case WeaponType.Melee: return "근접무기";
+            case WeaponType.Ranged: return "특수 무기";
             default: return "총기";
         }
     }
@@ -159,6 +192,7 @@ public static class ShopPricing
                 case WeaponType.AR: return "소총탄";
                 case WeaponType.Shotgun: return "산탄";
                 case WeaponType.Sniper: return "저격탄";
+                case WeaponType.Ranged: return "특수 탄약";
             }
         }
         return item != null ? item.itemName : "";
@@ -175,12 +209,25 @@ public static class ShopPricing
                 : $"{PlayerUpgrades.EffectText(up.upgrade)} · {lv}단계 → {lv + 1}단계 (영구)";
         }
         if (item is AmmoData a)
-            return $"{WeaponTypeName(a.weaponType)}용 · {a.ammoAmount}발 한 묶음";
+            return a.weaponType == WeaponType.Ranged
+                ? $"화염방사기·미니건·레이저·RPG 공용 · {a.ammoAmount}발 한 묶음"
+                : $"{WeaponTypeName(a.weaponType)}용 · {a.ammoAmount}발 한 묶음";
         if (item is WeaponData w)
         {
-            if (w.type == WeaponType.Melee) return $"{RarityName(w.rarity)} · 근접 · 피해 {w.damage:0}";
+            var wdb = WeaponDatabase.Instance;
+            string tag = wdb != null && wdb.IsShopOnly(w) ? "상점 전용" : RarityName(w.rarity);
+            if (w.type == WeaponType.Melee) return $"{tag} · 근접 · 피해 {w.damage:0}";
             string dmg = w.type == WeaponType.Shotgun && w.pelletCount > 1 ? $"{w.damage:0}×{w.pelletCount}" : $"{w.damage:0}";
-            return $"{RarityName(w.rarity)} · {WeaponTypeName(w.type)} · 피해 {dmg} · 장탄 {w.maxAmmo}";
+            return $"{tag} · {WeaponTypeName(w.type)} · 피해 {dmg} · 장탄 {w.maxAmmo}";
+        }
+        if (item is ThrowableData t)
+        {
+            switch (t.throwableType)
+            {
+                case ThrowableType.Grenade: return $"폭발 반경 {t.radius:0}m · 피해 {t.damage:0} · 신관 {t.fuseTime:0}초";
+                case ThrowableType.Molotov: return $"불길 반경 {t.radius:0}m · {t.fireDuration:0}초간 타오름";
+                default: return $"섬광 반경 {t.flashRadius:0}m · 기절 {t.stunDuration:0}초";
+            }
         }
         if (item is ConsumableData c)
         {

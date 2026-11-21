@@ -13,7 +13,18 @@ public class ReloadUI : MonoBehaviour
     private float currentReloadTime;
     private bool isReloadingUI = false;
 
-    void Awake() => gaugeImage.gameObject.SetActive(false);
+    void Awake()
+    {
+        // (2026-11-21) 게이지를 월드 고정 위치가 아니라 화면 기준 '머리 옆'에 띄움.
+        // 예전엔 캔버스(FloatingUI)가 월드 방향 오프셋을 써서 카메라를 돌리면 엉뚱한 곳에 나왔음
+        var follow = GetComponentInParent<FloatingUI>(true);
+        if (follow != null)
+        {
+            follow.cameraRelative = true;
+            gaugeImage.rectTransform.anchoredPosition = Vector2.zero;   // 캔버스 한가운데 = 머리 옆 지점
+        }
+        gaugeImage.gameObject.SetActive(false);
+    }
 
     void Update()
     {

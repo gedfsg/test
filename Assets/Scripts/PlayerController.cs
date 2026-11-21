@@ -133,6 +133,9 @@ public class PlayerController : MonoBehaviour
         if (meleeWeaponObject != null) meleeWeapon = meleeWeaponObject.GetComponent<MeleeWeapon>();
 
         if (rangedWeapon != null) rangedWeapon.shooterTag = "Player";
+        // (2026-11-21) 총알 방향 = 커서 지점. 씬의 Weapon.aimTarget이 비어 있으면 Weapon이 총구 방향(firePoint.forward)으로 쏴서
+        // 총 자세(Low-Ready·달리며 가슴에 안기)에 따라 총알이 엉뚱한 곳으로 나갔음 → 여기서 PlayerController의 aimTarget을 연결
+        if (rangedWeapon != null && rangedWeapon.aimTarget == null) rangedWeapon.aimTarget = aimTarget;
         if (meleeWeapon != null) meleeWeapon.shooterTag = "Player";
 
         weaponHandAttacher = FindAnyObjectByType<WeaponHandAttacher>();
@@ -519,7 +522,15 @@ public class PlayerController : MonoBehaviour
     {
         isFireButtonPressed = true;
         firePressed = true;
+        lastFirePressTime = Time.time;
+        // (2026-11-21) 총 들고 달리다 쏘면 몸이 아직 달리는 방향을 보고 있음 → 첫 발부터 커서 쪽으로 즉시 돌림
+        if (IsGunSprinting && !isRolling && !isDead && !MenuUI.InventoryOpen) FaceMouseNow();
     }
+
+    // (2026-11-21) 마지막으로 발사 버튼을 누른 시각. 권총처럼 한 발씩 쏠 때 버튼을 뗄 때마다
+    // 달리기 자세(이동 방향)로 돌아갔다가 다시 커서로 도는 걸 막으려고, 쏜 뒤 잠깐은 커서를 계속 봄
+    float lastFirePressTime = -99f;
+    const float SprintAimHoldTime = 0.6f;
 
     private void OnFireCanceled(InputAction.CallbackContext context)
         => isFireButtonPressed = false;
@@ -589,9 +600,14 @@ public class PlayerController : MonoBehaviour
     private bool IsPointerOverUI()
         => EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
 
+    // (2026-11-21) 인벤토리 위에서 누른 클릭(아이템 드래그 등)이 창 밖으로 끌려 나와도 사격으로 바뀌지 않게, 버튼을 뗄 때까지 무시
+    private bool pressBeganOverUI;
+
     private void HandleFire()
     {
-        if (IsPointerOverUI()) { firePressed = false; return; }
+        if (!isFireButtonPressed) pressBeganOverUI = false;
+        else if (firePressed && IsPointerOverUI()) pressBeganOverUI = true;
+        if (IsPointerOverUI() || pressBeganOverUI) { firePressed = false; return; }
 
         ItemData activeItem = WeaponHotbarUI.Instance?.GetActiveItem();
 
@@ -847,7 +863,8 @@ public class PlayerController : MonoBehaviour
             bool gunHeld = !meleeHeld && !throwableHeld && currentMode == WeaponMode.Ranged && rangedWeapon != null && rangedWeapon.weaponData != null;
             weaponHandAttacher.gripWeapon = gunHeld ? rangedWeapon.weaponData : null;
             float planarSpeed = rb != null ? new Vector2(rb.linearVelocity.x, rb.linearVelocity.z).magnitude : 0f;
-            weaponHandAttacher.gripLowReady = gunHeld && locomotion != null && locomotion.IsSprinting && planarSpeed > 2f && !isFireButtonPressed;
+            weaponHandAttacher.gripLowReady = gunHeld && locomotion != null && locomotion.IsSprinting && planarSpeed > 2f && !isFireButtonPressed
+                && Time.time - lastFirePressTime > SprintAimHoldTime; // (2026-11-21) 쏜 직후엔 커서 방향 유지
             // (2026-11-18) 우클릭 조준(AimZoom 홀드) 또는 발사 중 → 눈높이 견착. UpperBodyAimIK도 이 값으로 가슴·머리 가중치를 올림
             IsGunHeld = gunHeld;
             IsGunAiming = gunHeld && (MuzzleLight.IsAiming || isFireButtonPressed) && !weaponHandAttacher.gripLowReady;
@@ -996,6 +1013,8 @@ public class PlayerController : MonoBehaviour
     {
         if (Mouse.current == null || mainCamera == null) return;
         if (inputBlocked || combatBlocked) return; // 일시정지·사망 (MenuUI) / 인벤토리 열림 (조준 회전만 막고 이동은 됨)
+        // (2026-11-21) 인벤토리를 연 채로 싸울 수 있게 됨 → 커서가 인벤토리·상점 창 위에 있는 동안만 조준을 그 자리에 멈춤
+        if (MenuUI.InventoryOpen && IsPointerOverUI()) return;
 
         // 기준 높이는 캐릭터 루트 + 고정 오프셋(총구 높이 정도). firePoint.position.y처럼
         // 애니메이션 때문에 흔들리는 값을 쓰면 마우스가 가만히 있어도 조준 지점이 미세하게

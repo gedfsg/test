@@ -99,7 +99,8 @@ public static class MenuUI
     /// <summary>
     /// 지금 상태에 맞게 조작을 켜고 끔.
     ///  - 플레이어 전체(이동·사격·재장전·달리기·구르기·상호작용·조준 회전): 메뉴(일시정지·사망·컷신)가 열리면 끔
-    ///  - 인벤토리가 열리면 (2026-11-12): 이동은 그대로, 사격·조준 회전·재장전만 끔 (마우스는 UI 조작)
+    ///  - 인벤토리가 열리면 (2026-11-21): 이동·사격·조준·재장전 모두 그대로. 커서가 인벤토리 창 위에 있을 때만 사격·조준이 멈춤
+    ///    (2026-11-12~11-20) 이동은 그대로, 사격·조준 회전·재장전만 끔
     ///    (이전) 인벤토리가 열려도 플레이어 조작을 전부 끔
     ///  - 카메라(휠/우클릭 줌·Q/E): 메뉴나 인벤토리가 열리면 끔 (휠은 인벤토리 스크롤과 겹침)
     ///  - 인벤토리 Tab: 메뉴(일시정지·사망)가 열렸을 때만 끔 (인벤토리를 열어둔 채로는 Tab으로 닫을 수 있어야 함)
@@ -113,7 +114,8 @@ public static class MenuUI
         if (pc != null)
         {
             pc.SetInputEnabled(!BlockingOpen);   // 이동 등 전체
-            pc.SetCombatInputEnabled(play);      // 사격·조준·재장전 (인벤토리 열림에도 꺼짐)
+            // pc.SetCombatInputEnabled(play);   // (이전) 사격·조준·재장전 (인벤토리 열림에도 꺼짐)
+            pc.SetCombatInputEnabled(!BlockingOpen); // (2026-11-21) 인벤토리를 연 채로도 공격 가능. UI 위 클릭은 PlayerController가 걸러냄
         }
         var cam = Camera.main;
         if (cam != null)

@@ -20,6 +20,12 @@ public class ShopStock
 
     /// <summary>상인이 영구 강화를 하나 진열할 확률</summary>
     public const double UpgradeChance = 0.6;
+    /// <summary>상인이 상점 전용 특수 무기(WeaponDatabase.shopWeapons)를 한 자루 진열할 확률</summary>
+    public const double SpecialWeaponChance = 0.3;
+    /// <summary>특수 무기가 없는 상인도 특수 탄약을 진열할 확률 (산 무기의 탄약을 다른 상인에게서도 구할 수 있게)</summary>
+    public const double SpecialAmmoChance = 0.3;
+    /// <summary>투척물(수류탄·화염병) 각각을 진열할 확률</summary>
+    public const double ThrowableChance = 0.5;
 
     public readonly List<Offer> offers = new List<Offer>();
     public string traderName = "상인";   // 상점 창 제목
@@ -48,6 +54,9 @@ public class ShopStock
     ///  탄약: 4종 중 1~2종 빠짐 (묶음 재고 3~6) / 음식·물, 치료: 각각 1~2종 빠짐 (재고 1~4)
     ///  총: 1~2정 (재고 1). 등급 확률 일반 50% · 고급 30% · 희귀 15% · 영웅 5% (ShopPricing.GunRarityWeight), 근접무기·전설 제외
     ///  영구 강화: UpgradeChance 확률로 1개 (아직 최대가 아닌 것 중에서, 재고 1)
+    ///  투척(수류탄·화염병): 각각 ThrowableChance 확률 (재고 1~3)
+    ///  상점 전용 특수 무기: SpecialWeaponChance 확률로 1자루 (재고 1) + 특수 탄약 (재고 2~4).
+    ///    특수 무기가 없어도 SpecialAmmoChance 확률로 특수 탄약만 진열
     /// </summary>
     public static ShopStock Generate(int seed)
     {
@@ -86,7 +95,47 @@ public class ShopStock
             s.Add(g, 1);
             guns.Remove(g);
         }
+
+        // (2026-11-21) 투척물 — 각각 따로 확률. 루팅 데이터에 들어 있는 것만
+        foreach (var t in Candidates(pool, ShopCategory.Throwable))
+            if (rng.NextDouble() < ThrowableChance) s.Add(t, rng.Next(1, 4));
+
+        // (2026-11-21) 상점 전용 특수 무기 (팀원 WeaponDatabase.shopWeapons) + 공용 특수 탄약
+        var specials = new List<ItemData>();
+        var wdb = WeaponDatabase.Instance;
+        if (wdb != null) foreach (var w in wdb.shopWeapons) if (w != null) specials.Add(w);
+        bool hasSpecial = false;
+        if (specials.Count > 0 && rng.NextDouble() < SpecialWeaponChance)
+        {
+            s.Add(specials[rng.Next(specials.Count)], 1);
+            hasSpecial = true;
+        }
+        if (specials.Count > 0 && (hasSpecial || rng.NextDouble() < SpecialAmmoChance))
+            s.Add(SpecialAmmo(pool), rng.Next(2, 5));
         return s;
+    }
+
+    private static AmmoData specialAmmo;
+    /// <summary>
+    /// 특수 무기 공용 탄약 (WeaponType.Ranged). 에셋이 따로 없어서 실행 중에 하나 만들어 씀.
+    /// 사면 AmmoInventory.AddAmmo(Ranged, 40) — 팀원 AmmoInventory 주석에 적힌 방식 그대로
+    /// </summary>
+    public static AmmoData SpecialAmmo(List<ItemData> pool = null)
+    {
+        if (specialAmmo != null) return specialAmmo;
+        specialAmmo = ScriptableObject.CreateInstance<AmmoData>();
+        specialAmmo.name = "Special Ammo";
+        specialAmmo.hideFlags = HideFlags.DontSave;
+        specialAmmo.itemName = "특수 탄약";
+        specialAmmo.itemType = ItemType.Ammo;
+        specialAmmo.rarity = Rarity.Epic;
+        specialAmmo.weaponType = WeaponType.Ranged;
+        specialAmmo.ammoAmount = 40;
+        if (pool != null)   // 아이콘은 다른 탄약 것을 빌림 (소총탄 우선)
+            foreach (var it in pool)
+                if (it is AmmoData a && a.icon != null && (specialAmmo.icon == null || a.weaponType == WeaponType.AR))
+                    specialAmmo.icon = a.icon;
+        return specialAmmo;
     }
 
     /// <summary>등급 확률대로 등급을 먼저 고르고, 그 등급 안에서 한 자루</summary>

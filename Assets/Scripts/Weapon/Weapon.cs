@@ -217,6 +217,9 @@ public class Weapon : MonoBehaviour
 
     void OnDisable()
     {
+        // (2026-11-21) 재장전 중에 근접 무기로 바꾸면 이 오브젝트가 꺼지면서 코루틴만 멈춰
+        // 게이지가 안 사라지고 isReloading이 true로 남아 총을 다시 들어도 못 쐈음 → 취소 처리
+        CancelReload();
         // 근접 무기로 바꾸면 이 오브젝트가 꺼짐 → 불빛도 끔
         if (muzzleLight != null) muzzleLight.Deactivate();
         muzzleLight = null; lightVisual = null;
@@ -295,14 +298,22 @@ public class Weapon : MonoBehaviour
 
     // savedAmmo가 -1이면 처음 줍는 무기 → maxAmmo로 초기화
     // savedAmmo가 0 이상이면 저장된 탄수 복원
+    /// <summary>
+    /// (2026-11-21) 재장전 취소. onReloadComplete를 불러서 재장전 게이지(ReloadUI)·플레이어 재장전 자세·
+    /// 좀비 AI의 "재장전 중" 정보가 같이 풀리게 함 (예전엔 총을 바꾸면 게이지가 화면에 남았음)
+    /// </summary>
+    void CancelReload()
+    {
+        if (!isReloading) return;
+        StopAllCoroutines();
+        isReloading = false;
+        onReloadComplete?.Invoke();
+    }
+
     public void ChangeWeaponData(WeaponData newData, int savedAmmo = -1)
     {
-        // 장전 중이면 취소
-        if (isReloading)
-        {
-            StopAllCoroutines();
-            isReloading = false;
-        }
+        // 장전 중이면 취소 (2026-11-21: 재장전 게이지도 같이 닫도록 CancelReload로)
+        CancelReload();
 
         weaponData = newData;
         currentAmmo = (savedAmmo >= 0) ? savedAmmo : newData.maxAmmo;

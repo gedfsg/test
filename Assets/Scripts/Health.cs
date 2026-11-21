@@ -87,7 +87,8 @@ public class Health : MonoBehaviour
         currentHealth -= amount;
 
         // 데미지 텍스트를 생성하는 함수를 호출함.
-        ShowDamageText(amount, isCritical);
+        // (2026-11-21) 이미 죽은 몸(시체)을 때릴 때는 숫자를 띄우지 않음
+        if (!dead) ShowDamageText(amount, isCritical);
 
         if (dead) return;
         if (currentHealth > 0f) PlayHurtSound(); // 죽는 타격은 사망음으로 대신

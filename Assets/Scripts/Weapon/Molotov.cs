@@ -42,6 +42,9 @@ public class Molotov : MonoBehaviour
     {
         const float Tick = 0.5f;
         const float FadeTime = 1f;
+        // (2026-11-21) 자해: 플레이어도 불 위에 서 있으면 다침 (좀비보다 약하게) + 나와도 잠깐 탐
+        const float PlayerDamageRatio = 0.4f;     // 좀비 초당 피해(data.damage)의 40% (기본 30 → 초당 12)
+        const float PlayerIgniteDps = 5f, PlayerIgniteDuration = 2f;
 
         ThrowableData data;
         GameObject thrower;
@@ -119,11 +122,22 @@ public class Molotov : MonoBehaviour
                 {
                     Health h = c.GetComponentInParent<Health>();
                     if (h == null || !hitThisTick.Add(h)) continue;
-                    if (h.CompareTag("Player") || (thrower != null && h.gameObject == thrower)) continue; // 자기 불엔 안 다침
-                    var z = h.GetComponent<ZombieController>();
-                    if (z == null || z.IsDead) continue; // 좀비만
+                    // (이전) if (h.CompareTag("Player") || (thrower != null && h.gameObject == thrower)) continue; // 자기 불엔 안 다침
+                    bool isPlayer = h.CompareTag("Player");
+                    if (!isPlayer)
+                    {
+                        var z = h.GetComponent<ZombieController>();
+                        if (z == null || z.IsDead) continue; // 플레이어 말고는 좀비만
+                    }
                     Vector3 d = h.transform.position - transform.position; d.y = 0f;
                     if (d.magnitude > radius) continue; // 원기둥 판정 (위·아래로 멀면 구가 잡아도 수평으로 재확인)
+                    if (isPlayer)
+                    {
+                        // 자해 (2026-11-21): 자기가 던진 불도 밟으면 다침. 구르기 무적 중엔 Health가 알아서 무시
+                        h.TakeDamage(dps * Tick * PlayerDamageRatio);
+                        BurnDoT.Apply(h.gameObject, PlayerIgniteDps, PlayerIgniteDuration);
+                        continue;
+                    }
                     h.TakeDamage(dps * Tick);
                     BurnDoT.Apply(h.gameObject, data != null ? data.igniteDps : 10f, data != null ? data.igniteDuration : 3f);
                 }
