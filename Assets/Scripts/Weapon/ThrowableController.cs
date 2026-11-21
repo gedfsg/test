@@ -21,6 +21,12 @@ using UnityEngine.Animations.Rigging;
 ///  - 던지면 공중이든 땅이든 남은 시간 뒤 폭발 (좀비에 맞아도 바로 안 터짐)
 ///  - 쥔 채 5초가 지나면 손 안에서 폭발 → 플레이어 즉사
 ///  - 핀 뽑힌 채 다른 칸으로 바꾸면 발밑에 떨어뜨림 (남은 시간 뒤 폭발)
+/// [조작 - 2026-11-22 C4 리워크] (사용자 요청)
+///  - 좌클릭 꾹: 조준 자세 + 궤적 (핀은 아직 안 뽑힘 - 0.3초 자동 핀 뽑기 제거)
+///  - R(재장전 키): 수류탄 핀 뽑기 → 5초 카운트다운, 머리 위 타이머 (조준 중일 때만). 핀 뽑은 뒤엔 우클릭 취소 불가
+///  - 좌클릭 뗌: 던짐 (R 없이 던지면 던지는 순간 핀 → 5초 그대로)
+///  - 우클릭: 조준 취소 (수류탄은 핀 뽑기 전만, 화염병은 아무 때나)
+///  - 핀 뽑고 5초 쥐고 있으면 손 안에서 폭발(즉사) 유지. 화염병은 R 없음 (신관 없음)
 /// [투척 자세] Animation Rigging 두 팔 IK (런타임 Rig 레이어 "ThrowPoseRig")
 ///  - 조준 중: 오른손을 머리 뒤로 들어올림(위팔 약 80° 들고 팔꿈치 90°), 왼손은 앞으로 내밀어 균형, 상체는 UpperBodyAimIK가 커서 쪽
 ///  - 던지는 순간: 오른팔이 앞으로 휘둘러짐(약 0.12초) 후 풀림
@@ -67,6 +73,10 @@ public class ThrowableController : MonoBehaviour
     float fuseEnd;
     GrenadeFuseLabel fuseLabel;
     bool waitRelease; // 취소 후 좌클릭을 뗄 때까지 무시
+    bool pinRequested; // (2026-11-22 C4) R 키 입력 (다음 Tick에서 처리)
+
+    /// <summary>(2026-11-22 C4) R(재장전 키): 수류탄을 조준 중이면 핀 뽑기. 화염병·조준 전엔 무시</summary>
+    public void RequestPin() => pinRequested = true;
 
     // 투척 자세 IK
     Rig poseRig;
@@ -103,7 +113,7 @@ public class ThrowableController : MonoBehaviour
         if (data == null) { Cancel(); return; }
 
         // 취소한 뒤엔 좌클릭을 한 번 뗄 때까지 아무것도 안 함
-        if (waitRelease) { if (!held) waitRelease = false; wasHeld = held; return; }
+        if (waitRelease) { if (!held) waitRelease = false; wasHeld = held; pinRequested = false; return; }
 
         if (held && !wasHeld) // 누름 시작
         {
@@ -112,7 +122,13 @@ public class ThrowableController : MonoBehaviour
             // if (data.pinSound != null) AudioManager.PlaySFX(data.pinSound, transform.position + Vector3.up, 1f, AudioManager.Channel.SFX, 20f);
         }
         // 수류탄: 누르고 0.3초 → 핀 뽑힘 (이후 취소 불가, 5초 카운트다운)
-        if (held && IsGrenade(data) && !pinPulled && Time.time - pressTime >= pinDelay) PullPin(data);
+        // if (held && IsGrenade(data) && !pinPulled && Time.time - pressTime >= pinDelay) PullPin(data); // (이전 2026-11-18) 0.3초 자동 핀
+        // (2026-11-22 C4) R(재장전 키)로 핀 뽑기 - PlayerController가 RequestPin 호출 → 여기서 처리
+        if (pinRequested)
+        {
+            pinRequested = false;
+            if (held && IsGrenade(data) && !pinPulled) PullPin(data);
+        }
         if (held && !aiming && Time.time - pressTime >= holdThreshold) aiming = true;
 
         // 우클릭 = 투척 취소 (2026-11-18). 수류탄은 핀 뽑기 전만
@@ -177,7 +193,7 @@ public class ThrowableController : MonoBehaviour
     {
         // (2026-11-18) 핀 뽑힌 수류탄을 쥔 채 내려놓으면 발밑에 떨어뜨림 (남은 시간 뒤 폭발)
         if (pinPulled && heldData != null) DropCooked(heldData);
-        aiming = false; wasHeld = false; waitRelease = false;
+        aiming = false; wasHeld = false; waitRelease = false; pinRequested = false;
         if (traj != null) traj.Hide();
         ShowInHand(null);
     }
