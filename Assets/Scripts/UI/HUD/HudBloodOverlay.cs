@@ -86,7 +86,8 @@ public class HudBloodOverlay : MonoBehaviour
         // img.sprite = BuildSplatterSprite(); // (2026-11-22 1차) 단색 얼룩
         // img.color = StaticColor;
         img.sprite = HudGrunge.BloodVignette();  // (2차) 색까지 구운 스플래터
-        img.color = new Color(1f, 1f, 1f, 0.88f);
+        // img.color = new Color(1f, 1f, 1f, 0.88f); // (2026-11-22 2차)
+        img.color = new Color(1f, 1f, 1f, 0.6f);         // (2026-11-22) 피드백 "테두리 피 조금 더 안 보이게"
         img.raycastTarget = false;
         rt.SetAsFirstSibling(); // 피격 펄스보다 아래
 
