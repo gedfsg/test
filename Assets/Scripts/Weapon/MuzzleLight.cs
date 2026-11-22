@@ -32,6 +32,8 @@ using UnityEngine.InputSystem;
 ///   b) 애니메이션: 0.04~0.06초 동안 크기 1.0 → 1.2, 알파 1 → 0 (화염방사기 0.1초 / RPG 0.12초 유지)
 ///   c) 화염방사기 #FF5500 / RPG #FF8800 / 레이저 색은 그대로 (무기 색으로 물들임)
 ///   d) 섬광 조명: 3.5m / 9 / #FFC060 / 0.04초 그대로 (스펙 3~4m, 8~12), 바닥 원형 빛 없음(cullingMask) 유지
+///  (2026-11-22 6차) 피드백 "총 쏘면 캐릭터 바닥에 원형 빛" → cullingMask는 Default 바닥만 빠져서 실내 등 다른 레이어 바닥엔 원이 생김
+///     → 섬광 Point 조명을 끔 (useFlashPointLight = false). 섬광 플레어·스파크·조준등은 그대로
 [RequireComponent(typeof(Light))]
 public class MuzzleLight : MonoBehaviour
 {
@@ -57,6 +59,8 @@ public class MuzzleLight : MonoBehaviour
     // public float flashLightIntensity = 8f; // (이전) 스펙 8~12 중 하한: 10이면 가까운 벽·바닥이 하얗게 날아가 섬광 스프라이트가 묻힘 (Play 캡처)
     // (2026-11-18) 3~4m / 8~10 - 바닥을 cullingMask로 빼서 밝혀도 바닥이 하얗게 안 날아감.
     // 이름을 바꾼 이유: 무기 프리팹에 예전 값(flashLightRange 4 / flashLightIntensity 10)이 저장돼 있어 코드 기본값이 안 먹음
+    [Tooltip("(2026-11-22) 발사 순간 Point 조명 사용 여부. 실내 바닥 등 Default가 아닌 레이어 바닥에 발밑 원형 빛이 생겨서 끔 (섬광 그림·스파크는 그대로)")]
+    public bool useFlashPointLight = false;
     public float flashPointRange = 3.5f;
     public float flashPointIntensity = 9f;
     public float flashLightTime = 0.04f;
@@ -184,7 +188,8 @@ public class MuzzleLight : MonoBehaviour
             UpdateFlash();
         }
         if (sparks != null) EmitSparks(sparkCount, sparkAngle);
-        if (flashLight != null)
+        // if (flashLight != null) // (이전) 쏠 때마다 Point 조명 → 발밑 원형 빛
+        if (flashLight != null && useFlashPointLight)
         {
             flashLight.color = flashLightColor;
             flashLight.range = flashPointRange;
