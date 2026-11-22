@@ -59,6 +59,8 @@ public class MissionHUD : MonoBehaviour
     float shownProgress; // (2026-11-22) 진행 바 애니메이션용
     TextMeshProUGUI percentText, footerText, emptySubText;
     Image barFill;
+    Sprite barSpriteRed, barSpriteGreen; // (2026-11-22) 100%면 초록 그라데이션으로 바꿈
+    bool barReady;
     // (이전) 메인 미션 1줄: TextMeshProUGUI mainTitle; Image mainStatus;
     // 2026-11-12: 진행 중 메인 미션 최대 3개, 각 2줄 (미션명 / 할 일)
     const float MainRowH = 46f, ActionGap = 19f;
@@ -263,6 +265,22 @@ public class MissionHUD : MonoBehaviour
         // (2026-11-22) 부드럽게 차오름 (초당 최대 40%p)
         shownProgress = Mathf.MoveTowards(shownProgress, p, 40f * Time.unscaledDeltaTime);
         barFill.rectTransform.anchorMax = new Vector2(Mathf.Clamp01(shownProgress / 100f), 1f);
+        // (2026-11-22) 100% (탈출 조건 달성) → 바·% 빨강→초록 + 반짝임 (0.6~1 알파 맥동)
+        bool ready = mm.ProgressReady;
+        if (ready != barReady)
+        {
+            barReady = ready;
+            if (barSpriteRed == null) barSpriteRed = barFill.sprite;
+            if (ready && barSpriteGreen == null) barSpriteGreen = HudStyle.HorizontalGradient(new Color32(0x1E, 0x7A, 0x34, 0xFF), Green);
+            barFill.sprite = ready ? barSpriteGreen : barSpriteRed;
+            if (!ready) { barFill.color = Color.white; percentText.color = RefPercent; }
+        }
+        if (ready)
+        {
+            float glow = 0.6f + 0.4f * (0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 6f));
+            barFill.color = new Color(1f, 1f, 1f, glow);
+            percentText.color = Color.Lerp(Green, Color.white, (glow - 0.6f) * 1.2f);
+        }
 
         // 메인 미션: 미션명 (+ 진행 수) + ○/✓ / 아래 줄에 할 일 (진행 중인 것 최대 3개 - 탈출 → 오늘 → 이전 날)
         // (이전) var main = mm.CurrentMain; mainTitle.text = main.title + detail; SetStatus(mainStatus, mm.MainDone);

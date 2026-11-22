@@ -3,6 +3,7 @@ using UnityEngine;
 /// <summary>
 /// 탈출 지점 = 헬리패드: 흰색 "H" 헬리패드 + 상태 테두리 원 + 점 조명.
 ///  - 잠김(빨강): 7일차 메인 미션 "구조 헬기 탑승"이 공개되기 전 → 들어가면 헬기가 오는 날 안내
+///              (2026-11-22) 7일차여도 7일 누적 진행률 100% 미만이면 잠김 → "진행률 부족! (현재 72%, 100% 필요)" 안내
 ///  - 열림(초록): 초록 빛기둥으로 탑승 가능 표시. 들어가면 구조 헬기 컷신(HelicopterCutscene) 한 번 실행
 ///    → 컷신이 끝나면 MissionManager.Escape() → 게임 클리어
 ///  (이전: 열림 상태에서 들어가면 바로 Escape(), 빛기둥은 기본 꺼둠)
@@ -81,7 +82,9 @@ public class EscapePoint : MonoBehaviour
     }
 
     // void OnUnlocked() => PickupFeedbackUI.Instance?.Show("탈출 지점이 열렸다! 미니맵 ◆ 근처를 찾아가자"); // (이전) "초록 빛기둥으로 이동"
-    void OnUnlocked() => PickupFeedbackUI.Instance?.Show("구조 요청 수신. 헬리패드로 이동하세요");
+    // void OnUnlocked() => PickupFeedbackUI.Instance?.Show("구조 요청 수신. 헬리패드로 이동하세요"); // (이전) 7일차 시작 알림
+    // (2026-11-22) 이제 EscapeUnlocked = 진행률 100% 달성 순간. "탈출 준비 완료! 헬리패드로 이동"은 MissionManager가 HUD 토스트로 띄우므로 여기선 짧게만
+    void OnUnlocked() => PickupFeedbackUI.Instance?.Show("헬리패드가 열렸습니다 (미니맵 초록 ◆)");
 
     // 흰색 "H" 헬리패드: 흰 원 테두리 + 어두운 바닥 + H (조명 영향 없는 불투명 재질, 바닥과 겹쳐 깜빡이지 않게 높이를 조금씩 다르게)
     static void BuildHelipad(Transform root, float r)

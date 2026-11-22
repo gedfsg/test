@@ -92,7 +92,16 @@ public class MissionManager : MonoBehaviour
     public int SurvivalGoalDays => DayNightCycle.Instance != null ? DayNightCycle.Instance.totalDays : 7;
     public int CurrentDay => DayNightCycle.Instance != null ? DayNightCycle.Instance.CurrentDay : 1;
     // public bool CanEscape => !Finished && CurrentMain != null && CurrentMain.type == MainMissionType.Escape; // (이전)
-    public bool CanEscape => !Finished && activeMains.Exists(m => m.IsEscape && !m.done);
+    // public bool CanEscape => !Finished && activeMains.Exists(m => m.IsEscape && !m.done); // (이전) 7일차만 되면 진행률과 상관없이 탈출
+    /// <summary>탈출 미션(구조 헬기 탑승)이 공개돼 진행 중인지 - 7일차부터. 진행률은 따지지 않음</summary>
+    public bool EscapeMissionActive => !Finished && activeMains.Exists(m => m.IsEscape && !m.done);
+    /// <summary>(2026-11-22) 탈출에 필요한 7일 누적 진행률 (%)</summary>
+    public const float EscapeProgressRequired = 100f;
+    /// <summary>진행률 조건을 채웠는지 (부동소수 합산 오차 0.01%p 허용)</summary>
+    public bool ProgressReady => TotalProgress >= EscapeProgressRequired - 0.01f;
+    /// <summary>헬기를 부를 수 있는지 = 탈출 미션 진행 중(7일차~) + 7일 누적 진행률 100%. EscapePoint 색·컷신, HUD가 사용</summary>
+    public bool CanEscape => EscapeMissionActive && ProgressReady;
+    bool escapeReadyAnnounced; // "탈출 준비 완료" 알림은 한 번만
     /// <summary>7일차가 지나도록 탈출 못 한 횟수 (Day 8 = 1회). HUD "탈출 실패 횟수"</summary>
     public int EscapeFailCount => Mathf.Max(0, CurrentDay - SurvivalGoalDays);
     public int DoneSubCount { get { int n = 0; foreach (var s in subMissions) if (s.Rewarded) n++; return n; } }
@@ -100,8 +109,11 @@ public class MissionManager : MonoBehaviour
     // public float DayProgress => Mathf.Clamp((MainDone ? MainWeight : 0f) + DoneSubCount * SubWeight, 0f, 100f); // (이전) 하루치
     float totalProgress; // 지금까지 완료한 미션으로 쌓인 진행률 (%)
     /// <summary>7일 전체 진행률 0~100 (메인 1개 = 70/7 = 10%, 서브 = 하루 30/7 ≈ 4.3%를 그날 서브 수로 나눔)</summary>
-    public float TotalProgress => Mathf.Clamp(totalProgress, 0f, 100f);
-    float MainStep => MainWeightTotal / Mathf.Max(1, SurvivalGoalDays);
+    // public float TotalProgress => Mathf.Clamp(totalProgress, 0f, 100f); // (이전)
+    public float TotalProgress => Mathf.Clamp(Mathf.Round(totalProgress * 100f) / 100f, 0f, 100f); // 0.01% 단위로 반올림 (70/6 같은 몫을 더할 때 99.9999%로 남는 것 방지)
+    // float MainStep => MainWeightTotal / Mathf.Max(1, SurvivalGoalDays); // (이전) 탈출 미션도 몫(10%)이 있었음 → 탈출 전엔 최대 90%라 100% 조건을 못 채움
+    // (2026-11-22) 탈출 미션은 진행률 몫 없음: 메인 70%를 1~6일차 메인 6개가 나눔 (1개 ≈ 11.7%), 서브 30%는 그대로 하루 30/7%
+    float MainStep => MainWeightTotal / Mathf.Max(1, SurvivalGoalDays - 1);
     // float SubStep => SubWeightTotal / Mathf.Max(1, SurvivalGoalDays) / Mathf.Max(1, subMissions.Count); // (이전) 완료 순간 목록 수 기준
     // 2026-11-12: 서브가 다음 날로 넘어가면 목록 수가 바뀌므로, 할당할 때 1개당 몫을 정해 SubMission.progressStep에 저장
     float DailySubShare => SubWeightTotal / Mathf.Max(1, SurvivalGoalDays);
@@ -171,6 +183,7 @@ public class MissionManager : MonoBehaviour
     void Update()
     {
         if (Finished || playerTf == null) return;
+        CheckEscapeReady(); // 미션 완료로 진행률이 100%가 된 순간 알림 (값 비교 1번이라 매 프레임 해도 가벼움)
         TrackMovement();
         if (Time.time < nextPoll) return;
         nextPoll = Time.time + 0.25f;
@@ -246,7 +259,23 @@ public class MissionManager : MonoBehaviour
         if (CurrentMain != null)
             Hud?.ShowToast(MissionHUD.ToastKind.NewDay, $"{day}일차 메인 미션", CurrentMain.title);
         if (debugLog) Debug.Log($"[MissionManager] Day {day} 메인: {CurrentMain?.title} (진행 중 {activeMains.Count}개: {string.Join(", ", activeMains.ConvertAll(m => m.Title))}) / 서브 {subMissions.Count}개: " + string.Join(", ", subMissions.ConvertAll(s => s.title)));
-        if (CanEscape) { EscapeUnlocked?.Invoke(); }
+        // if (CanEscape) { EscapeUnlocked?.Invoke(); } // (이전) 7일차 시작 = 바로 탈출 가능
+        // (2026-11-22) 탈출 미션이 열렸지만 진행률이 모자라면 안내만. 100%가 되는 순간은 CheckEscapeReady()가 알림
+        if (EscapeMissionActive && !ProgressReady)
+            Hud?.ShowToast(MissionHUD.ToastKind.Info, "구조 헬기 대기 중", $"진행률 {EscapeProgressRequired:F0}% 달성 시 헬기 호출 (현재 {Mathf.FloorToInt(TotalProgress)}%)");
+        CheckEscapeReady();
+    }
+
+    /// <summary>(2026-11-22) 탈출 조건(7일차 + 진행률 100%)을 처음 채운 순간 한 번 알림:
+    /// HUD 토스트 + EscapeUnlocked(헬리패드 초록 + 빛기둥은 EscapePoint가 CanEscape로 처리, 미니맵 핀은 GetMapPins)</summary>
+    void CheckEscapeReady()
+    {
+        if (escapeReadyAnnounced || !CanEscape) return;
+        escapeReadyAnnounced = true;
+        PlaySound(l => l.missionNotification);
+        Hud?.ShowToast(MissionHUD.ToastKind.SubComplete, "탈출 준비 완료!", "헬리패드로 이동"); // SubComplete = 초록 토스트
+        EscapeUnlocked?.Invoke();
+        if (debugLog) Debug.Log($"[MissionManager] 탈출 준비 완료 (진행률 {TotalProgress:F1}%, {CurrentDay}일차)");
     }
 
     /// <summary>HUD 표시 순서: 탈출 미션 → 오늘 미션 → 이전 날 미션(최근 순). 최대 MaxShownMains개</summary>
@@ -541,7 +570,8 @@ public class MissionManager : MonoBehaviour
         mm.done = true;
         mm.progress = mm.data.target;
         CompletedMainMissions++;
-        totalProgress += MainStep;
+        // totalProgress += MainStep; // (이전)
+        if (!mm.IsEscape) totalProgress += MainStep; // (2026-11-22) 탈출 미션은 진행률 몫 없음 (100%가 탈출 조건)
         mm.guideTarget = null;
         if (mm.Type == MainMissionType.PowerRestore) PowerRestored = true; // 실내등 밝아짐
         if (mm.IsEscape) return; // 탈출은 Escape()에서 엔딩
@@ -642,7 +672,11 @@ public class MissionManager : MonoBehaviour
     }
 
     // public string EscapeLockedReason() => $"탈출 지점은 {SurvivalGoalDays}일차에 열립니다 (지금 {CurrentDay}일차)"; // (이전)
-    public string EscapeLockedReason() => $"구조 헬기는 {SurvivalGoalDays}일차에 옵니다 (지금 {CurrentDay}일차)";
+    // public string EscapeLockedReason() => $"구조 헬기는 {SurvivalGoalDays}일차에 옵니다 (지금 {CurrentDay}일차)"; // (이전)
+    // (2026-11-22) 7일차 전 = 날짜 안내, 7일차 이후 = 진행률 부족 안내
+    public string EscapeLockedReason() => !EscapeMissionActive
+        ? $"구조 헬기는 {SurvivalGoalDays}일차에 옵니다 (지금 {CurrentDay}일차)"
+        : $"진행률 부족! (현재 {Mathf.FloorToInt(TotalProgress)}%, {EscapeProgressRequired:F0}% 필요)";
 
     /// <summary>구조 헬기 탑승 → 클리어 (Day 7 메인 미션 완료). 헬기 컷신(HelicopterCutscene)이 끝날 때 부름.
     /// showEnding=false면 옛 엔딩 화면(DeathUI) 대신 컷신이 GAME CLEAR 화면을 띄움</summary>
@@ -712,7 +746,7 @@ public class MissionManager : MonoBehaviour
     // ── 미니맵 핀 (MinimapMissionPins가 매 프레임 읽음) ──
 
     /// <summary>미니맵 핀 1개. pos = 실제 위치 (흐리기는 MapPinFuzz로)</summary>
-    public struct MapPin { public Vector3 pos; public bool main; }
+    public struct MapPin { public Vector3 pos; public bool main; public bool escape; } // escape = 탈출 준비 완료된 헬리패드 (초록)
 
     [Header("미니맵 핀")]
     [Tooltip("미니맵 핀을 실제 위치에서 이 거리 안으로 랜덤하게 흐림 (m)")]
@@ -736,6 +770,9 @@ public class MissionManager : MonoBehaviour
             if (mm.done) continue;
             switch (mm.Type)
             {
+                case MainMissionType.Escape: // (2026-11-22) 헬리패드 핀은 탈출 준비 완료(진행률 100%) 때만 점등, 정확한 위치로
+                    if (CanEscape && mm.guideTarget.HasValue) result.Add(new MapPin { pos = mm.guideTarget.Value, main = true, escape = true });
+                    break;
                 case MainMissionType.Recon: // 정찰: 안 간 깃발 전부 (화살표는 가장 가까운 것만 가리켰음)
                     for (int i = 0; i < mm.reconFlags.Count; i++)
                         if (mm.reconFlags[i] != null && !mm.reconVisited[i]) result.Add(new MapPin { pos = mm.reconFlags[i].position, main = true });

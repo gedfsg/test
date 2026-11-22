@@ -99,6 +99,7 @@ public class MinimapMissionPins : MonoBehaviour
             Vector3 shown = mm.MapPinFuzz(pins[i].pos);
             // 아이콘 50m 안으로 오면 정확한 위치 (메인 미션만. 서브는 원 중심 = 흐린 위치 그대로)
             if (pins[i].main && player != null && FlatDist(player.position, shown) <= mm.mapPinExactRadius) shown = pins[i].pos;
+            if (pins[i].escape) shown = pins[i].pos; // (2026-11-22) 헬리패드는 흐리지 않고 정확한 위치
 
             if (!pins[i].main)
             {
@@ -127,6 +128,7 @@ public class MinimapMissionPins : MonoBehaviour
             bool main = pins[i].main;
             img.sprite = main ? HudStyle.Diamond : HudStyle.Search;
             if (main) img.color = MainColor; // (이전) main ? MainColor : SubColor → 서브는 위에서 원 안/밖에 따라 정함
+            if (pins[i].escape) img.color = AreaGreen; // (2026-11-22) 탈출 준비 완료된 헬리패드 = 초록 ◆
             img.gameObject.SetActive(true);
         }
         for (int i = pins.Count; i < pool.Count; i++) pool[i].gameObject.SetActive(false);
