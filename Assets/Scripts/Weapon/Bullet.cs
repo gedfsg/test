@@ -24,6 +24,8 @@ public class Bullet : MonoBehaviour
     [Tooltip("화염방사기: 맞은 좀비에 점화 DoT")]
     public float burnDps;
     public float burnDuration;
+    [Tooltip("(2026-11-22) 폭발(splash) 소리. 비우면 산탄 소리를 낮게")]
+    public AudioClip explodeSound;
     [Tooltip("궤적 색 (기본 노랑). 화염 = 주황, 레이저 = 청록")]
     public Color trailColor = Color.yellow;
     [Tooltip("궤적 굵기 (기본 0.05)")]
@@ -289,7 +291,10 @@ public class Bullet : MonoBehaviour
         ps.Play();
         Destroy(go, 1f);
         Destroy(li, 0.25f);
-        if (AudioManager.Library != null)
+        // (2026-11-22) RPG: rpg.mp3의 폭발 구간 (Weapon.SpawnBullet이 넣어 줌). 없으면 예전처럼 산탄 소리를 낮게 (총소리처럼 들렸음)
+        if (explodeSound != null)
+            AudioManager.PlaySFX(explodeSound, p, 1f, AudioManager.Channel.SFX, 80f);
+        else if (AudioManager.Library != null)
             AudioManager.PlaySFX(SoundLibrary.Pick(AudioManager.Library.FireFor(WeaponType.Shotgun)), p, AudioManager.Vol.GunshotShotgun,
                                  AudioManager.Channel.SFX, 80f, 0.6f); // 산탄 소리를 낮게 → 폭발음 대용
     }

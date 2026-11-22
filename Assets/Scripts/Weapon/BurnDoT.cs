@@ -46,6 +46,7 @@ public class BurnDoT : MonoBehaviour
         glow.intensity = 1.2f + Mathf.PerlinNoise(Time.time * 8f, 0f) * 0.8f; // 일렁임
         if (Time.time < nextTick) return;
         nextTick = Time.time + TickInterval;
-        health.TakeDamage(dps * TickInterval);
+        // health.TakeDamage(dps * TickInterval); // (이전) 틱마다 살 맞는 소리
+        health.TakeDamageSilent(dps * TickInterval); // (2026-11-22) 화상은 소리 없이
     }
 }

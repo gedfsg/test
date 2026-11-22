@@ -23,6 +23,11 @@ public class Health : MonoBehaviour
     [Header("사운드")]
     [Tooltip("플레이어 신음 최소 간격(초) - 여러 마리에게 연달아 맞아도 신음이 겹치지 않게")]
     public float hurtSoundCooldown = 0.5f;
+    [Tooltip("(2026-11-22) 좀비 살 맞는 소리 최소 간격 (초). 화염방사기·미니건·전기톱처럼 초당 10~20번 맞으면 '퍽퍽' 총소리처럼 들렸음")]
+    public float zombieHitSoundCooldown = 0.15f;
+    [Tooltip("(2026-11-22) 이보다 작은 피해(화염방사기 한 발 1, 화상 지속 피해)는 살 맞는 소리 없음")]
+    public float zombieHitSoundMinDamage = 3f;
+    private float lastZombieHitSoundTime = -99f;
     [Tooltip("이 체력 비율 이하면 심장소리 시작 (플레이어만)")]
     public float heartbeatStartRatio = 0.3f;
     [Tooltip("이 체력 비율 이하면 심장소리가 빨라짐")]
@@ -64,7 +69,8 @@ public class Health : MonoBehaviour
     }
 
     // 피격음: 플레이어 = 신음 (2D, 쿨타임), 좀비 = 살 맞는 소리 랜덤 (3D)
-    private void PlayHurtSound()
+    // private void PlayHurtSound() // (이전) 피해마다 소리
+    private void PlayHurtSound(float amount)
     {
         var lib = AudioManager.Library;
         if (lib == null) return;
@@ -76,6 +82,9 @@ public class Health : MonoBehaviour
         }
         else if (isZombie)
         {
+            // (2026-11-22) 작은 피해(불길·화상)는 소리 없음 + 0.15초에 한 번까지
+            if (silentHit || amount < zombieHitSoundMinDamage || Time.time < lastZombieHitSoundTime + zombieHitSoundCooldown) return;
+            lastZombieHitSoundTime = Time.time;
             AudioManager.PlaySFX(SoundLibrary.Pick(lib.hitFlesh), transform.position + Vector3.up,
                                  AudioManager.Vol.Impact, AudioManager.Channel.SFX, 25f, UnityEngine.Random.Range(0.9f, 1.1f));
         }
@@ -86,6 +95,16 @@ public class Health : MonoBehaviour
     /// 갈증·배고픔·불길 같은 피해로는 먹고 마시기가 끊기지 않게 하려고 구분함
     /// </summary>
     public bool IsZombieHit { get; private set; }
+
+    // (2026-11-22) 소리 없는 피해 (화상 지속 피해 등): 불에 타는 좀비가 0.5초마다 '퍽' 살 맞는 소리를 내던 것 방지
+    private bool silentHit;
+    /// <summary>살 맞는 소리 없이 피해 (BurnDoT). 나머지는 TakeDamage와 같음</summary>
+    public void TakeDamageSilent(float amount)
+    {
+        silentHit = true;
+        try { TakeDamage(amount); }
+        finally { silentHit = false; }
+    }
 
     /// <summary>좀비 공격 피해 (ZombieController가 호출). 나머지는 TakeDamage와 같음</summary>
     public void TakeZombieHit(float amount)
@@ -105,7 +124,7 @@ public class Health : MonoBehaviour
         if (!dead) ShowDamageText(amount, isCritical);
 
         if (dead) return;
-        if (currentHealth > 0f) PlayHurtSound(); // 죽는 타격은 사망음으로 대신
+        if (currentHealth > 0f) PlayHurtSound(amount); // 죽는 타격은 사망음으로 대신
         onHurt?.Invoke();
         if (currentHealth <= 0f)
         {
