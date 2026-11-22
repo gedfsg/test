@@ -3,7 +3,7 @@ using UnityEngine.Events;
 using TMPro;
 
 /// <summary>
-/// 낮(8분) → 노을(1분) → 밤(5분) → 새벽(1분) → 반복
+/// 낮(2분) → 노을(36초) → 밤(1분) → 새벽(24초) → 반복 = 하루 4분 (2026-11-22, 이전 8분)
 /// 7일 생존이 기본 목표. 미션 시스템이 있으면 진행률 100%로 탈출할 때까지 Day가 계속 늘어남
 /// </summary>
 public class DayNightCycle : MonoBehaviour
@@ -16,30 +16,46 @@ public class DayNightCycle : MonoBehaviour
     [Tooltip("지금은 테스트하기 쉽게 하루 2분(낮1+노을15초+밤30초+새벽15초)으로 맞춰둠. 실제 플레이용 15분으로 쓰려면 480/60/300/60으로 바꿀 것.")]
     // (이전) 하루 300초(5분): 낮 150 + 노을 37.5 + 밤 75 + 새벽 37.5
     // 2026-11-12: 5분은 너무 짧음 → 하루 480초(8분): 낮 240 + 노을 60 + 밤 120 + 새벽 60 (같은 비율). 설정 화면에서 바꿀 수 있게 public 유지
-    public float dayDuration   = 240f;
-    public float duskDuration  = 60f;
-    public float nightDuration = 120f;
-    public float dawnDuration  = 60f;
+    // public float dayDuration   = 240f; // (이전) 하루 480초
+    // public float duskDuration  = 60f;
+    // public float nightDuration = 120f;
+    // public float dawnDuration  = 60f;
+    // 2026-11-22: 8분은 늘어짐 → 하루 240초(4분), 7일 = 28분. 비율 낮 50% / 황혼 15% / 밤 25% / 새벽 10%
+    // (씬 main.unity에 저장된 값이 우선 - 씬 값도 같이 바꿔둠)
+    public float dayDuration   = 120f;
+    public float duskDuration  = 36f;
+    public float nightDuration = 60f;
+    public float dawnDuration  = 24f;
     public int   totalDays     = 7;
 
     [Header("라이팅")]
     public Light directionalLight;
 
-    public Color  dayLightColor      = new Color(1f, 0.95f, 0.8f);
-    public float  dayLightIntensity  = 1.1f;
+    // (이전) 낮 (1, 0.95, 0.8) 1.1 / 노을 (1, 0.45, 0.1) 0.5(안 쓰였음) / 밤 (0.1, 0.15, 0.35) 0.08 - 씬 값은 낮 회청색 1.1, 밤 0.45라 낮밤 차이가 작았음
+    // 2026-11-22: 낮 강한 햇빛 #FFE8B0 1.3 / 황혼 주황 #E07020 0.7 / 밤 달빛 #4060A0 0.3 / 새벽 보라 #8060A0 0.5
+    public Color  dayLightColor      = new Color32(0xFF, 0xE8, 0xB0, 0xFF);
+    public float  dayLightIntensity  = 1.3f;
     public float  dayLightAngle      = 50f;
 
-    public Color  duskColor          = new Color(1f, 0.45f, 0.1f);
-    public float  duskLightIntensity = 0.5f;
+    [Tooltip("황혼 한가운데의 색·밝기 (낮 → 황혼 → 밤으로 섞임)")]
+    public Color  duskColor          = new Color32(0xE0, 0x70, 0x20, 0xFF);
+    public float  duskLightIntensity = 0.7f;
 
-    public Color  nightLightColor    = new Color(0.1f, 0.15f, 0.35f);
-    public float  nightLightIntensity = 0.08f;
+    public Color  nightLightColor    = new Color32(0x40, 0x60, 0xA0, 0xFF);
+    public float  nightLightIntensity = 0.3f;
     public float  nightLightAngle    = -30f;
+
+    [Tooltip("(2026-11-22) 새벽 한가운데의 색·밝기 (밤 → 새벽 → 낮으로 섞임)")]
+    public Color  dawnColor          = new Color32(0x80, 0x60, 0xA0, 0xFF);
+    public float  dawnLightIntensity = 0.5f;
 
     [Header("환경광 (Ambient) - 낮은 밝게, 밤은 기존 값 유지")]
     public bool  controlAmbient = true;
-    public Color dayAmbient   = new Color(0.45f, 0.47f, 0.52f);
-    public Color nightAmbient = new Color(0.188f, 0.204f, 0.243f); // 예전 씬 값 (밤 분위기 유지)
+    // public Color dayAmbient   = new Color(0.45f, 0.47f, 0.52f); // (이전)
+    // public Color nightAmbient = new Color(0.188f, 0.204f, 0.243f); // 예전 씬 값 (밤 분위기 유지)
+    // 2026-11-22: 낮은 따뜻하고 밝게, 밤은 어두운 푸른 톤 (낮밤 구분 확실히)
+    public Color dayAmbient   = new Color(0.58f, 0.56f, 0.50f);
+    public Color nightAmbient = new Color(0.15f, 0.17f, 0.27f);
 
     [Tooltip("날씨(흐림/비)가 조명 강도에 곱하는 값 (WeatherManager가 설정)")]
     [HideInInspector] public float weatherLightMultiplier = 1f;
@@ -241,7 +257,11 @@ public class DayNightCycle : MonoBehaviour
                 targetAngle     = dayLightAngle;
                 break;
             case Phase.Dusk:
-                targetIntensity = Mathf.Lerp(dayLightIntensity, nightLightIntensity, t);
+                // targetIntensity = Mathf.Lerp(dayLightIntensity, nightLightIntensity, t); // (이전) duskLightIntensity를 안 썼음
+                // 2026-11-22: 낮 → (가운데) 황혼 밝기 → 밤
+                targetIntensity = t < 0.5f
+                    ? Mathf.Lerp(dayLightIntensity, duskLightIntensity, t * 2f)
+                    : Mathf.Lerp(duskLightIntensity, nightLightIntensity, (t - 0.5f) * 2f);
                 targetAngle     = Mathf.Lerp(dayLightAngle, nightLightAngle, t);
                 targetColor     = t < 0.5f
                     ? Color.Lerp(dayLightColor, duskColor, t * 2f)
@@ -253,8 +273,15 @@ public class DayNightCycle : MonoBehaviour
                 targetAngle     = nightLightAngle;
                 break;
             case Phase.Dawn:
-                targetColor     = Color.Lerp(nightLightColor, dayLightColor, t);
-                targetIntensity = Mathf.Lerp(nightLightIntensity, dayLightIntensity, t);
+                // targetColor     = Color.Lerp(nightLightColor, dayLightColor, t); // (이전) 밤 → 낮 바로
+                // targetIntensity = Mathf.Lerp(nightLightIntensity, dayLightIntensity, t);
+                // 2026-11-22: 밤 → (가운데) 새벽 보라 → 낮
+                targetColor     = t < 0.5f
+                    ? Color.Lerp(nightLightColor, dawnColor, t * 2f)
+                    : Color.Lerp(dawnColor, dayLightColor, (t - 0.5f) * 2f);
+                targetIntensity = t < 0.5f
+                    ? Mathf.Lerp(nightLightIntensity, dawnLightIntensity, t * 2f)
+                    : Mathf.Lerp(dawnLightIntensity, dayLightIntensity, (t - 0.5f) * 2f);
                 targetAngle     = Mathf.Lerp(nightLightAngle, dayLightAngle, t);
                 break;
             default: return;

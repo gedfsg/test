@@ -119,12 +119,17 @@ public static class AtmosphereSetup
         if (dnc == null) { Debug.LogWarning("[AtmosphereSetup] DayNightCycle 없음"); return; }
         Undo.RecordObject(dnc, "Atmosphere DayNight");
         // 밤: 예전엔 각도 -30°(땅 밑)라 달빛 그림자가 없었음 → 35° 높이에서 청보라 달빛 (탑뷰에선 하늘이 안 보여서 달을 빛으로 표현)
-        dnc.nightLightColor = new Color(0.42f, 0.45f, 0.95f);
-        dnc.nightLightIntensity = 0.45f;
+        // dnc.nightLightColor = new Color(0.42f, 0.45f, 0.95f); // (이전)
+        // dnc.nightLightIntensity = 0.45f;
+        // (2026-11-22) 낮밤 구분 강화: 달빛 #4060A0 0.3 (DayNightCycle 코드 기본값과 같게)
+        dnc.nightLightColor = new Color32(0x40, 0x60, 0xA0, 0xFF);
+        dnc.nightLightIntensity = 0.3f;
         dnc.nightLightAngle = 35f;
-        dnc.nightAmbient = new Color(0.2f, 0.18f, 0.3f);       // 살짝 보라, 예전보다 조금 밝게 (컬러 그레이딩이 따뜻하게 바꾸면서 어두워 보임)
+        // dnc.nightAmbient = new Color(0.2f, 0.18f, 0.3f); // (이전)
+        dnc.nightAmbient = new Color(0.15f, 0.17f, 0.27f); // (2026-11-22) 어두운 푸른 톤       // 살짝 보라, 예전보다 조금 밝게 (컬러 그레이딩이 따뜻하게 바꾸면서 어두워 보임)
         dnc.nightFogColor = new Color(0.17f, 0.08f, 0.24f);    // 보라 안개
-        dnc.duskColor = new Color(1f, 0.42f, 0.15f);           // 노을 주황 (예전 씬 값은 갈색)
+        // dnc.duskColor = new Color(1f, 0.42f, 0.15f); // (이전)
+        dnc.duskColor = new Color32(0xE0, 0x70, 0x20, 0xFF); // (2026-11-22) 황혼 주황 #E07020           // 노을 주황 (예전 씬 값은 갈색)
         EditorUtility.SetDirty(dnc);
     }
 }
