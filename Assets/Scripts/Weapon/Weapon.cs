@@ -63,6 +63,7 @@ public class Weapon : MonoBehaviour
         {
             if (Time.time - lastTriggerTime > 0.15f) spinStartTime = Time.time;
             lastTriggerTime = Time.time;
+            if (weaponData.specialKind == SpecialWeaponKind.Minigun) SpecialWeaponAudio.For(this).OnSpinning(weaponData, this); // (2026-11-22) 예열 중에도 회전음
             if (Time.time < spinStartTime + weaponData.spinUpTime) return;
         }
 
@@ -129,6 +130,13 @@ public class Weapon : MonoBehaviour
 
         WeaponType wType = (weaponData != null) ? weaponData.type : WeaponType.Ranged;
 
+        // (2026-11-22) 화염방사기: 탄 궤적 선 대신 총구에서 불길 파티클 분사 (탄은 데미지·점화 판정만)
+        if (weaponData != null && weaponData.specialKind == SpecialWeaponKind.Flamethrower && firePoint != null)
+        {
+            var body = GetComponentInParent<Rigidbody>();
+            FlameStream.Emit(firePoint.position, baseDirection, body != null ? body.linearVelocity : Vector3.zero);
+        }
+
         if (wType == WeaponType.Shotgun)
         {
             int pellets = (weaponData != null) ? weaponData.pelletCount : 8;
@@ -168,7 +176,11 @@ public class Weapon : MonoBehaviour
                 bullet.burnDuration = weaponData.burnDuration;
                 switch (weaponData.specialKind)
                 {
-                    case SpecialWeaponKind.Flamethrower: bullet.trailColor = new Color(1f, 0.4f, 0.05f); bullet.trailWidth = 0.35f; break;
+                    // case SpecialWeaponKind.Flamethrower: bullet.trailColor = new Color(1f, 0.4f, 0.05f); bullet.trailWidth = 0.35f; break; // (이전) 주황 선
+                    case SpecialWeaponKind.Flamethrower: // (2026-11-22) 불길은 FlameStream이 그림 → 탄은 안 보이게
+                        bullet.trailWidth = 0f;
+                        foreach (var rr in bulletObj.GetComponentsInChildren<Renderer>()) rr.enabled = false;
+                        break;
                     case SpecialWeaponKind.RPG: bullet.trailColor = new Color(1f, 0.55f, 0.2f); bullet.trailWidth = 0.12f; break;
                     case SpecialWeaponKind.Laser: bullet.trailColor = new Color(0f, 0.93f, 1f); bullet.trailWidth = 0.08f; break;
                 }
@@ -187,6 +199,8 @@ public class Weapon : MonoBehaviour
     // 발사음/재장전음 (3D). WeaponData에 지정된 소리 우선, 없으면 총 종류별 기본 소리
     void PlayWeaponSound(bool fire)
     {
+        // (2026-11-22) 특수 무기 소리 (화염방사기·미니건 반복 / RPG·레이저 1회) → 처리했으면 기본 총소리 생략
+        if (fire && weaponData != null && weaponData.specialKind != SpecialWeaponKind.None && SpecialWeaponAudio.For(this).OnShot(weaponData, this)) return;
         AudioClip clip = weaponData != null ? (fire ? weaponData.fireSound : weaponData.reloadSound) : null;
         if (clip == null && AudioManager.Library != null)
         {

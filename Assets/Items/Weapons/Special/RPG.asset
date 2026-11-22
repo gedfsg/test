@@ -49,8 +49,9 @@ MonoBehaviour:
   lightRange: 2.5
   noiseRadius: 90
   autoFire: 0
-  fireSound: {fileID: 0}
+  fireSound: {fileID: 8300000, guid: 248e7d780681b3b45927852725e49e49, type: 3}
   reloadSound: {fileID: 0}
+  loopSound: {fileID: 0}
   positionOffset: {x: 0.01, y: 0.06, z: -0.2}
   rotationOffset: {x: 30, y: 170, z: 0}
   carryRotationOffset: {x: 0, y: 0, z: 0}

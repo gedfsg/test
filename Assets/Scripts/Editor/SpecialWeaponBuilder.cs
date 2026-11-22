@@ -232,8 +232,38 @@ public static class SpecialWeaponBuilder
         // 손 위치 기본값: AR과 같음 (근접은 stats에서 덮어씀)
         d.positionOffset = new Vector3(0.01f, 0.06f, -0.2f); d.rotationOffset = new Vector3(30f, 170f, 0f);
         c.stats(d);
+        AssignSpecialSounds(d);
         if (isNew) AssetDatabase.CreateAsset(d, path); else EditorUtility.SetDirty(d);
         return d;
+    }
+
+    // (2026-11-22) 특수 무기 소리: Assets/Audio/weapon/sp/ → 반복(화염방사기·전기톱·미니건) / 1회(RPG·레이저). SpecialWeaponAudio가 재생
+    const string SpecialSoundDir = "Assets/Audio/weapon/sp";
+    static void AssignSpecialSounds(WeaponData d)
+    {
+        AudioClip Clip(string f) => AssetDatabase.LoadAssetAtPath<AudioClip>($"{SpecialSoundDir}/{f}.mp3");
+        switch (d.specialKind)
+        {
+            case SpecialWeaponKind.Flamethrower: d.loopSound = Clip("flamethrower"); break;
+            case SpecialWeaponKind.Chainsaw: d.loopSound = Clip("chainsaw"); break;
+            case SpecialWeaponKind.Minigun: d.loopSound = Clip("minigun"); break;
+            case SpecialWeaponKind.RPG: d.fireSound = Clip("rpg"); break;
+            case SpecialWeaponKind.Laser: d.fireSound = Clip("laser"); break;
+        }
+    }
+
+    [MenuItem("Tools/Weapons/Assign Special Weapon Sounds")]
+    public static void AssignAllSpecialSounds()
+    {
+        int n = 0;
+        foreach (var g in AssetDatabase.FindAssets("t:WeaponData", new[] { SpecialDataDir }))
+        {
+            var d = AssetDatabase.LoadAssetAtPath<WeaponData>(AssetDatabase.GUIDToAssetPath(g));
+            if (d == null || d.specialKind == SpecialWeaponKind.None) continue;
+            AssignSpecialSounds(d); EditorUtility.SetDirty(d); n++;
+        }
+        AssetDatabase.SaveAssets();
+        Debug.Log($"[SpecialWeapons] 특수 무기 소리 연결: {n}개");
     }
 
     // ── Resources/WeaponDatabase: Assets/Items/Weapons 아래 모든 WeaponData + 상점 전용 목록 ──

@@ -51,6 +51,7 @@ MonoBehaviour:
   autoFire: 1
   fireSound: {fileID: 0}
   reloadSound: {fileID: 0}
+  loopSound: {fileID: 8300000, guid: e334de57dc557f84eba428bb88ec8ddf, type: 3}
   positionOffset: {x: 0.01, y: 0.06, z: -0.2}
   rotationOffset: {x: 30, y: 170, z: 0}
   carryRotationOffset: {x: 0, y: 0, z: 0}

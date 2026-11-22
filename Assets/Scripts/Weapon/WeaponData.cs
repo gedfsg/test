@@ -86,6 +86,8 @@ public class WeaponData : ItemData
     [Header("Sound (비우면 SoundLibrary의 총 종류별 기본 소리)")]
     public AudioClip fireSound;
     public AudioClip reloadSound;
+    [Tooltip("(2026-11-22) 반복 소리 - 화염방사기·미니건(쏘는 동안), 전기톱(들고 있는 동안). SpecialWeaponAudio가 재생")]
+    public AudioClip loopSound;
 
     [Header("Hand Offset")]
     public Vector3 positionOffset = new Vector3(0.01f, 0.06f, -0.2f);
