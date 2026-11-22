@@ -8,18 +8,31 @@ using UnityEngine;
 ///  - 왼손에 작은 손전등 모형(검은 원통 몸통 + 넓은 머리 + 렌즈, 길이 약 17cm)을 런타임에 만들어 쥐어 줌 (기본 도형 메시, 콜라이더 없음)
 ///  - 빛은 렌즈에서 조준점(커서, 총과 같은 방향) 쪽으로 약간 아래(pitchDown)를 비추는 Spot: Range 15m, Angle 35°, Intensity 3, #FFE8B0 따뜻한 백색
 ///  - 켜고 끄기(T키)·배터리는 DayNightCycle 그대로 - 이 스크립트는 Light.enabled를 보고 렌즈만 밝힘
+/// (2026-11-22) 밤·안개에 눈앞이 안 보여서:
+///  - Spot을 넓고 더 아래로: Angle 35° → 70°, pitchDown 12° → 22°, Range 15 → 20m, Intensity 3 → 4.5
+///    → 빛의 아래쪽 끝이 발 앞 약 0.7m부터 닿아서 바로 앞부터 밝고, 바닥의 사다리꼴도 넓어짐
+///  - 켜면 플레이어 머리 위에 원형 주변광(Point, 반경 7m)도 같이 켜짐 → 옆·뒤도 조금 보임
 /// 방향을 손 뼈 회전에 맡기지 않는 이유: 걷기·총 잡기 애니메이션으로 손이 흔들리면 빛이 사방으로 튐 → 위치만 손, 방향은 몸 정면.
 /// </summary>
 [RequireComponent(typeof(Light))]
 public class HandFlashlight : MonoBehaviour
 {
     [Header("빛 (Spot)")]
-    public float range = 15f;
-    public float spotAngle = 35f;
-    public float intensity = 3f;
+    // public float range = 15f; public float spotAngle = 35f; public float intensity = 3f; // (이전) 2026-11-22 넓힘
+    public float range = 20f;
+    public float spotAngle = 70f;
+    public float intensity = 4.5f;
     public Color color = new Color32(0xFF, 0xE8, 0xB0, 0xFF);
     [Tooltip("몸 정면에서 아래로 숙이는 각도(도)")]
-    public float pitchDown = 12f;
+    // public float pitchDown = 12f; // (이전)
+    public float pitchDown = 22f;
+
+    [Header("주변 원형 빛 (Point, 2026-11-22) - 손전등이 켜져 있을 때만")]
+    public bool aroundLight = true;
+    public float aroundRange = 7f;
+    public float aroundIntensity = 3f;
+    [Tooltip("플레이어 발밑 기준 높이(m). 높을수록 원이 넓고 고르게")]
+    public float aroundHeight = 2.5f;
 
     [Header("손에 쥔 위치 (왼손 뼈 기준, 몸 방향 축: x 오른쪽, y 위, z 앞) m")]
     public Vector3 holdOffset = new Vector3(0.02f, 0.01f, 0.06f);
@@ -30,6 +43,7 @@ public class HandFlashlight : MonoBehaviour
     Transform hand;        // 왼손 뼈
     Transform model;       // 손전등 모형 루트 (렌즈가 +Z)
     Material lensMat;
+    Light around;          // 주변 원형 빛 (2026-11-22)
     bool lastOn;
     static readonly Color LensOff = new Color(0.25f, 0.24f, 0.2f);
 
@@ -48,6 +62,7 @@ public class HandFlashlight : MonoBehaviour
         var anim = body != null ? body.GetComponentInChildren<Animator>() : null;
         if (anim != null && anim.isHuman) hand = anim.GetBoneTransform(HumanBodyBones.LeftHand);
         BuildModel();
+        BuildAroundLight();
         lastOn = !lt.enabled; // 첫 프레임에 렌즈 색 맞춤
     }
 
@@ -73,6 +88,22 @@ public class HandFlashlight : MonoBehaviour
         Part(root, "Head", cyl, new Vector3(0f, 0f, 0.035f), new Vector3(0.05f, 0.016f, 0.05f), headMat, layer);   // 머리
         Part(root, "Lens", cyl, new Vector3(0f, 0f, 0.052f), new Vector3(0.042f, 0.002f, 0.042f), lensMat, layer); // 렌즈
         Part(root, "Button", Resources.GetBuiltinResource<Mesh>("Cube.fbx"), new Vector3(0f, 0.017f, -0.03f), new Vector3(0.01f, 0.006f, 0.018f), headMat, layer, false);
+    }
+
+    /// <summary>(2026-11-22) 머리 위 주변광. 그림자 없음 (가볍게), 손전등과 같은 색</summary>
+    void BuildAroundLight()
+    {
+        if (!aroundLight) return;
+        var go = new GameObject("FlashlightAroundLight");
+        go.transform.SetParent(body != null ? body : transform, false);
+        go.transform.localPosition = Vector3.up * aroundHeight;
+        around = go.AddComponent<Light>();
+        around.type = LightType.Point;
+        around.range = aroundRange;
+        around.intensity = aroundIntensity;
+        around.color = color;
+        around.shadows = LightShadows.None;
+        around.enabled = lt.enabled;
     }
 
     static void Part(Transform parent, string name, Mesh mesh, Vector3 pos, Vector3 scale, Material mat, int layer, bool cylinder = true)
@@ -107,6 +138,8 @@ public class HandFlashlight : MonoBehaviour
         Quaternion rot = Quaternion.LookRotation(dir, Vector3.up);
         model.SetPositionAndRotation(pos, rot);
         transform.SetPositionAndRotation(pos + dir * 0.06f, rot); // 빛은 렌즈 바로 앞에서
+
+        if (around != null) around.enabled = lt.enabled;   // 손전등 켜고 끄기(T)·배터리 방전을 그대로 따라감
 
         if (lt.enabled != lastOn)
         {

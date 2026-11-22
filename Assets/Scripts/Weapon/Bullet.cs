@@ -220,15 +220,22 @@ public class Bullet : MonoBehaviour
 
     // ── RPG 폭발 (2026-11-16) ──
     // 반경 안 모든 Health(쏜 쪽 태그 제외)에 광역 데미지 + 좀비 넉백. 직격 대상도 광역을 같이 받음 (300 + 150)
+    // (2026-11-22) 자해: 쏜 플레이어도 폭발 반경 안이면 다침 — 가까울수록 세게, 중심 = 광역 데미지의 40% (기본 60) → 가장자리 0
+    const float SelfSplashRatio = 0.4f;
+
     void Explode(Vector3 center)
     {
         var done = new System.Collections.Generic.HashSet<Health>();
         foreach (var c in Physics.OverlapSphere(center, splashRadius, ~0, QueryTriggerInteraction.Ignore))
         {
-            if (!string.IsNullOrEmpty(shooterTag) && c.CompareTag(shooterTag)) continue;
+            // if (!string.IsNullOrEmpty(shooterTag) && c.CompareTag(shooterTag)) continue; // (이전) 쏜 쪽은 무시
             Health h = c.GetComponentInParent<Health>();
             if (h == null || !done.Add(h)) continue;
-            if (!string.IsNullOrEmpty(shooterTag) && h.CompareTag(shooterTag)) continue;
+            if (!string.IsNullOrEmpty(shooterTag) && (c.CompareTag(shooterTag) || h.CompareTag(shooterTag)))
+            {
+                if (shooterTag == "Player") SelfSplash(h, center);   // (2026-11-22) 자해
+                continue;
+            }
             var z = h.GetComponent<ZombieController>();
             if (z != null && z.IsDead) continue;
             h.TakeDamage(splashDamage);
@@ -245,6 +252,15 @@ public class Bullet : MonoBehaviour
         }
         WorldFX_Explosion(center);
         NoiseSystem.Emit(center, splashRadius * 6f); // 폭발음은 크게 들림
+    }
+
+    /// <summary>(2026-11-22) RPG 자해 — 폭발 중심에서 멀수록 줄어듦 (구르기 무적 중엔 Health가 알아서 무시)</summary>
+    void SelfSplash(Health h, Vector3 center)
+    {
+        Vector3 d = h.transform.position - center; d.y = 0f;
+        float falloff = Mathf.Clamp01(1f - d.magnitude / Mathf.Max(0.01f, splashRadius));
+        float dmg = splashDamage * SelfSplashRatio * falloff;
+        if (dmg >= 1f) h.TakeDamage(dmg);
     }
 
     static Material explosionMat;

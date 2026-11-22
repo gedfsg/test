@@ -650,10 +650,34 @@ public class HelicopterCutscene : MonoBehaviour
         Text(panel.transform, "Sub", new Vector2(0f, 20f), 40f, Color.white, true).text = Localization.T("생존자 구출 성공");
         var s = GameStats.Instance;
         string days = Localization.IsEnglish ? $"Day {(s != null ? s.CurrentDay : 7)}" : $"{(s != null ? s.CurrentDay : 7)}일차";
-        string stats = $"{days}  ·  {Localization.T("생존 시간")} {GameStats.FormatTime(s != null ? s.PlayTime : 0f)}  ·  {Localization.T("완료한 미션")} {(s != null ? s.CompletedMissions : 0)}";
-        Text(panel.transform, "Stats", new Vector2(0f, -45f), 24f, new Color(0.8f, 0.82f, 0.86f), false).text = stats;
-        ClearButton(panel.transform, new Vector2(-150f, -160f), Localization.T("다시 시작"), true, MenuUI.RestartGame);
-        ClearButton(panel.transform, new Vector2(150f, -160f), Localization.T("메인 메뉴로"), false, MenuUI.LoadMainMenu);
+        // string stats = $"{days}  ·  {Localization.T("생존 시간")} {GameStats.FormatTime(s != null ? s.PlayTime : 0f)}  ·  {Localization.T("완료한 미션")} {(s != null ? s.CompletedMissions : 0)}";
+        // Text(panel.transform, "Stats", new Vector2(0f, -45f), 24f, new Color(0.8f, 0.82f, 0.86f), false).text = stats;
+        // ClearButton(panel.transform, new Vector2(-150f, -160f), Localization.T("다시 시작"), true, MenuUI.RestartGame);
+        // ClearButton(panel.transform, new Vector2(150f, -160f), Localization.T("메인 메뉴로"), false, MenuUI.LoadMainMenu);
+
+        // (2026-11-22) 기록을 칸으로: 생존 시간 · 처치한 좀비 · 메인 미션 · 서브 미션 · 번 돈 (큰 숫자 + 작은 이름)
+        var mm = MissionManager.Instance;
+        var money = PlayerMoney.Instance;
+        Text(panel.transform, "Days", new Vector2(0f, -28f), 22f, new Color(0.8f, 0.82f, 0.86f), false).text =
+            Localization.IsEnglish ? $"Survived {days}" : $"{days}까지 생존";
+        string[] values =
+        {
+            GameStats.FormatTime(s != null ? s.PlayTime : 0f),
+            (s != null ? s.ZombiesKilled : 0).ToString("N0"),
+            (mm != null ? mm.CompletedMainMissions : 0).ToString(),
+            (mm != null ? mm.CompletedSubMissions : 0).ToString(),
+            "$" + (money != null ? money.TotalEarned : 0).ToString("N0"),
+        };
+        string[] labels = { "생존 시간", "처치한 좀비", "메인 미션", "서브 미션", "번 돈" };
+        const float colW = 220f;
+        for (int i = 0; i < values.Length; i++)
+        {
+            float x = (i - (values.Length - 1) * 0.5f) * colW;
+            Text(panel.transform, "StatValue", new Vector2(x, -82f), 40f, new Color(1f, 0.86f, 0.55f), true).text = values[i];
+            Text(panel.transform, "StatLabel", new Vector2(x, -122f), 20f, new Color(0.7f, 0.72f, 0.76f), false).text = Localization.T(labels[i]);
+        }
+        ClearButton(panel.transform, new Vector2(-150f, -215f), Localization.T("다시 시작"), true, MenuUI.RestartGame);
+        ClearButton(panel.transform, new Vector2(150f, -215f), Localization.T("메인 메뉴로"), false, MenuUI.LoadMainMenu);
 
         for (float t = 0f; t < 1f; t += Time.unscaledDeltaTime / 1.2f) { group.alpha = t; yield return null; }
         group.alpha = 1f;

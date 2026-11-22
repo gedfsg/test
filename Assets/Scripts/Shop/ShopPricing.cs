@@ -6,10 +6,12 @@ public enum ShopCategory { Ammo, Food, Medical, Weapon, Other, Upgrade, Throwabl
 /// <summary>
 /// 상점 가격·분류·설명 (상점 2단계). 아이템마다 가격을 입력하지 않고 종류·등급으로 정한다.
 ///  돈 기준: 일반 좀비 1마리 ≈ $2 (PlayerMoney)
-///   - 탄약: 한 묶음(AmmoData.ammoAmount발) × 발당 가격  (권총탄 30발 ≈ $6)
+///   - 탄약: 한 묶음(AmmoData.ammoAmount발) × 발당 가격  (2026-11-22 2.5배: 권총 15발 $8, 소총 30발 $18, 산탄 8발 $12, 저격 5발 $12, 특수 40발 $40)
 ///   - 음식·물 / 치료: 등급별 기본값 (일반 $4 ~ 전설 $30), 치료는 1.5배
+///     (2026-11-22) 돈이 남아서 생필품 구매가 × ConsumableMarkup(3) → 음식 $12 ~ $90, 치료 $18 ~ $135.
+///      팔 때는 예전 값 기준 그대로 (비싸게 사서 비싸게 되파는 돈벌이가 안 되게)
 ///   - 총기: 등급별 (일반 $25 ~ 영웅 $110), 근접무기는 0.6배. 전설은 상점에서 안 팜 (팔기만 가능)
-///   - 상점 전용 특수 무기 (WeaponDatabase.shopWeapons): 종류별 $140 ~ $240, 특수 탄약 40발 $20
+///   - 상점 전용 특수 무기 (WeaponDatabase.shopWeapons): 종류별 $140 ~ $240, 특수 탄약 40발 $40
 ///   - 투척: 수류탄 $20, 화염병 $15, 섬광탄 $15
 ///   - 판매가 = 구매가 × sellRatio (35%)
 /// 숫자를 바꾸려면 아래 표만 고치면 된다.
@@ -17,10 +19,14 @@ public enum ShopCategory { Ammo, Food, Medical, Weapon, Other, Upgrade, Throwabl
 public static class ShopPricing
 {
     public const float SellRatio = 0.35f;
+    /// <summary>(2026-11-22) 음식·물·치료 구매가 배수. 판매가에는 안 붙음</summary>
+    public const float ConsumableMarkup = 3f;
 
     // 발당 가격
-    private const float PistolRound = 0.2f, ARRound = 0.25f, ShotgunShell = 0.6f, SniperRound = 1.0f;
-    private const float SpecialRound = 0.5f;   // 특수 무기 공용 탄약 (화염방사기 연료·미니건·레이저·RPG)
+    // private const float PistolRound = 0.2f, ARRound = 0.25f, ShotgunShell = 0.6f, SniperRound = 1.0f; private const float SpecialRound = 0.5f; // (이전)
+    // (2026-11-22) 돈이 남아서 탄약 2.5배
+    private const float PistolRound = 0.5f, ARRound = 0.6f, ShotgunShell = 1.5f, SniperRound = 2.5f;
+    private const float SpecialRound = 1.0f;   // 특수 무기 공용 탄약 (화염방사기 연료·미니건·레이저·RPG)
 
     /// <summary>상점 전용 특수 무기 값</summary>
     public static int SpecialWeaponPrice(SpecialWeaponKind k)
@@ -92,9 +98,8 @@ public static class ShopPricing
                 return Mathf.Max(1, Mathf.RoundToInt(per * Mathf.Max(1, a.ammoAmount)));
             }
             case ShopCategory.Food:
-                return ByRarity(item.rarity, 4, 6, 10, 18, 30);
             case ShopCategory.Medical:
-                return Mathf.RoundToInt(ByRarity(item.rarity, 4, 6, 10, 18, 30) * 1.5f);
+                return Mathf.RoundToInt(ConsumableBase(item) * ConsumableMarkup);   // (2026-11-22) 생필품 비싸게
             case ShopCategory.Weapon:
             {
                 var w = (WeaponData)item;
@@ -110,7 +115,21 @@ public static class ShopPricing
     }
 
     /// <summary>상인에게 팔 때 받는 값 (한 개)</summary>
-    public static int SellPrice(ItemData item) => item == null ? 0 : Mathf.Max(1, Mathf.RoundToInt(BuyPrice(item) * SellRatio));
+    // public static int SellPrice(ItemData item) => item == null ? 0 : Mathf.Max(1, Mathf.RoundToInt(BuyPrice(item) * SellRatio)); // (이전)
+    public static int SellPrice(ItemData item)
+    {
+        if (item == null) return 0;
+        var cat = CategoryOf(item);
+        float basePrice = cat == ShopCategory.Food || cat == ShopCategory.Medical ? ConsumableBase(item) : BuyPrice(item);   // 생필품은 올리기 전 값으로
+        return Mathf.Max(1, Mathf.RoundToInt(basePrice * SellRatio));
+    }
+
+    /// <summary>음식·물·치료의 원래(올리기 전) 값: 등급별 $4 ~ $30, 치료는 1.5배</summary>
+    static float ConsumableBase(ItemData item)
+    {
+        float p = ByRarity(item.rarity, 4, 6, 10, 18, 30);
+        return CategoryOf(item) == ShopCategory.Medical ? p * 1.5f : p;
+    }
 
     /// <summary>
     /// 상인 진열대 총기 등급 확률 (총 한 자루를 고를 때 그 등급이 나올 비율, 합 100 아니어도 됨).

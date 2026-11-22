@@ -9,7 +9,7 @@ using UnityEngine.SceneManagement;
 ///   스태미나 최대치 +15 / 단계
 ///   스태미나 회복  +20% / 단계
 ///   최대 체력     +10 / 단계  (살 때 그만큼 회복도 됨)
-///  - 강화마다 최대 3단계, 가격 $40 → $70 → $110
+///  - 강화마다 최대 3단계, 가격 $80 → $140 → $220 (2026-11-22 두 배, 이전 $40 → $70 → $110)
 ///  - 상인마다 0~1개 진열 (ShopStock.Generate). 사면 바로 적용, 가방 안 차지함
 ///  - 인벤토리를 열면 창 왼쪽 바깥에 '강화' 카드 (UpgradeCard) —— 하나라도 샀을 때만
 ///  - 아드레날린 같은 속도 버프(PlayerBuffManager)가 끝나도 강화된 속도로 돌아오게 그쪽 '원래 속도'도 같이 올림
@@ -19,7 +19,8 @@ public class PlayerUpgrades : MonoBehaviour
     public static PlayerUpgrades Instance { get; private set; }
 
     public const int MaxLevel = 3;
-    private static readonly int[] Prices = { 40, 70, 110 };
+    // private static readonly int[] Prices = { 40, 70, 110 }; // (이전)
+    private static readonly int[] Prices = { 80, 140, 220 };   // (2026-11-22) 돈이 남아서 두 배
     private const float SpeedPerLevel = 0.05f, StaminaPerLevel = 15f, RegenPerLevel = 0.20f, HealthPerLevel = 10f;
 
     public static readonly UpgradeType[] All = { UpgradeType.MoveSpeed, UpgradeType.StaminaMax, UpgradeType.StaminaRegen, UpgradeType.MaxHealth };

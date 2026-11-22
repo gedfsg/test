@@ -149,6 +149,11 @@ public static class Localization
         { "도달 일차", "Day Reached" },
         { "생존 시간", "Time Survived" },
         { "완료한 미션", "Missions Done" },
+        // 클리어 기록 (2026-11-22)
+        { "처치한 좀비", "Zombies Killed" },
+        { "메인 미션", "Main Missions" },
+        { "서브 미션", "Side Missions" },
+        { "번 돈", "Money Earned" },
 
         // 탈출 헬기 컷신 (HelicopterCutscene)
         { "구조 헬기 접근 중...", "Rescue helicopter approaching..." },
