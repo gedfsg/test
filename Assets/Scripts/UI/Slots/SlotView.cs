@@ -101,11 +101,15 @@ public class SlotView : MonoBehaviour, IPointerClickHandler,
             countLabel.text = amount > 1 ? $"x{amount}" : "";
 
         // 총기 등급 테두리 (인벤토리 칸만 - 핫바는 WeaponHotbarUI가 안쪽 등급 테두리를 따로 그림, 색은 같은 RarityColors)
-        SetRarityBorder(Owner == SlotOwner.Inventory && item is WeaponData ? RarityColors.Get(item.rarity) : (Color?)null);
+        // SetRarityBorder(Owner == SlotOwner.Inventory && item is WeaponData ? RarityColors.Get(item.rarity) : (Color?)null); // (이전) 인벤토리만
+        // (2026-11-22) 핫바에 장착해도 같은 등급 테두리 (인벤토리와 같은 규칙·색)
+        bool showRarity = (Owner == SlotOwner.Inventory || Owner == SlotOwner.Hotbar) && item is WeaponData;
+        SetRarityBorder(showRarity ? RarityColors.Get(item.rarity) : (Color?)null);
     }
 
     // ── 등급 테두리 (2026-11-12) ── 2px 선 4개 (위/아래/왼쪽/오른쪽). 일반 회색 / 희귀 파랑 / 영웅 보라 / 전설 주황
     const float RarityBorderPx = 2f;
+    const float HotbarRarityBorderPx = 3f; // (2026-11-22) 핫바 등급 테두리
     private GameObject rarityBorder;
     private Image[] rarityBorderLines;
 
@@ -119,13 +123,14 @@ public class SlotView : MonoBehaviour, IPointerClickHandler,
             root.SetParent(transform, false);
             root.anchorMin = Vector2.zero; root.anchorMax = Vector2.one; root.offsetMin = root.offsetMax = Vector2.zero;
             rarityBorderLines = new Image[4];
+            float px = Owner == SlotOwner.Hotbar ? HotbarRarityBorderPx : RarityBorderPx; // (2026-11-22) 핫바는 화면에서 작게 보여서 굵게
             // (anchorMin, anchorMax, sizeDelta) - 위, 아래, 왼쪽, 오른쪽
             var defs = new (Vector2 min, Vector2 max, Vector2 size, Vector2 pivot)[]
             {
-                (new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, RarityBorderPx), new Vector2(0.5f, 1f)),
-                (new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0f, RarityBorderPx), new Vector2(0.5f, 0f)),
-                (new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(RarityBorderPx, 0f), new Vector2(0f, 0.5f)),
-                (new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(RarityBorderPx, 0f), new Vector2(1f, 0.5f)),
+                (new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, px), new Vector2(0.5f, 1f)),
+                (new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0f, px), new Vector2(0.5f, 0f)),
+                (new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(px, 0f), new Vector2(0f, 0.5f)),
+                (new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(px, 0f), new Vector2(1f, 0.5f)),
             };
             for (int i = 0; i < 4; i++)
             {

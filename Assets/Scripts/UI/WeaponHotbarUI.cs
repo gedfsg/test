@@ -40,7 +40,9 @@ public class WeaponHotbarUI : MonoBehaviour
             // return IsWeaponSlot(index) ? item is WeaponData : item is ConsumableData; // (이전)
             if (IsWeaponSlot(index)) return item is WeaponData w && w.type != WeaponType.Melee;
             if (IsThrowSlot(index)) return item is ThrowableData;
-            return (item is WeaponData) || (item is ConsumableData);
+            // return (item is WeaponData) || (item is ConsumableData); // (이전) 총도 4·5번에 들어갔음
+            // (2026-11-22) 총은 1·2번에만: 4·5번은 근접 무기(도끼 등)·소비 아이템만
+            return (item is WeaponData fw && fw.type == WeaponType.Melee) || (item is ConsumableData);
         }
 
         /// <summary>못 넣을 때 토스트 문구</summary>
@@ -713,6 +715,7 @@ public class WeaponHotbarUI : MonoBehaviour
 
         slots[i].SetNumber(i + 1, isActive, theme);
         // UpdateRarityFrame(i); // (이전 2026-11-12~16) 핫바 안 등급 테두리 → 2026-11-17 핫바에서는 안 그림
+        // (2026-11-22) 등급 테두리 다시 표시: 인벤토리와 같은 테두리를 SlotView.SetItem이 그림 (Owner == Hotbar 포함)
         RestyleSlot(i, isActive);
 
         if (SlotTypeFilter.IsThrowSlot(i))
