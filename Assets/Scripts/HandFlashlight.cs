@@ -22,14 +22,16 @@ public class HandFlashlight : MonoBehaviour
     // public float range = 15f; public float spotAngle = 35f; public float intensity = 3f; // (이전) 2026-11-22 넓힘
     public float range = 20f;
     public float spotAngle = 70f;
-    public float intensity = 4.5f;
+    // public float intensity = 4.5f; // (2026-11-22) "랜턴 켜면 너무 밝음"
+    public float intensity = 2.5f;
     public Color color = new Color32(0xFF, 0xE8, 0xB0, 0xFF);
     [Tooltip("몸 정면에서 아래로 숙이는 각도(도)")]
     // public float pitchDown = 12f; // (이전)
     public float pitchDown = 22f;
 
     [Header("주변 원형 빛 (Point, 2026-11-22) - 손전등이 켜져 있을 때만")]
-    public bool aroundLight = true;
+    // public bool aroundLight = true; // (2026-11-22) "랜턴 켜면 캐릭터 밑에 원형 빛" = 이 머리 위 Point 빛 → 끔
+    public bool aroundLight = false;
     public float aroundRange = 7f;
     public float aroundIntensity = 3f;
     [Tooltip("플레이어 발밑 기준 높이(m). 높을수록 원이 넓고 고르게")]

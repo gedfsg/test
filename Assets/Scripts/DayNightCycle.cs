@@ -3,7 +3,7 @@ using UnityEngine.Events;
 using TMPro;
 
 /// <summary>
-/// 낮(2분) → 노을(36초) → 밤(1분) → 새벽(24초) → 반복 = 하루 4분 (2026-11-22, 이전 8분)
+/// 낮(2분15초) → 노을(40.5초) → 밤(67.5초) → 새벽(27초) → 반복 = 하루 4분 30초 (2026-11-22 2차, 1차 4분 / 이전 8분)
 /// 7일 생존이 기본 목표. 미션 시스템이 있으면 진행률 100%로 탈출할 때까지 Day가 계속 늘어남
 /// </summary>
 public class DayNightCycle : MonoBehaviour
@@ -22,10 +22,15 @@ public class DayNightCycle : MonoBehaviour
     // public float dawnDuration  = 60f;
     // 2026-11-22: 8분은 늘어짐 → 하루 240초(4분), 7일 = 28분. 비율 낮 50% / 황혼 15% / 밤 25% / 새벽 10%
     // (씬 main.unity에 저장된 값이 우선 - 씬 값도 같이 바꿔둠)
-    public float dayDuration   = 120f;
-    public float duskDuration  = 36f;
-    public float nightDuration = 60f;
-    public float dawnDuration  = 24f;
+    // public float dayDuration   = 120f; // (2026-11-22 1차) 하루 240초 → "너무 빠름"
+    // public float duskDuration  = 36f;
+    // public float nightDuration = 60f;
+    // public float dawnDuration  = 24f;
+    // (2026-11-22 2차) 아주 조금 느리게: 하루 270초(4분 30초), 7일 = 31.5분. 비율 그대로 50/15/25/10%
+    public float dayDuration   = 135f;
+    public float duskDuration  = 40.5f;
+    public float nightDuration = 67.5f;
+    public float dawnDuration  = 27f;
     public int   totalDays     = 7;
 
     [Header("라이팅")]
