@@ -145,6 +145,121 @@ public static class BridgeSafetyBuilder
         return best > float.MinValue;
     }
 
+    // ── (2026-11-22) 경사로·다리 밑 낮은 틈 메우기 ──
+    // 문제: 피드백 "농장 쪽 다리 밑에서 위로 갈 때 뚫리는 데가 있음".
+    //  - 다리 양 끝 경사로(기울어진 road-straight/road-bend)와 다리 상판 끝 아래로 둑이 비스듬히 올라와 밑면과 만나는 "쐐기" 틈이 있음
+    //  - 플레이어 충돌체는 지름 1m 구(높이 0 캡슐, 발밑 -0.1 ~ 0.9m)인데 모델 머리는 2.2m → 1m 틈만 있어도 몸판정은 들어가고
+    //    보이는 몸은 위 도로를 뚫고 나옴. 더 밀면 도로 위로 튀어 오름 (실측: 둑 14.38m, 머리 위 경사로 15.23m에 끼임)
+    //  - 도로 충돌 메시는 윗면만 막는 한쪽 면이라 밑에서는 안 막힘
+    // 해결: 다리 + 다리 주변 기울어진 도로 조각 아래를 1m 격자로 재서 "지면 ~ 도로 밑면" 틈이 FillMin~FillMax인 칸을
+    //  지면 아래 0.3m부터 밑면까지 BoxCollider로 꽉 채움 (같은 줄 이웃 칸은 최대 FillMergeCells개까지 한 박스로 합침).
+    //  틈이 FillMax 이상인 곳(머리가 안 닿는 다리 한가운데 밑)은 그대로 둠. 윗면(도로)은 안 건드려서 위로 걷는 데 영향 없음
+    const string RampRootName = "RampUndersideBlockers";
+    const float RampMinTilt = 0.3f;        // 이 각도(도) 이상 기울어진 도로 조각 = 경사로
+    const float RampBridgeRange = 130f;    // 다리 중심에서 이 거리(XZ) 안의 경사로만
+    const float FillCell = 1f;             // 격자 간격 (m)
+    // const float FillMin = 0.8f; // (1차) 0.74m 틈에도 파고듦 (밑면이 안 막아서 구가 그대로 들어감)
+    const float FillMin = 0.4f, FillMax = 3.0f; // 메울 틈 범위: 평평한 도로가 땅 위에 놓인 틈(0.35m)은 제외, 위는 모델 키 2.2m + 가파른 둑에 걸친 높이 여유 (2.6 → 3.0, 본 다리 끝 실측)
+    const float FillPad = 0.25f;           // 칸 가장자리 빈틈 메우기: 박스를 사방으로 이만큼 넓힘
+    const int FillMergeCells = 6;          // 한 박스로 합칠 최대 칸 수 (경사 때문에 높이 차가 커지지 않게)
+    const float FillMergeMaxStep = 0.15f;  // 합칠 칸들의 밑면 높이 차 최대 (m)
+
+    [MenuItem("Tools/Map/Build Ramp Underside Blockers")]
+    public static void BuildRampBlockers()
+    {
+        if (EditorApplication.isPlaying) { Debug.LogWarning("[BridgeSafety] Play 모드에서는 실행 불가"); return; }
+        var old = GameObject.Find(RampRootName);
+        if (old != null) Undo.DestroyObjectImmediate(old);
+        var roads = GameObject.Find("Roads");
+        if (roads == null) { Debug.LogWarning("[BridgeSafety] Roads 없음"); return; }
+
+        // 대상: 다리 본체 + 다리 근처 기울어진 도로 조각
+        var bridges = new List<Vector3>();
+        foreach (Transform t in roads.transform) if (t.name.StartsWith("road-bridge")) bridges.Add(t.GetComponentInChildren<Collider>().bounds.center);
+        var targets = new List<MeshCollider>();
+        foreach (Transform t in roads.transform)
+        {
+            var mc = t.GetComponentInChildren<MeshCollider>();
+            if (mc == null) continue;
+            if (t.name.StartsWith("road-bridge")) { targets.Add(mc); continue; }
+            if (Vector3.Angle(mc.transform.up, Vector3.up) < RampMinTilt) continue;
+            foreach (var c in bridges) { var d = c - t.position; d.y = 0f; if (d.magnitude < RampBridgeRange) { targets.Add(mc); break; } }
+        }
+
+        var root = new GameObject(RampRootName);
+        Undo.RegisterCreatedObjectUndo(root, "Ramp Underside Blockers");
+        bool hb = Physics.queriesHitBackfaces;
+        Physics.queriesHitBackfaces = true; // 도로 밑면(뒷면)을 위로 쏴서 찾음
+        int boxes = 0, cells = 0;
+        try
+        {
+            foreach (var mc in targets)
+            {
+                var b = mc.bounds;
+                for (float x = b.min.x + FillCell / 2f; x < b.max.x; x += FillCell)
+                {
+                    // z 방향 한 줄씩: 메울 칸을 모아 이웃끼리 합침
+                    float runStart = 0f, runGround = 0f, runUnder = 0f, runUnderMax = 0f; int runLen = 0;
+                    for (float z = b.min.z + FillCell / 2f; z < b.max.z + FillCell; z += FillCell)
+                    {
+                        float ground = 0f, under = 0f;
+                        bool fill = z < b.max.z && GapAt(mc, x, z, out ground, out under);
+                        // 밑면 높이가 비슷한 이웃 칸만 합침 (다리 들보처럼 밑면이 들쭉날쭉하면 박스 위에 빈 틈이 생겨 올라가 낄 수 있음 - 다리(2) 실측)
+                        if (fill && runLen > 0 && runLen < FillMergeCells
+                            && Mathf.Max(runUnderMax, under) - Mathf.Min(runUnder, under) < FillMergeMaxStep)
+                        {
+                            runLen++; runGround = Mathf.Min(runGround, ground); runUnder = Mathf.Min(runUnder, under); runUnderMax = Mathf.Max(runUnderMax, under); cells++;
+                            continue;
+                        }
+                        if (runLen > 0) { MakeFill(root.transform, x, runStart, runLen, runGround, runUnder, boxes++); runLen = 0; }
+                        if (fill) { runStart = z; runLen = 1; runGround = ground; runUnder = runUnderMax = under; cells++; }
+                    }
+                }
+            }
+        }
+        finally { Physics.queriesHitBackfaces = hb; }
+
+        EditorSceneManager.MarkSceneDirty(root.scene);
+        EditorSceneManager.SaveScene(root.scene);
+        Debug.Log($"[BridgeSafety] 다리·경사로 밑 틈 메움: 칸 {cells}개 → 박스 {boxes}개 (대상 {targets.Count}개, {RampRootName})");
+    }
+
+    /// <summary>(x, z)에서 도로(mc) 바로 아래 지면과 도로 밑면 사이 틈이 메울 범위인지</summary>
+    static bool GapAt(MeshCollider mc, float x, float z, out float ground, out float under)
+    {
+        ground = under = 0f;
+        // 도로 윗면
+        if (!mc.Raycast(new Ray(new Vector3(x, mc.bounds.max.y + 5f, z), Vector3.down), out RaycastHit top, mc.bounds.size.y + 10f)) return false;
+        // 그 아래 가장 높은 지면 (도로·투명 벽·물체 제외)
+        float best = float.MinValue; Vector3 n = Vector3.up;
+        foreach (var h in Physics.RaycastAll(new Vector3(x, top.point.y - 0.05f, z), Vector3.down, 60f, ~0, QueryTriggerInteraction.Ignore))
+        {
+            if (IsRoad(h.collider) || h.collider.GetComponent<InvisibleWall>() != null || h.collider.attachedRigidbody != null) continue;
+            if (h.point.y > best) { best = h.point.y; n = h.normal; }
+        }
+        // if (best == float.MinValue || n.y < 0.5f) return false; // (1차) 가파른 둑(다리 끝 밑)이 빠짐
+        if (best == float.MinValue || n.y < 0.2f) return false; // 지면 없음 / 거의 수직인 벽
+        // 지면에서 위로 → 처음 닿는 도로 밑면
+        if (!mc.Raycast(new Ray(new Vector3(x, best + 0.02f, z), Vector3.up), out RaycastHit up, top.point.y - best + 1f)) return false;
+        float gap = up.point.y - best;
+        if (gap < FillMin || gap >= FillMax) return false;
+        ground = best; under = up.point.y;
+        return true;
+    }
+
+    static void MakeFill(Transform parent, float x, float z0, int len, float ground, float under, int i)
+    {
+        float bottom = ground - 0.3f, top = under - 0.02f; // 위는 밑면 바로 아래 (도로 면은 안 건드림)
+        if (top - bottom < 0.1f) return;
+        var go = new GameObject("Fill_" + i);
+        go.transform.SetParent(parent, false);
+        go.transform.position = new Vector3(x, (bottom + top) / 2f, z0 + (len - 1) * FillCell / 2f);
+        go.isStatic = true;
+        var box = go.AddComponent<BoxCollider>();
+        box.size = new Vector3(FillCell + FillPad * 2f, top - bottom, len * FillCell + FillPad * 2f);
+        go.AddComponent<InvisibleWall>(); // 총알 통과
+    }
+
     static bool IsRoad(Collider c) => c != null && c.name.StartsWith("road");
 
     static bool IsRoadAt(Vector3 p) => TopHit(p, out RaycastHit h) && IsRoad(h.collider);

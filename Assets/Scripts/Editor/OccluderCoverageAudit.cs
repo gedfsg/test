@@ -180,4 +180,67 @@ public static class OccluderCoverageAudit
         if (list.Count > 30) sb.Append($" … 외 {list.Count - 30}개");
         return sb.ToString();
     }
+
+    // ── (2026-11-22) 큰 외벽·구조물 Occludable 지정 ──
+    // 피드백 "외부에서 건물에 캐릭터가 가려졌는데 원형(구멍)이 안 보이는 곳이 있음".
+    // 맵 전체 실외 지점(3m 간격) × 카메라 4방향 스캔: 몸·머리가 다 가려지는데 구멍이 안 열리는 경우의 대부분이
+    //  위 Audit의 "가로 40m 넘는 메시 제외"(MaxFootprint)에 걸려 Default로 남은 큰 외벽·구조물 + 그 콜라이더였음
+    //  (OccluderFader는 Occludable "콜라이더"로 감지하므로 렌더러만 Occludable이어도 안 열림)
+    //  - 학교 정면·옆 외벽(Mesh1/37/39 등), 광장 둘레 담벽(MURO), Kay Lousberg 건물 본체 → 렌더러+콜라이더가 같은 오브젝트: 높이 3.5m 이상 조각만
+    //  - 농장 2곳·급수탑 2개·물탱크·다리 3개 → 콜라이더가 렌더러와 따로 있어서 루트째 (RenderersFor가 가장 위 Occludable 조상 아래 렌더러를 모음)
+    // 구멍은 플레이어 발 + HoleMinHeight 위만 자르므로 땅이 붙은 농장 메시도 발밑은 안 잘림
+    static readonly string[] PieceRoots =
+    {
+        "Buildings/Enterable_School",
+        "scene/2e6e3a56b6f4412db7eb377c179d50a9.fbx",          // 광장 담벽(MURO)·분수
+        "Buildings/Building by Kay Lousberg - qOhhGLftam",
+    };
+    static readonly string[] WholeRoots =
+    {
+        "Buildings/Enterable_Farm by Poly by Google - 5GDbUJV2vQb",
+        "Buildings/Enterable_Farm by Quaternius - 91wMLb9kKo",
+        "Water/Water Tank by Quaternius - XVB8vUbnZb",
+        "Water/Water Tank by Quaternius - XVB8vUbnZb (1)",
+        "Urban Bits – Free Lowpoly City Props Pack - By MaHa/WaterSource",
+        "Roads/road-bridge",
+        "Roads/road-bridge (1)",
+        "Roads/road-bridge (2)",
+    };
+
+    [MenuItem("Tools/Utility/Mark Large Occluders (2026-11-22)")]
+    public static void MarkLargeOccluders()
+    {
+        if (Application.isPlaying) { Debug.LogWarning("[OccluderAudit] Play 중에는 실행 안 함"); return; }
+        int occ = LayerMask.NameToLayer(OccluderFader.LayerName);
+        if (occ < 0) { Debug.LogError("[OccluderAudit] 'Occludable' 레이어 없음"); return; }
+        int changed = 0;
+        foreach (var path in PieceRoots)
+        {
+            var go = GameObject.Find(path);
+            if (go == null) { Debug.LogWarning("[OccluderAudit] 없음: " + path); continue; }
+            foreach (var r in go.GetComponentsInChildren<Renderer>(true))
+            {
+                if (r.gameObject.layer == occ || IsDynamic(r) || r.bounds.size.y < OccluderFader.MinOccluderHeight) continue;
+                Undo.RecordObject(r.gameObject, "Mark Large Occluders");
+                r.gameObject.layer = occ; changed++;
+            }
+        }
+        foreach (var path in WholeRoots)
+        {
+            var go = GameObject.Find(path);
+            if (go == null) { Debug.LogWarning("[OccluderAudit] 없음: " + path); continue; }
+            foreach (var t in go.GetComponentsInChildren<Transform>(true))
+            {
+                if (t.gameObject.layer == occ) continue;
+                var c = t.GetComponent<Collider>();
+                if (c != null && c.isTrigger && t != go.transform) continue; // 실내 트리거 등은 그대로
+                Undo.RecordObject(t.gameObject, "Mark Large Occluders");
+                t.gameObject.layer = occ; changed++;
+            }
+        }
+        var scene = EditorSceneManager.GetActiveScene();
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene);
+        Debug.Log($"[OccluderAudit] 큰 외벽·구조물 Occludable 지정: 오브젝트 {changed}개");
+    }
 }
