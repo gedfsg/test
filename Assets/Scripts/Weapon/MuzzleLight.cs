@@ -22,6 +22,16 @@ using UnityEngine.InputSystem;
 ///  (2026-11-20 4차) 피드백 "조준등이 어색하게 빛남" → Intensity 2 → 1.2, Spot Angle 28° → 22° (아래 가장자리 11°가 바닥에 닿는 곳 ≈ 6.7m > Range 6m → 바닥 원 없음),
 ///     낮엔 0.3배(거의 안 보임) ~ 밤·실내 1.0배 (DayNightCycle 단계·진행률로 자동, 0.5초에 걸쳐 바뀜). 섬광은 그대로.
 ///     프리팹에 예전 값(spotIntensity 2 / spotAngle 28)이 저장돼 있어서 새 이름(aimLight*)으로 씀
+///  (2026-11-22 5차) 실사 레퍼런스(Assets/UI/References/muzzle_flash_*) 톤으로 섬광 재작업:
+///   a) 별 모양 빌보드 Quad → "메인 플레어 Quad + 스파크 파티클" 2단
+///      - 메인 플레어: Custom/MuzzleFlare (흰 코어 → 노랑 FFE060 → 주황 FF8030 전방 분출, 가산, HDR 1.5배, ZWrite Off / ZTest On)
+///        축 빌보드: 긴 축 = 총구 방향, 면 = 카메라 쪽 → 총구 앞으로 길쭉하게 뻗음
+///        크기(가로 × 길이, 월드 m): 권총 0.25×0.4 / AR·SMG·스나이퍼 0.35×0.55 / 샷건 0.45×0.7 / 화염방사기 0.6×1.0 / RPG 0.7×1.1
+///      - 스파크: 파티클 버스트 10~15개(샷건 24개·넓게), 수명 0.1초, 방사형으로 튐
+///      - 둘 다 총구 끝(이 오브젝트 = MuzzlePoint 자식) 위치·방향 기준. 월드 크기 고정 (예전엔 무기 모델 스케일에 따라 크기가 달라졌음)
+///   b) 애니메이션: 0.04~0.06초 동안 크기 1.0 → 1.2, 알파 1 → 0 (화염방사기 0.1초 / RPG 0.12초 유지)
+///   c) 화염방사기 #FF5500 / RPG #FF8800 / 레이저 색은 그대로 (무기 색으로 물들임)
+///   d) 섬광 조명: 3.5m / 9 / #FFC060 / 0.04초 그대로 (스펙 3~4m, 8~12), 바닥 원형 빛 없음(cullingMask) 유지
 [RequireComponent(typeof(Light))]
 public class MuzzleLight : MonoBehaviour
 {
@@ -61,6 +71,15 @@ public class MuzzleLight : MonoBehaviour
 
     Transform flashQuad;
     MeshRenderer flashRenderer;
+    // (2026-11-22) 메인 플레어 + 스파크
+    WeaponType weaponType = WeaponType.AR;
+    Vector2 flareSize;            // (가로, 길이) 월드 m
+    ParticleSystem sparks;
+    static Material flareMat, sparkMat;
+    static readonly int AlphaId = Shader.PropertyToID("_Alpha");
+    static readonly int TintId = Shader.PropertyToID("_Tint");
+    static readonly int SeedId = Shader.PropertyToID("_Seed");
+    const float FlareGrow = 1.2f;
     MaterialPropertyBlock mpb;
     float flashStart = -1f, flashDur, flashBaseSize, flashRoll;
     float lightUntil = -1f;
@@ -93,6 +112,7 @@ public class MuzzleLight : MonoBehaviour
         if (lightComp == null) Awake();
         Color c = data != null ? data.lightColor : (Color)new Color32(0xFF, 0xD0, 0x70, 0xFF);
         kind = data != null ? data.specialKind : SpecialWeaponKind.None;
+        weaponType = data != null ? data.type : WeaponType.AR; // (2026-11-22) 섬광 크기용
         lightComp.color = c;
         // lightComp.intensity = data != null && data.lightIntensity > spotIntensity ? data.lightIntensity : spotIntensity; // (이전) 2, 화염방사기 2.0
         // (2026-11-20) 모든 총 1.2 (무기 색은 그대로), 실제 밝기 = 1.2 × 낮/밤 배율 (LateUpdate)
@@ -119,6 +139,27 @@ public class MuzzleLight : MonoBehaviour
         if (flashLight != null) flashLight.enabled = false;
     }
 
+    // (2026-11-22) 플레어·스파크는 무기 모델 스케일 영향을 안 받게 씬 루트에 둠 → 무기가 사라지면 같이 정리
+    void OnDestroy()
+    {
+        if (flashQuad != null) Destroy(flashQuad.gameObject);
+        if (sparks != null) Destroy(sparks.gameObject);
+    }
+
+    /// <summary>(2026-11-22) 무기 종류별 메인 플레어 크기 (가로, 길이) m · 스파크 수 · 퍼짐 각도</summary>
+    void FlareSpec(out Vector2 size, out int sparkCount, out float sparkAngle)
+    {
+        sparkCount = 12; sparkAngle = 35f;
+        switch (weaponType)
+        {
+            case WeaponType.Pistol: size = new Vector2(0.25f, 0.4f); sparkCount = 10; break;
+            case WeaponType.Shotgun: size = new Vector2(0.45f, 0.7f); sparkCount = 24; sparkAngle = 70f; break;
+            default: size = new Vector2(0.35f, 0.55f); sparkCount = 13; break; // AR·SMG·스나이퍼
+        }
+        if (kind == SpecialWeaponKind.Flamethrower) { size = new Vector2(0.6f, 1.0f); sparkCount = 6; }
+        else if (kind == SpecialWeaponKind.RPG) { size = new Vector2(0.7f, 1.1f); sparkCount = 20; sparkAngle = 60f; }
+    }
+
     /// <summary>발사 순간 섬광 (Weapon.Shoot) - 연사하면 매 발 다시 터짐</summary>
     public void Flash()
     {
@@ -128,16 +169,21 @@ public class MuzzleLight : MonoBehaviour
         if (kind == SpecialWeaponKind.Flamethrower) { size = new Vector2(0.8f, 0.8f); time = new Vector2(0.1f, 0.1f); }
         else if (kind == SpecialWeaponKind.RPG) { size = new Vector2(1.0f, 1.0f); time = new Vector2(0.12f, 0.12f); }
 
+        // (2026-11-22) 무기별 플레어 크기 · 지속 0.04~0.06초 (화염·RPG는 위 time 그대로)
+        FlareSpec(out flareSize, out int sparkCount, out float sparkAngle);
+        if (kind != SpecialWeaponKind.Flamethrower && kind != SpecialWeaponKind.RPG) time = new Vector2(0.04f, 0.06f);
         if (flashQuad != null)
         {
             flashDur = Random.Range(time.x, time.y);
             flashStart = Time.time;
-            flashBaseSize = Random.Range(size.x, size.y);
-            flashQuad.localPosition = Vector3.forward * flashForward;
-            flashRoll = Random.Range(0f, 360f); // 매번 다른 모양
+            // flashBaseSize = Random.Range(size.x, size.y); // (이전) 별 모양 정사각 크기
+            // flashQuad.localPosition = Vector3.forward * flashForward;
+            flashBaseSize = Random.Range(0.9f, 1.1f);      // (2026-11-22) 발사마다 크기 ±10%
+            flashRoll = Random.Range(0f, 360f); // 매번 다른 모양 (플레어 셰이더 _Seed)
             flashRenderer.enabled = true;
             UpdateFlash();
         }
+        if (sparks != null) EmitSparks(sparkCount, sparkAngle);
         if (flashLight != null)
         {
             flashLight.color = flashLightColor;
@@ -189,16 +235,52 @@ public class MuzzleLight : MonoBehaviour
     {
         float t = (Time.time - flashStart) / Mathf.Max(0.01f, flashDur);
         if (t >= 1f || !active) { flashRenderer.enabled = false; return; }
-        // 빌보드: 카메라를 정면으로 + 발사마다 다른 회전, 1.0 → 1.3배로 커지며 사라짐
+        // (이전 ~2026-11-21) 빌보드: 카메라를 정면으로 + 발사마다 다른 회전, 1.0 → 1.3배로 커지며 사라짐 (별 모양 정사각)
+        // var cam = Camera.main;
+        // if (cam != null) flashQuad.rotation = Quaternion.LookRotation(cam.transform.forward, cam.transform.up) * Quaternion.Euler(0f, 0f, flashRoll);
+        // flashQuad.localScale = Vector3.one * flashBaseSize * Mathf.Lerp(1f, flashGrow, t);
+        // float a = 1f - t;
+        // Color c = flashTint * 0.5f * a; c.a = a;
+        // mpb.SetColor(TintColor, c);
+        // mpb.SetColor(ColorId, c);
+        // flashRenderer.SetPropertyBlock(mpb);
+
+        // (2026-11-22) 축 빌보드: 긴 축(로컬 Y) = 총구 방향, 면(로컬 Z) = 카메라 쪽. 총구 끝에서 앞으로 뻗음
+        Vector3 fwd = transform.forward, origin = transform.position - fwd * 0.02f; // 총구 끝과 이어지게 살짝 뒤에서 시작
         var cam = Camera.main;
-        if (cam != null) flashQuad.rotation = Quaternion.LookRotation(cam.transform.forward, cam.transform.up) * Quaternion.Euler(0f, 0f, flashRoll);
-        flashQuad.localScale = Vector3.one * flashBaseSize * Mathf.Lerp(1f, flashGrow, t);
+        Vector3 toCam = cam != null ? cam.transform.position - origin : -fwd;
+        Vector3 n = Vector3.ProjectOnPlane(toCam, fwd);
+        if (n.sqrMagnitude < 1e-6f) n = Vector3.ProjectOnPlane(Vector3.up, fwd);
+        float grow = Mathf.Lerp(1f, FlareGrow, t) * flashBaseSize;
+        float w = flareSize.x * grow, len = flareSize.y * grow;
+        flashQuad.SetPositionAndRotation(origin + fwd * (len * 0.5f), Quaternion.LookRotation(n.normalized, fwd));
+        flashQuad.localScale = new Vector3(w, len, 1f);
         float a = 1f - t;
-        // Legacy Particles/Additive = 텍스처 × 틴트 × 2 → 틴트 0.5가 원래 밝기. 알파도 같이 줄여 사라지게
-        Color c = flashTint * 0.5f * a; c.a = a;
-        mpb.SetColor(TintColor, c);
-        mpb.SetColor(ColorId, c);
+        mpb.SetFloat(AlphaId, a);
+        mpb.SetColor(TintId, flashTint);
+        mpb.SetFloat(SeedId, flashRoll / 360f);
         flashRenderer.SetPropertyBlock(mpb);
+    }
+
+    /// <summary>(2026-11-22) 스파크 버스트: 총구 끝에서 전방 원뿔 + 사방으로 조금</summary>
+    void EmitSparks(int count, float angle)
+    {
+        var ep = new ParticleSystem.EmitParams { applyShapeToPosition = false };
+        Vector3 fwd = transform.forward, pos = transform.position + fwd * 0.05f;
+        for (int i = 0; i < count; i++)
+        {
+            // 70%는 전방 원뿔, 30%는 사방 (레퍼런스의 사방 파편)
+            Vector3 dir = Random.value < 0.7f
+                ? Quaternion.AngleAxis(Random.Range(0f, angle), Random.onUnitSphere) * fwd
+                : Random.onUnitSphere;
+            if (Vector3.Dot(dir, fwd) < -0.2f) dir = Vector3.Reflect(dir, fwd); // 총 뒤쪽(플레이어 쪽)으로는 안 튀게
+            ep.position = pos;
+            ep.velocity = dir.normalized * Random.Range(3f, 7f);
+            ep.startLifetime = Random.Range(0.07f, 0.12f);
+            ep.startSize = Random.Range(0.02f, 0.045f);
+            ep.startColor = Color.Lerp(new Color(1f, 0.95f, 0.75f), new Color(1f, 0.6f, 0.2f), Random.value) * flashTint;
+            sparks.Emit(ep, 1);
+        }
     }
 
     void EnsureFlashObjects()
@@ -206,21 +288,25 @@ public class MuzzleLight : MonoBehaviour
         if (flashQuad == null)
         {
             if (flashMat == null) flashMat = Resources.Load<Material>("FX/MuzzleFlash"); // Tools/Weapons/Add Muzzle Light to All이 만듦
-            if (flashMat != null)
+            // (2026-11-22) 메인 플레어 재질 (Custom/MuzzleFlare) - 없으면 예전 별 모양 재질
+            if (flareMat == null) { var sh = Shader.Find("Custom/MuzzleFlare"); if (sh != null) flareMat = new Material(sh) { name = "MuzzleFlare(Runtime)" }; }
+            if (flashMat != null || flareMat != null)
             {
                 // CreatePrimitive는 MeshCollider가 붙어 나와서 (Destroy가 프레임 끝이라) 한 프레임 동안 플레이어 Rigidbody 밑 오목 콜라이더 에러 → 메시만 씀
                 var go = new GameObject("MuzzleFlashQuad");
                 go.AddComponent<MeshFilter>().sharedMesh = Resources.GetBuiltinResource<Mesh>("Quad.fbx");
                 flashRenderer = go.AddComponent<MeshRenderer>();
-                go.transform.SetParent(transform, false);
-                flashQuad = go.transform;
-                flashRenderer.sharedMaterial = flashMat;
+                // go.transform.SetParent(transform, false); // (이전) 무기 모델 스케일 영향 받음
+                flashQuad = go.transform;                    // (2026-11-22) 씬 루트 (월드 크기 고정, OnDestroy에서 정리)
+                // flashRenderer.sharedMaterial = flashMat; // (이전)
+                flashRenderer.sharedMaterial = flareMat != null ? flareMat : flashMat;
                 flashRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 flashRenderer.receiveShadows = false;
                 flashRenderer.enabled = false;
                 mpb = new MaterialPropertyBlock();
             }
         }
+        if (sparks == null) sparks = CreateSparks(); // (2026-11-22)
         if (flashLight == null)
         {
             var lgo = new GameObject("MuzzleFlashLight");
@@ -233,6 +319,56 @@ public class MuzzleLight : MonoBehaviour
             flashLight.cullingMask = FlashCullingMask(); // (2026-11-18) 지면·플레이어 제외 → 발밑 원형 빛 없음
             flashLight.enabled = false;
         }
+    }
+
+    /// <summary>(2026-11-22) 스파크 파티클 시스템 (월드 공간, 직접 Emit만 - 자동 방출 없음)</summary>
+    static ParticleSystem CreateSparks()
+    {
+        var go = new GameObject("MuzzleSparks");
+        var ps = go.AddComponent<ParticleSystem>();
+        ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        var main = ps.main;
+        main.loop = false; main.playOnAwake = false;
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.maxParticles = 200;
+        main.gravityModifier = 0.3f;
+        var em = ps.emission; em.enabled = false;
+        var sh = ps.shape; sh.enabled = false;
+        var col = ps.colorOverLifetime; col.enabled = true;
+        var g = new Gradient();
+        g.SetKeys(new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(new Color(1f, 0.55f, 0.15f), 1f) },
+                  new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(0.8f, 0.5f), new GradientAlphaKey(0f, 1f) });
+        col.color = g;
+        var r = go.GetComponent<ParticleSystemRenderer>();
+        r.renderMode = ParticleSystemRenderMode.Stretch; // 날아가는 방향으로 늘어난 선 모양 파편
+        r.velocityScale = 0.025f;
+        r.lengthScale = 1.5f;
+        r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        r.receiveShadows = false;
+        if (sparkMat == null)
+        {
+            var shd = Shader.Find("Legacy Shaders/Particles/Additive");
+            if (shd == null && flashMat != null) shd = flashMat.shader;
+            if (shd != null) sparkMat = new Material(shd) { name = "MuzzleSparks(Runtime)", mainTexture = DotTexture() };
+            if (sparkMat != null && sparkMat.HasProperty("_TintColor")) sparkMat.SetColor("_TintColor", new Color(0.75f, 0.75f, 0.75f, 1f)); // Legacy Additive ×2 → 약 1.5배 발광
+        }
+        r.sharedMaterial = sparkMat;
+        ps.Play();
+        return ps;
+    }
+
+    static Texture2D DotTexture()
+    {
+        var t = new Texture2D(16, 16, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+        for (int y = 0; y < 16; y++)
+            for (int x = 0; x < 16; x++)
+            {
+                float d = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), new Vector2(8f, 8f)) / 8f;
+                float a = Mathf.Clamp01(1f - d); a *= a;
+                t.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+            }
+        t.Apply();
+        return t;
     }
 
     /// <summary>섬광 조명이 비추는 레이어: 지면(Default·Ground)·물·플레이어·UI 빼고 전부 (건물·나무·차 = Occludable)</summary>

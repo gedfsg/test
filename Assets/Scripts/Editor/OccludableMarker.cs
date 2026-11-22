@@ -17,7 +17,8 @@ using UnityEngine;
 /// </summary>
 public static class OccludableMarker
 {
-    const float MinPropHeight = 1.2f;
+    // const float MinPropHeight = 1.2f; // (이전)
+    const float MinPropHeight = OccluderFader.MinOccluderHeight; // (2026-11-22 C1) 3.5m - 차·작은 소품은 가림 대상 아님
     // 실내(BuildingInterior)가 없고 바닥 넓이가 이보다 큰 건물 = 땅까지 한 메시로 붙은 농장 등 → 통째로 반투명해지면 땅이 사라져 배경색이 보임 (2026-11-18 Play)
     const float MaxPlainBuildingFootprint = 40f;
 
@@ -84,6 +85,7 @@ public static class OccludableMarker
                 if (Mathf.Max(r.bounds.size.x, r.bounds.size.z) >= MaxPlainBuildingFootprint) { if (go.layer == layer) Set(go, 0); continue; } // 땅째 붙은 큰 메시
                 if (go.layer != 0 && go.layer != layer) continue;
                 if (IsExcluded(go.transform) || IsGroundLike(r)) { if (go.layer == layer) Set(go, 0); continue; }
+                if (OccluderFader.IsVehicle(go.transform) || root.name.StartsWith("Building_Interior")) { if (go.layer == layer) Set(go, 0); continue; } // (2026-11-22 C1)
                 if (r.bounds.size.y < MinPropHeight) { if (go.layer == layer) Set(go, 0); continue; }
                 props++;
                 if (Set(go, layer)) objs++;
@@ -134,7 +136,7 @@ public static class OccludableMarker
         return true;
     }
 
-    static bool IsExcluded(Transform t)
+    internal static bool IsExcluded(Transform t) // (2026-11-21) Audit Occluder Coverage에서도 씀 (private → internal)
     {
         for (var p = t; p != null; p = p.parent)
         {
@@ -153,7 +155,7 @@ public static class OccludableMarker
         return false;
     }
 
-    static bool IsGroundLike(Renderer r)
+    internal static bool IsGroundLike(Renderer r) // (2026-11-21) Audit에서도 씀
     {
         string n = r.name.ToLowerInvariant();
         foreach (var w in GroundWords) if (n.Contains(w)) return true;

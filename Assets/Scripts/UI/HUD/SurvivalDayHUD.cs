@@ -12,6 +12,12 @@ using UnityEngine.UI;
 /// Start에서 코드로 전부 생성하고, DayNightCycle.Instance를 매 프레임 읽기만 함.
 /// 위치/크기는 레퍼런스 이미지(1681x936) 픽셀 기준 — Canvas Scaler가 같은 해상도 기준이라 그대로 맞음.
 /// 이 컴포넌트는 Canvas 밑 빈 오브젝트(TopCenterHUD, 상단 중앙 앵커)에 붙임 → Tools/HUD/Apply Layout/2.
+///
+/// (2026-11-22) 아포칼립스 리디자인 (Assets/UI/변경할 ui.png): 위치 그대로
+///      생존 1일차          ← "1일차"만 빨강
+///     ☀ │ 06:39           ← 굵은 흰 시각
+///   금색 테두리·제목 탭·1~7일 동그라미 줄 제거 (사용자 결정 2026-11-22), 반투명 검정 배경(모서리 작게).
+///   예전 배치는 Build() 안 주석 + ShowDayDots=false로 남김
 /// </summary>
 public class SurvivalDayHUD : MonoBehaviour
 {
@@ -39,7 +45,10 @@ public class SurvivalDayHUD : MonoBehaviour
     // 2026-11 ui.jpg: 금색 테두리 패널 (위 가운데 "생존 N일차" 탭 / 날짜 원 / 해·달 + 시각)
     const float CircleY = -40f, TitleY = 0f, BottomY = -84f;
     const float CircleSize = 28f, CircleSpacing = 44f;
-    const float FrameW = 360f, FrameH = 112f, FrameY = -58f;
+    // const float FrameW = 360f, FrameH = 112f, FrameY = -58f; // (이전 2026-11)
+    const float FrameW = 250f, FrameH = 92f, FrameY = -40f;     // (2026-11-22) 날짜 동그라미 줄이 빠져 작아짐
+    const bool ShowDayDots = false;                              // (2026-11-22) 1~7일 동그라미 줄 (사용자 결정: 빼기)
+    const float ApocTitleY = -16f, ApocBottomY = -58f;
     static readonly Color FrameFill = new Color(0.06f, 0.07f, 0.09f, 0.84f);
     static readonly Color FrameGold = new Color32(0xC9, 0xA2, 0x55, 0xE6);
 
@@ -79,19 +88,27 @@ public class SurvivalDayHUD : MonoBehaviour
         // (이전) 글자 뒤 은은한 어두운 그림자 (레퍼런스의 상단 어두운 그라데이션)
         // HudStyle.NewImage(root, "Shadow", HudStyle.SoftShadow, new Color(0f, 0f, 0f, 0.55f), new Vector2(0f, -42f), new Vector2(560f, 170f));
 
-        // ── 금색 테두리 패널 (모서리 깎임, 미션 패널과 같은 스타일) ──
-        Sprite panelSprite = HudStyle.ChamferPanel != null ? HudStyle.ChamferPanel : HudStyle.RoundedRect;
-        Sprite frameSprite = HudStyle.ChamferFrame != null ? HudStyle.ChamferFrame : HudStyle.RoundedFrame;
-        // 9-slice 배율 1.6 = 테두리를 레퍼런스처럼 얇게 (MissionHUD와 같은 값)
-        HudStyle.NewImage(root, "Frame", panelSprite, FrameFill, new Vector2(0f, FrameY), new Vector2(FrameW, FrameH)).pixelsPerUnitMultiplier = 1.6f;
-        HudStyle.NewImage(root, "FrameBorder", frameSprite, FrameGold, new Vector2(0f, FrameY), new Vector2(FrameW, FrameH)).pixelsPerUnitMultiplier = 1.6f;
-        // 위 가운데 제목 탭 (테두리 윗변 위에 걸침)
-        HudStyle.NewImage(root, "TitleTab", panelSprite, FrameFill, new Vector2(0f, TitleY), new Vector2(170f, 30f)).pixelsPerUnitMultiplier = 1.6f;
-        HudStyle.NewImage(root, "TitleTabBorder", frameSprite, FrameGold, new Vector2(0f, TitleY), new Vector2(170f, 30f)).pixelsPerUnitMultiplier = 1.6f;
+        // ── (이전 2026-11) 금색 테두리 패널 + 제목 탭 ──
+        // Sprite panelSprite = HudStyle.ChamferPanel != null ? HudStyle.ChamferPanel : HudStyle.RoundedRect;
+        // Sprite frameSprite = HudStyle.ChamferFrame != null ? HudStyle.ChamferFrame : HudStyle.RoundedFrame;
+        // HudStyle.NewImage(root, "Frame", panelSprite, FrameFill, new Vector2(0f, FrameY), new Vector2(FrameW, FrameH)).pixelsPerUnitMultiplier = 1.6f;
+        // HudStyle.NewImage(root, "FrameBorder", frameSprite, FrameGold, new Vector2(0f, FrameY), new Vector2(FrameW, FrameH)).pixelsPerUnitMultiplier = 1.6f;
+        // HudStyle.NewImage(root, "TitleTab", panelSprite, FrameFill, new Vector2(0f, TitleY), new Vector2(170f, 30f)).pixelsPerUnitMultiplier = 1.6f;
+        // HudStyle.NewImage(root, "TitleTabBorder", frameSprite, FrameGold, new Vector2(0f, TitleY), new Vector2(170f, 30f)).pixelsPerUnitMultiplier = 1.6f;
+        // titleText = HudStyle.NewText(root, "Title", "생존 1일차", HudStyle.SemiBold, 17f, titleColor,
+        //     TextAlignmentOptions.Center, new Vector2(0f, TitleY), new Vector2(200f, 30f));
 
-        // ── 제목 ──
-        titleText = HudStyle.NewText(root, "Title", "생존 1일차", HudStyle.SemiBold, 17f, titleColor,
-            TextAlignmentOptions.Center, new Vector2(0f, TitleY), new Vector2(200f, 30f));
+        // ── (2026-11-22) 반투명 검정 패널 (테두리 없음, 모서리 작게) ──
+        // var frame = HudStyle.NewImage(root, "Frame", HudStyle.RoundedRect, HudStyle.ApocPanel, new Vector2(0f, FrameY), new Vector2(FrameW, FrameH)); // (1차)
+        // frame.type = Image.Type.Sliced; frame.pixelsPerUnitMultiplier = 4f;
+        // (2026-11-22 2차) 레퍼런스: 붓질 검정 띠 2줄(제목 / 시각) + 뒤에 번진 검붉은 피 얼룩
+        HudStyle.NewImage(root, "BloodSmear", HudGrunge.Brush("smear"), new Color(0.42f, 0.03f, 0.03f, 0.75f), new Vector2(0f, FrameY), new Vector2(FrameW + 130f, FrameH + 34f));
+        HudStyle.NewImage(root, "TitleBand", HudGrunge.Brush("title"), new Color(0.03f, 0.012f, 0.008f, 1f), new Vector2(0f, ApocTitleY), new Vector2(FrameW + 40f, 42f));
+        HudStyle.NewImage(root, "ClockBand", HudGrunge.Brush("clock"), new Color(0.03f, 0.012f, 0.008f, 1f), new Vector2(0f, ApocBottomY), new Vector2(FrameW + 60f, 60f));
+        // ── 제목 (일차 숫자 빨강 - Refresh에서 리치 텍스트) ──
+        titleText = HudStyle.NewText(root, "Title", "생존 1일차", HudStyle.Bold, 23f, new Color32(0xE6, 0xDE, 0xD6, 0xFF), // (2차) 레퍼런스 회색빛 흰
+            TextAlignmentOptions.Center, new Vector2(0f, ApocTitleY), new Vector2(240f, 30f));
+        titleText.richText = true;
         // 7일 초과: 테두리 아래에 "탈출 실패 횟수: N" (2026-11-12)
         escapeFailText = HudStyle.NewText(root, "EscapeFail", "", HudStyle.SemiBold, 14f, new Color32(0xFF, 0x6B, 0x5E, 0xFF),
             TextAlignmentOptions.Center, new Vector2(0f, FrameY - FrameH / 2f - 14f), new Vector2(260f, 22f));
@@ -101,7 +118,9 @@ public class SurvivalDayHUD : MonoBehaviour
         // titleLineL = HudStyle.NewImage(root, "TitleLineL", null, lineColor, new Vector2(-123f, TitleY + 0.5f), new Vector2(115f, 2f));
         // titleLineR = HudStyle.NewImage(root, "TitleLineR", null, lineColor, new Vector2(122f, TitleY + 0.5f), new Vector2(115f, 2f));
 
-        // ── 날짜 원 1~N + 연결선 ──
+        // ── 날짜 원 1~N + 연결선 ── (2026-11-22 ShowDayDots=false로 안 만듦)
+        dayBorders = new Image[0]; dayFills = new Image[0]; dayNumbers = new TextMeshProUGUI[0];
+        if (ShowDayDots) {
         float firstX = -(totalDays - 1) * CircleSpacing / 2f;
         for (int i = 0; i < totalDays - 1; i++)
         {
@@ -120,6 +139,7 @@ public class SurvivalDayHUD : MonoBehaviour
             dayNumbers[i] = HudStyle.NewText(dayBorders[i].transform, "Num", (i + 1).ToString(), HudStyle.SemiBold, 17f, dayNumber,
                 TextAlignmentOptions.Center, new Vector2(0f, 0.5f), new Vector2(CircleSize, CircleSize));
         }
+        } // ShowDayDots
 
         // (이전) 아래 줄: ☀ 12:51 │ 낮 │ 생존 목표 · 7일
         // phaseIcon = HudStyle.NewImage(root, "PhaseIcon", HudStyle.Sun, sunColor, new Vector2(-181.5f, BottomY), new Vector2(36f, 36f));
@@ -146,10 +166,16 @@ public class SurvivalDayHUD : MonoBehaviour
         // weatherIcon.preserveAspect = true;
         // ── (2026-11-18) 아이콘 │ 시각 한 묶음을 가운데로 (왼쪽 해/달 아이콘만, 날씨 아이콘 없음 → weatherIcon = null) ──
         const float GroupShift = 10f; // 날씨 아이콘이 빠진 만큼 묶음(-77~67)을 오른쪽으로 옮겨 가운데 맞춤
-        phaseIcon = HudStyle.NewImage(root, "PhaseIcon", HudStyle.Sun, sunColor, new Vector2(-62f + GroupShift, BottomY), new Vector2(30f, 30f));
-        phaseDivider = HudStyle.NewImage(root, "Divider1", null, dividerColor, new Vector2(-38f + GroupShift, BottomY), new Vector2(1.5f, 24f));
-        clockText = HudStyle.NewText(root, "Clock", "12:51", HudStyle.Bold, 32f, clockColor,
-            TextAlignmentOptions.Left, new Vector2(-28f + 50f + GroupShift, BottomY), new Vector2(100f, 40f));
+        // (이전 2026-11-18) BottomY 기준 배치, 시각 크림색 32
+        // phaseIcon = HudStyle.NewImage(root, "PhaseIcon", HudStyle.Sun, sunColor, new Vector2(-62f + GroupShift, BottomY), new Vector2(30f, 30f));
+        // phaseDivider = HudStyle.NewImage(root, "Divider1", null, dividerColor, new Vector2(-38f + GroupShift, BottomY), new Vector2(1.5f, 24f));
+        // clockText = HudStyle.NewText(root, "Clock", "12:51", HudStyle.Bold, 32f, clockColor,
+        //     TextAlignmentOptions.Left, new Vector2(-28f + 50f + GroupShift, BottomY), new Vector2(100f, 40f));
+        // (2026-11-22) 패널 안 아래 줄, 굵은 흰 시각 크게
+        phaseIcon = HudStyle.NewImage(root, "PhaseIcon", HudStyle.Sun, sunColor, new Vector2(-62f + GroupShift, ApocBottomY), new Vector2(32f, 32f));
+        phaseDivider = HudStyle.NewImage(root, "Divider1", null, Color.clear, new Vector2(-38f + GroupShift, ApocBottomY), new Vector2(1.5f, 24f)); // (2차) 레퍼런스엔 세로선 없음 (실내 전환용으로 오브젝트는 둠)
+        clockText = HudStyle.NewText(root, "Clock", "12:51", HudStyle.Bold, 40f, new Color32(0xF2, 0xEC, 0xE6, 0xFF), // (2차) 오프화이트
+            TextAlignmentOptions.Left, new Vector2(-28f + 50f + GroupShift, ApocBottomY), new Vector2(100f, 44f));
     }
 
     void Refresh(bool force)
@@ -167,14 +193,18 @@ public class SurvivalDayHUD : MonoBehaviour
         clockText.text = $"{hour:00}:{minute:00}";
 
         int realDay = dnc.CurrentDay;
-        int day = Mathf.Clamp(realDay, 1, dayFills.Length); // 7일 넘어가면 마지막 원 유지
+        int day = Mathf.Clamp(realDay, 1, Mathf.Max(1, dayFills.Length)); // 7일 넘어가면 마지막 원 유지
         if (force || realDay != shownDay)
         {
             shownDay = realDay;
             bool extended = realDay > totalDays;
             // titleText.text = extended ? $"생존 {realDay}일차 (연장)" : $"생존 {realDay}일차"; // (이전)
             // 2026-11-12: 7일 넘으면 "생존 7일+N일차" + 아래에 탈출 실패 횟수 (7일차 이후 하루 지날 때마다 1회)
-            titleText.text = extended ? $"생존 {totalDays}일+{realDay - totalDays}일차" : $"생존 {realDay}일차";
+            // titleText.text = extended ? $"생존 {totalDays}일+{realDay - totalDays}일차" : $"생존 {realDay}일차"; // (이전)
+            // (2026-11-22) 일차 숫자 부분만 빨강 (레퍼런스)
+            // string red = "#" + ColorUtility.ToHtmlStringRGB(HudStyle.ApocRed); // (1차)
+            string red = "#E8A09A"; // (2026-11-22 2차) 레퍼런스: "1일차"는 연한 빨강
+            titleText.text = extended ? $"생존 <color={red}>{totalDays}일+{realDay - totalDays}일차</color>" : $"생존 <color={red}>{realDay}일차</color>";
             if (escapeFailText != null)
             {
                 escapeFailText.gameObject.SetActive(extended);

@@ -36,16 +36,27 @@ public class MissionHUD : MonoBehaviour
 
     // 색상 (요청 스펙)
     static readonly Color Orange = new Color32(0xFF, 0xA5, 0x00, 0xFF);   // 제목 / % / 바
+    // (2026-11-22 2차) 레퍼런스 샘플 색 (Assets/UI/변경할 ui.png)
+    static readonly Color RefHeader = new Color32(0xFF, 0xDC, 0x69, 0xFF);   // "메인 미션"·"서브 미션" 제목
+    static readonly Color RefHeaderIcon = new Color32(0xFA, 0xA3, 0x28, 0xFF); // ◆ / 돋보기
+    static readonly Color RefOffWhite = new Color32(0xF8, 0xEE, 0xE6, 0xFF);  // "진행률"
+    static readonly Color RefPercent = new Color32(0xC0, 0x12, 0x20, 0xFF);   // 0%
+    static readonly Color RefWarn = new Color32(0xB8, 0x14, 0x21, 0xFF);      // ! 원
+    static readonly Color RefFrame = new Color32(0x9A, 0x92, 0x8C, 0xF0);     // 긁힌 금속 테두리
+    static readonly Color RefPanelBase = new Color32(0x14, 0x09, 0x05, 0xFF); // 검붉은 바탕
     static readonly Color Gray = new Color32(0x9E, 0x9E, 0x9E, 0xFF);     // 미완료 ○ / 안내
     static readonly Color Green = new Color32(0x5C, 0xE6, 0x73, 0xFF);    // 완료 ✓
     static readonly Color PanelFill = new Color(0.06f, 0.07f, 0.09f, 0.84f);
     static readonly Color Gold = new Color32(0xC9, 0xA2, 0x55, 0xE6);      // 테두리
-    static readonly Color Divider = new Color(1f, 1f, 1f, 0.12f);
+    // static readonly Color Divider = new Color(1f, 1f, 1f, 0.12f); // (이전)
+    // static readonly Color Divider = new Color(1f, 1f, 1f, 0.22f); // (2026-11-22 1차)
+    static readonly Color Divider = new Color32(0x8B, 0x83, 0x7D, 0xB0);   // (2026-11-22 2차) 레퍼런스 샘플
     static readonly Color Cyan = new Color32(0x4F, 0xC3, 0xF7, 0xFF);      // 발견 토스트
 
     MissionManager mm;
     RectTransform panel;
     Image panelFrame;
+    float shownProgress; // (2026-11-22) 진행 바 애니메이션용
     TextMeshProUGUI percentText, footerText, emptySubText;
     Image barFill;
     // (이전) 메인 미션 1줄: TextMeshProUGUI mainTitle; Image mainStatus;
@@ -84,27 +95,50 @@ public class MissionHUD : MonoBehaviour
         scaler.matchWidthOrHeight = 0.5f;
 
         // 패널: 오른쪽 위 고정 (높이는 발견된 서브 미션 수에 맞춰 Update에서 조절)
-        var bg = HudStyle.NewImage(canvasGo.transform, "Panel", PanelSprite, PanelFill, Vector2.zero, new Vector2(Width, 300f));
+        // var bg = HudStyle.NewImage(canvasGo.transform, "Panel", PanelSprite, PanelFill, Vector2.zero, new Vector2(Width, 300f)); // (이전) 금색 테두리 패널
+        // (2026-11-22) 아포칼립스 리디자인: 반투명 검정 + 얇은 흰 선, 모서리 작게 (Assets/UI/변경할 ui.png)
+        // var bg = HudStyle.NewImage(canvasGo.transform, "Panel", HudStyle.RoundedRect, HudStyle.ApocPanel, Vector2.zero, new Vector2(Width, 300f)); // (2026-11-22 1차)
+        // bg.type = Image.Type.Sliced;
+        // (2026-11-22 2차) 레퍼런스 질감: 얼룩·긁힘 있는 거의 불투명한 검붉은 바탕
+        var bg = HudStyle.NewImage(canvasGo.transform, "Panel", HudGrunge.Panel(RefPanelBase, 0.9f, "mission"), Color.white, Vector2.zero, new Vector2(Width, 300f));
         panel = bg.rectTransform;
         panel.anchorMin = panel.anchorMax = panel.pivot = new Vector2(1f, 1f);
         panel.anchoredPosition = new Vector2(-20f, -20f);
-        panelFrame = HudStyle.NewImage(panel, "Frame", FrameSprite, Gold, Vector2.zero, Vector2.zero);
-        bg.pixelsPerUnitMultiplier = panelFrame.pixelsPerUnitMultiplier = FrameScale; // 테두리를 레퍼런스처럼 얇게
+        // panelFrame = HudStyle.NewImage(panel, "Frame", FrameSprite, Gold, Vector2.zero, Vector2.zero); // (이전)
+        // bg.pixelsPerUnitMultiplier = panelFrame.pixelsPerUnitMultiplier = FrameScale; // 테두리를 레퍼런스처럼 얇게
+        // panelFrame = HudStyle.NewImage(panel, "Frame", HudStyle.RoundedFrame, HudStyle.ApocLine, Vector2.zero, Vector2.zero); // (2026-11-22 1차)
+        // panelFrame.type = Image.Type.Sliced;
+        // bg.pixelsPerUnitMultiplier = panelFrame.pixelsPerUnitMultiplier = 4f;
+        panelFrame = HudStyle.NewImage(panel, "Frame", HudGrunge.Frame(3f), RefFrame, Vector2.zero, Vector2.zero); // (2차) 긁힌 금속 테두리
+        panelFrame.type = Image.Type.Sliced;
         Stretch(panelFrame.rectTransform);
 
         // 진행률 + 큰 %
-        Text(panel, "ProgressLabel", "진행률", HudStyle.Bold, 18f, Orange, TextAlignmentOptions.MidlineLeft, Pad, -30f, 150f);
-        percentText = Text(panel, "Percent", "0%", HudStyle.Bold, 32f, Orange, TextAlignmentOptions.MidlineRight, Width - Pad - 150f, -30f, 150f);
+        // Text(panel, "ProgressLabel", "진행률", HudStyle.Bold, 18f, Orange, TextAlignmentOptions.MidlineLeft, Pad, -30f, 150f); // (이전) 주황
+        // percentText = Text(panel, "Percent", "0%", HudStyle.Bold, 32f, Orange, TextAlignmentOptions.MidlineRight, Width - Pad - 150f, -30f, 150f);
+        // (2026-11-22) 빨간 원 "!" + 흰 "진행률" + 빨간 큰 %
+        var warn = HudStyle.NewImage(panel, "WarnIcon", HudGrunge.RoughCircle(), RefWarn, Vector2.zero, new Vector2(30f, 30f)); // (2차) 거친 빨간 원
+        TopLeft(warn.rectTransform, Pad, -30f);
+        var warnMark = HudStyle.NewText(warn.transform, "Mark", "!", HudStyle.Bold, 22f, new Color32(0x16, 0x04, 0x04, 0xFF), TextAlignmentOptions.Center, Vector2.zero, new Vector2(30f, 30f)); // (2차) 레퍼런스: 검은 !
+        warnMark.rectTransform.anchoredPosition = new Vector2(0f, 1f);
+        Text(panel, "ProgressLabel", "진행률", HudStyle.Bold, 22f, RefOffWhite, TextAlignmentOptions.MidlineLeft, Pad + 38f, -30f, 150f);
+        percentText = Text(panel, "Percent", "0%", HudStyle.Bold, 36f, RefPercent, TextAlignmentOptions.MidlineRight, Width - Pad - 150f, -30f, 150f);
         // 진행 바 (어두운 홈 + 주황 그라데이션 채움)
         var track = HudStyle.NewImage(panel, "BarTrack", HudStyle.RoundedRect, new Color(1f, 1f, 1f, 0.1f), Vector2.zero, new Vector2(Width - Pad * 2f, 10f));
         TopLeft(track.rectTransform, Pad, -60f);
         track.pixelsPerUnitMultiplier = 3f;
-        barFill = HudStyle.NewImage(track.rectTransform, "Fill", HudStyle.BarOrange, Color.white, Vector2.zero, Vector2.zero);
-        if (barFill.sprite == null) barFill.color = Orange;
+        // barFill = HudStyle.NewImage(track.rectTransform, "Fill", HudStyle.BarOrange, Color.white, Vector2.zero, Vector2.zero); // (이전) 주황
+        // if (barFill.sprite == null) barFill.color = Orange;
+        barFill = HudStyle.NewImage(track.rectTransform, "Fill", HudStyle.HorizontalGradient(HudStyle.HealthA, HudStyle.ApocRed), Color.white, Vector2.zero, Vector2.zero); // (2026-11-22) 빨강 그라데이션
         var f = barFill.rectTransform;
         f.anchorMin = Vector2.zero; f.anchorMax = new Vector2(0f, 1f); f.pivot = new Vector2(0f, 0.5f);
         f.anchoredPosition = Vector2.zero; f.sizeDelta = Vector2.zero;
-        Text(panel, "Goal", "목표 100%", HudStyle.Regular, 12f, Gray, TextAlignmentOptions.MidlineRight, Width - Pad - 150f, -78f, 150f);
+        var goalText = Text(panel, "Goal", "목표 100%", HudStyle.Regular, 12f, Gray, TextAlignmentOptions.MidlineRight, Width - Pad - 150f, -78f, 150f);
+        // (2026-11-22 2차) 레퍼런스엔 진행 바·"목표 100%"가 없음 → 숨김 (진행률은 % 숫자로 그대로 보임, 갱신 코드는 그대로 둠)
+        // track.gameObject.SetActive(false); // (2026-11-22 2차) 숨김 → 피드백 "0% 진행률 아래가 비어 보임" → 다시 표시 (얇고 어둡게)
+        track.color = new Color(1f, 1f, 1f, 0.08f);
+        track.rectTransform.sizeDelta = new Vector2(track.rectTransform.sizeDelta.x, 6f);
+        goalText.gameObject.SetActive(false);
 
         Line(panel, "Div1", -94f);
         // ◆ 메인 미션
@@ -170,10 +204,12 @@ public class MissionHUD : MonoBehaviour
     {
         var row = HudStyle.NewRect(parent, name, Vector2.zero, new Vector2(Width, RowH));
         TopLeft(row, 0f, y);
-        var ic = HudStyle.NewImage(row, "Icon", icon, Orange, Vector2.zero, new Vector2(14f, 14f));
+        // var ic = HudStyle.NewImage(row, "Icon", icon, Orange, Vector2.zero, new Vector2(14f, 14f)); // (이전)
+        var ic = HudStyle.NewImage(row, "Icon", icon, RefHeaderIcon, Vector2.zero, new Vector2(15f, 15f)); // (2026-11-22 2차) 레퍼런스 색
         TopLeft(ic.rectTransform, Pad, -RowH / 2f);
         ic.rectTransform.anchorMin = ic.rectTransform.anchorMax = new Vector2(0f, 1f);
-        Text(row, "Title", title, HudStyle.Bold, 16f, Orange, TextAlignmentOptions.MidlineLeft, Pad + 20f, -RowH / 2f, Width - Pad * 2f);
+        // Text(row, "Title", title, HudStyle.Bold, 16f, Orange, TextAlignmentOptions.MidlineLeft, Pad + 20f, -RowH / 2f, Width - Pad * 2f); // (이전)
+        Text(row, "Title", title, HudStyle.Bold, 17f, RefHeader, TextAlignmentOptions.MidlineLeft, Pad + 22f, -RowH / 2f, Width - Pad * 2f); // (2026-11-22 2차)
         return row;
     }
 
@@ -223,7 +259,10 @@ public class MissionHUD : MonoBehaviour
         if (inventoryOpen) compactText.text = $"진행률 {Mathf.FloorToInt(p)}% · 메인 미션 {(openMains == 0 ? "완료" : $"{openMains}개 진행 중")}";
 
         percentText.text = $"{Mathf.FloorToInt(p)}%";
-        barFill.rectTransform.anchorMax = new Vector2(Mathf.Clamp01(p / 100f), 1f);
+        // barFill.rectTransform.anchorMax = new Vector2(Mathf.Clamp01(p / 100f), 1f); // (이전) 즉시
+        // (2026-11-22) 부드럽게 차오름 (초당 최대 40%p)
+        shownProgress = Mathf.MoveTowards(shownProgress, p, 40f * Time.unscaledDeltaTime);
+        barFill.rectTransform.anchorMax = new Vector2(Mathf.Clamp01(shownProgress / 100f), 1f);
 
         // 메인 미션: 미션명 (+ 진행 수) + ○/✓ / 아래 줄에 할 일 (진행 중인 것 최대 3개 - 탈출 → 오늘 → 이전 날)
         // (이전) var main = mm.CurrentMain; mainTitle.text = main.title + detail; SetStatus(mainStatus, mm.MainDone);

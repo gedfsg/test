@@ -8,6 +8,9 @@
 //  보이게 되는데 예전엔 Cull Back이라 그 면이 통째로 안 그려졌음 → 카메라를 돌리면 벽이 사라짐.
 //  그래서 Cull Off로 뒷면도 그리고(컷이 켜졌을 때만), 잘린 단면 바로 아래 _WallThickness 높이를
 //  조명 영향 없는 진회색(_EdgeColor)으로 칠해서 모든 각도에서 벽 윗면이 두꺼운 캡처럼 보이게 함.
+//
+// (2026-11-21) 외부 가림 구멍: 플레이어가 건물 "밖"에서 이 건물 뒤에 가려지면 OccluderFader가 렌더러별 _HoleAmount(MPB)를 올림
+//  → 카메라→플레이어 시선 주변(반경 3.5m, 페더 1m)만 디더링으로 잘라냄 (OccluderHole.cginc). 지붕 컷(_CutEnabled)과 별개.
 Shader "Custom/BuildingCutaway"
 {
     Properties
@@ -19,6 +22,7 @@ Shader "Custom/BuildingCutaway"
         _WallThickness ("Cut Edge Thickness", Float) = 0.8
         _EdgeColor ("Cut Edge Color", Color) = (0.22, 0.22, 0.22, 1)
         _InnerShade ("Inner Face Brightness", Range(0,1)) = 0.75
+        _HoleAmount ("Outside Hole Amount (0~1, MPB)", Range(0,1)) = 0 // (2026-11-21) 외부 가림 구멍
     }
     SubShader
     {
@@ -29,6 +33,7 @@ Shader "Custom/BuildingCutaway"
         CGPROGRAM
         #pragma surface surf Lambert addshadow
         #pragma target 3.0
+        #include "../Resources/Shaders/OccluderHole.cginc" // (2026-11-21) 외부 가림 구멍
 
         sampler2D _MainTex;
         fixed4 _Color;
@@ -37,18 +42,29 @@ Shader "Custom/BuildingCutaway"
         float _WallThickness;
         fixed4 _EdgeColor;
         half _InnerShade;
+        float _HoleAmount; // (2026-11-21)
+        float _HoleInteriorFill; // (2026-11-21 3차) 1 = 구멍 안 바닥 높이를 어둡게 (건물 내부 안 보이게, MPB)
 
         struct Input
         {
             float2 uv_MainTex;
             float3 worldPos;
             float facing : VFACE; // 앞면 > 0, 뒷면 < 0
+            float4 screenPos;     // (2026-11-21) 구멍 페더링 디더용
         };
 
         void surf (Input IN, inout SurfaceOutput o)
         {
             bool cutOn = _CutEnabled > 0.5;
             bool backFace = IN.facing < 0;
+
+            // (2026-11-21) 외부 가림 구멍 - 그림자 패스에서는 안 뚫음 (햇빛이 새지 않게)
+            float fillK = 1; // (2026-11-21 3차) 1 = 원래 색, 0 = 어두운 단색 (내부 가림)
+            #ifndef UNITY_PASS_SHADOWCASTER
+            // float2 holePixel = IN.screenPos.xy / max(IN.screenPos.w, 1e-5) * _ScreenParams.xy; // (이전 1차) 디더용
+            // OccluderHoleClip(IN.worldPos, holePixel, _HoleAmount); // (이전 2차)
+            fillK = OccluderHoleClipFill(IN.worldPos, _HoleAmount, _HoleInteriorFill);
+            #endif
 
             // _CutEnabled가 켜져 있을 때만 컷 높이 위쪽 픽셀을 잘라냄
             float distFromCut = _CutHeight - IN.worldPos.y;
@@ -73,6 +89,9 @@ Shader "Custom/BuildingCutaway"
                 // 벽 안쪽 면은 살짝 어둡게 해서 바깥 면과 구분
                 o.Albedo = backFace ? c.rgb * _InnerShade : c.rgb;
             }
+            // (2026-11-21 3차) 내부 가림: 구멍 안 바닥 높이는 어두운 단색으로 (가장자리는 그라데이션)
+            o.Emission = lerp(OccHoleFillColor(), o.Emission, fillK);
+            o.Albedo *= fillK;
             o.Alpha = c.a;
         }
         ENDCG

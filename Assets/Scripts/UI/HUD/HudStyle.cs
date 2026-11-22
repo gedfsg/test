@@ -19,6 +19,37 @@ public static class HudStyle
     public static readonly Color Inactive  = new Color(1f, 1f, 1f, 0.35f);              // 지난/미래 날짜, 빈 슬롯 테두리
     public static readonly Color BarTrack  = new Color(1f, 1f, 1f, 0.12f);              // 바 배경 홈
 
+    // ── (2026-11-22) 아포칼립스 리디자인 팔레트 (Assets/UI/변경할 ui.png) ──
+    //  금색 테두리 전부 제거 → 반투명 어두운 검정 + 얇은 흰 선, 강조는 빨강
+    public static readonly Color ApocPanel   = new Color(0f, 0f, 0f, 0.62f);              // 패널 배경
+    public static readonly Color ApocLine    = new Color(1f, 1f, 1f, 0.28f);              // 얇은 흰 테두리/구분선
+    public static readonly Color ApocRed     = new Color32(0xE5, 0x2B, 0x2B, 0xFF);       // 강조 빨강 (진행률 %, 일차 숫자, ! 아이콘)
+    public static readonly Color ApocTrack   = new Color(1f, 1f, 1f, 0.10f);              // 바 홈
+    // 상태 바 그라데이션 (왼쪽 → 오른쪽)
+    public static readonly Color HealthA = new Color32(0x8E, 0x0E, 0x0E, 0xFF), HealthB = new Color32(0xFF, 0x3B, 0x30, 0xFF);
+    public static readonly Color EnergyA = new Color32(0xC9, 0x7A, 0x00, 0xFF), EnergyB = new Color32(0xFF, 0xD3, 0x3A, 0xFF);
+    public static readonly Color WaterA  = new Color32(0x0E, 0x5C, 0xB8, 0xFF), WaterB  = new Color32(0x3F, 0xC3, 0xFF, 0xFF);
+    public static readonly Color FoodA   = new Color32(0x4E, 0x7A, 0x1E, 0xFF), FoodB   = new Color32(0x9C, 0xD6, 0x4A, 0xFF);
+
+    static readonly System.Collections.Generic.Dictionary<long, Sprite> gradientCache = new System.Collections.Generic.Dictionary<long, Sprite>();
+    /// <summary>(2026-11-22) 가로 그라데이션 스프라이트 (a 왼쪽 → b 오른쪽). Simple Image + Filled로 쓰면 채운 만큼만 잘림</summary>
+    public static Sprite HorizontalGradient(Color a, Color b)
+    {
+        Color32 ca = a, cb = b;
+        long key = ((long)(uint)(ca.r << 24 | ca.g << 16 | ca.b << 8 | ca.a) << 32) | (uint)(cb.r << 24 | cb.g << 16 | cb.b << 8 | cb.a);
+        if (gradientCache.TryGetValue(key, out var s) && s != null) return s;
+        var tex = new Texture2D(128, 4, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+        for (int x = 0; x < 128; x++)
+        {
+            Color c = Color.Lerp(a, b, x / 127f);
+            for (int y = 0; y < 4; y++) tex.SetPixel(x, y, c);
+        }
+        tex.Apply();
+        s = Sprite.Create(tex, new Rect(0, 0, 128, 4), new Vector2(0.5f, 0.5f));
+        gradientCache[key] = s;
+        return s;
+    }
+
     // ── 폰트 (Pretendard) ──
     static TMP_FontAsset regular, semiBold, bold;
     public static TMP_FontAsset Regular  => regular  != null ? regular  : regular  = Resources.Load<TMP_FontAsset>("HUD/Fonts/Pretendard-Regular SDF");

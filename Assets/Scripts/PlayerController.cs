@@ -538,6 +538,12 @@ public class PlayerController : MonoBehaviour
     private void OnReloadPerformed(InputAction.CallbackContext context)
     {
         if (isRolling) return; // 구르는 중엔 재장전 막음
+        // (2026-11-22 C4) 투척물을 들고 있으면 R = 수류탄 핀 뽑기 (뒤에 있던 총 재장전 안 함)
+        if (WeaponHotbarUI.Instance?.GetActiveItem() is ThrowableData)
+        {
+            if (throwCtrl != null) throwCtrl.RequestPin();
+            return;
+        }
         if (currentMode == WeaponMode.Ranged && rangedWeapon != null)
             rangedWeapon.TryReload();
     }

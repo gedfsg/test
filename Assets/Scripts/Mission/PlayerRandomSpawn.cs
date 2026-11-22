@@ -39,7 +39,15 @@ public static class PlayerRandomSpawn
         candidates.AddRange(BuildCandidates(player.transform.position.y));
         if (lastSpawn.HasValue && candidates.Exists(c => (c - lastSpawn.Value).sqrMagnitude >= MinFromLastSpawn * MinFromLastSpawn))
             candidates.RemoveAll(c => (c - lastSpawn.Value).sqrMagnitude < MinFromLastSpawn * MinFromLastSpawn);
-        if (candidates.Count == 0) { Debug.Log("[PlayerRandomSpawn] 후보 없음 - 씬 위치에서 시작"); return; }
+        // if (candidates.Count == 0) { Debug.Log("[PlayerRandomSpawn] 후보 없음 - 씬 위치에서 시작"); return; } // (이전)
+        if (candidates.Count == 0)
+        {
+            // (2026-11-21) 씬 Player가 건물 위(y≈31)에 놓여 있어 옥상에서 시작하던 문제 → 씬 위치 바로 아래 지면으로
+            Vector3 sp = player.transform.position;
+            if (MissionManager.TryGroundPoint(sp.x, sp.z, TerrainY(sp.x, sp.z), out Vector3 g)) MovePlayer(player, g);
+            Debug.Log($"[PlayerRandomSpawn] 후보 없음 - 씬 위치 아래 지면에서 시작 {player.transform.position}");
+            return;
+        }
 
         Shuffle(candidates);
         int idx = candidates.FindIndex(c => ZombiesNear(c) <= MaxNearbyZombies);
@@ -106,7 +114,14 @@ public static class PlayerRandomSpawn
         }
     }
 
-    static List<Vector3> BuildCandidates(float groundY)
+    /// <summary>(2026-11-21) 그 지점 지형(Terrain) 높이 - 지면 판정 기준 (도로·인도 메시는 이보다 0~2m 위라 TryGroundPoint 허용 범위 안)</summary>
+    static float TerrainY(float x, float z)
+    {
+        var t = Terrain.activeTerrain;
+        return t.SampleHeight(new Vector3(x, 0f, z)) + t.transform.position.y;
+    }
+
+    static List<Vector3> BuildCandidates(float groundY) // groundY: (2026-11-21부터 안 씀, 호출 호환용으로 남김)
     {
         var terrain = Terrain.activeTerrain;
         Vector3 size = terrain.terrainData.size, origin = terrain.transform.position;
@@ -133,7 +148,10 @@ public static class PlayerRandomSpawn
         var result = new List<Vector3>();
         for (int i = 0; i < 600 && result.Count < CandidateCount; i++)
         {
-            if (!MissionManager.TryGroundPoint(Random.Range(area.min.x, area.max.x), Random.Range(area.min.z, area.max.z), groundY, out Vector3 c)) continue; // 지붕/위층/맵 아래 제외
+            // if (!MissionManager.TryGroundPoint(Random.Range(area.min.x, area.max.x), Random.Range(area.min.z, area.max.z), groundY, out Vector3 c)) continue; // (이전) 기준 = 씬 Player 높이
+            // (2026-11-21) 기준 높이를 그 지점의 지형 높이로: 씬 Player가 건물 위(y≈31)에 있으면 지면 후보가 전부 빠지고 옥상만 남았음
+            float sx = Random.Range(area.min.x, area.max.x), sz = Random.Range(area.min.z, area.max.z);
+            if (!MissionManager.TryGroundPoint(sx, sz, TerrainY(sx, sz), out Vector3 c)) continue; // 지붕/위층/맵 아래 제외
             if (trigs.Exists(t => t.Contains(c))) continue;                                                   // 건물 안/바로 옆 제외
             if (Physics.CheckSphere(c + Vector3.up * 2.6f, 2f, ~0, QueryTriggerInteraction.Ignore)) continue; // 주변이 트여 있어야
             if (result.Exists(q => (q - c).sqrMagnitude < MinCandidateSpacing * MinCandidateSpacing)) continue;
