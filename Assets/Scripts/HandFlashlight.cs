@@ -12,6 +12,7 @@ using UnityEngine;
 ///  - Spot을 넓고 더 아래로: Angle 35° → 70°, pitchDown 12° → 22°, Range 15 → 20m, Intensity 3 → 4.5
 ///    → 빛의 아래쪽 끝이 발 앞 약 0.7m부터 닿아서 바로 앞부터 밝고, 바닥의 사다리꼴도 넓어짐
 ///  - 켜면 플레이어 머리 위에 원형 주변광(Point, 반경 7m)도 같이 켜짐 → 옆·뒤도 조금 보임
+/// (2026-11-22) 손전등 모형은 켜져 있고 총을 안 들었을 때만 보임 (꺼져 있으면 왼손 비움, 총은 왼손이 ForeGrip)
 /// 방향을 손 뼈 회전에 맡기지 않는 이유: 걷기·총 잡기 애니메이션으로 손이 흔들리면 빛이 사방으로 튐 → 위치만 손, 방향은 몸 정면.
 /// </summary>
 [RequireComponent(typeof(Light))]
@@ -140,6 +141,11 @@ public class HandFlashlight : MonoBehaviour
         transform.SetPositionAndRotation(pos + dir * 0.06f, rot); // 빛은 렌즈 바로 앞에서
 
         if (around != null) around.enabled = lt.enabled;   // 손전등 켜고 끄기(T)·배터리 방전을 그대로 따라감
+
+        // (2026-11-22) 모형이 꺼져 있을 때도 늘 왼손에 붙어 있어서 "도끼 든 왼손에 검은 장갑/손목 장식"처럼 보였음 →
+        //  손전등이 켜져 있고 왼손이 비어 있을 때만 모형 표시. 총을 들면 왼손이 ForeGrip을 잡으므로 모형은 숨기고 빛만 (총에 단 라이트처럼)
+        bool showModel = lt.enabled && !(pc != null && pc.IsGunHeld);
+        if (model.gameObject.activeSelf != showModel) model.gameObject.SetActive(showModel);
 
         if (lt.enabled != lastOn)
         {
