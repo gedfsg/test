@@ -230,7 +230,7 @@ public class DayNightCycle : MonoBehaviour
                     return;
                 }
                 SetPhase(Phase.Day);
-                if (WeatherManager.Instance != null) WeatherManager.Instance.RollWeather(); // 새 사이클(새벽→낮) 시작 = 날씨 가중치 랜덤 (맑음 50 / 비 30 / 안개 20)
+                if (WeatherManager.Instance != null) WeatherManager.Instance.RollWeather(); // 새 사이클(새벽→낮) 시작 = 날씨 가중치 랜덤 (맑음 50 / 비 25 / 안개 25, 전날과 같은 날씨 제외 - WeatherManager)
                 onDayStart?.Invoke();
                 onNewDay?.Invoke(CurrentDay);
                 break;

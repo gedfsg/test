@@ -35,9 +35,16 @@ public class WeatherManager : MonoBehaviour
     [Header("가중치 (사이클 시작마다 랜덤)")]
     // public float clearWeight = 50f; public float rainWeight = 30f; public float fogWeight = 20f; // (이전)
     // 2026-11-13 피드백: 비·안개가 더 자주 나오게 → 맑음 34 / 비 36 / 안개 30
-    public float clearWeight = 34f;
-    public float rainWeight = 36f;
-    public float fogWeight = 30f;
+    // public float clearWeight = 34f; public float rainWeight = 36f; public float fogWeight = 30f; // (2026-11-13) 비·안개가 66% → "비·안개가 너무 많은 느낌"
+    // 2026-11-22: 맑음 50 / 비 25 / 안개 25 (사용자 선택)
+    public float clearWeight = 50f;
+    public float rainWeight = 25f;
+    public float fogWeight = 25f;
+    [Tooltip("(2026-11-22) 같은 날씨가 이틀 연속 안 나오게 (전날 날씨를 빼고 나머지 가중치로 뽑음)")]
+    public bool noSameWeatherTwice = true;
+    [Tooltip("(2026-11-22) 안개는 밤이 되면 걷힘 (안개 날도 밤까지 이어지지 않음). 비는 밤에도 계속")]
+    public bool fogClearsAtNight = true;
+    Weather lastRolled = (Weather)(-1); // 전날 뽑은 날씨 (밤에 안개가 걷혀도 그날은 안개로 기록)
     // [Header("⚠ 임시 (2026-11-12)")] public bool tempDay1Rain = true; // (삭제) 1일차 비 임시 → 1일차도 랜덤으로
     [Tooltip("날씨 바뀔 때 안개/파티클/소리/배수가 넘어가는 시간 (초)")]
     public float transitionTime = 1.5f;
@@ -171,6 +178,7 @@ public class WeatherManager : MonoBehaviour
         if (dnc != null)
         {
             dncFogWasOn = dnc.controlFog;
+            dnc.onNightStart.AddListener(OnNightStart); // (2026-11-22) 밤이 되면 안개 걷힘
             // dnc.onNewDay.AddListener(OnNewDay); // (이전) 하루 바뀔 때 4종 랜덤 → 지금은 DayNightCycle이 새벽→낮에 RollWeather() 직접 호출
         }
         var cam = Camera.main;
@@ -196,13 +204,33 @@ public class WeatherManager : MonoBehaviour
     //     SetWeather((Weather)Random.Range(0, 4)); // 2일차부터 4종 랜덤
     // }
 
-    /// <summary>가중치 랜덤 (맑음 34 / 비 36 / 안개 30). 게임 시작(1일차)과 DayNightCycle 새벽→낮 전환 때 호출</summary>
+    /// <summary>가중치 랜덤 (맑음 50 / 비 25 / 안개 25, 전날과 같은 날씨 제외). 게임 시작(1일차)과 DayNightCycle 새벽→낮 전환 때 호출</summary>
     public void RollWeather()
     {
-        float total = clearWeight + rainWeight + fogWeight;
+        // float total = clearWeight + rainWeight + fogWeight; // (이전) 매일 독립 랜덤
+        // float r = Random.Range(0f, total);
+        // Weather w = r < clearWeight ? Weather.Clear : r < clearWeight + rainWeight ? Weather.Rain : Weather.Fog;
+        // (2026-11-22) 전날과 같은 날씨는 후보에서 뺌 → 남은 날씨끼리 원래 가중치 비율로
+        bool skip = noSameWeatherTwice;
+        float wc = skip && lastRolled == Weather.Clear ? 0f : clearWeight;
+        float wr = skip && lastRolled == Weather.Rain ? 0f : rainWeight;
+        float wf = skip && lastRolled == Weather.Fog ? 0f : fogWeight;
+        float total = wc + wr + wf;
+        if (total <= 0f) { wc = clearWeight; wr = rainWeight; wf = fogWeight; total = wc + wr + wf; }
         float r = Random.Range(0f, total);
-        Weather w = r < clearWeight ? Weather.Clear : r < clearWeight + rainWeight ? Weather.Rain : Weather.Fog;
+        Weather w = r < wc ? Weather.Clear : r < wc + wr ? Weather.Rain : Weather.Fog;
+        lastRolled = w;
         SetWeather(w);
+    }
+
+    /// <summary>(2026-11-22) 밤이 되면 안개만 걷힘 (DayNightCycle.onNightStart). transitionTime 동안 서서히</summary>
+    void OnNightStart()
+    {
+        if (fogClearsAtNight && current == Weather.Fog)
+        {
+            Debug.Log("[Weather] 밤 → 안개 걷힘");
+            SetWeather(Weather.Clear);
+        }
     }
 
     public void SetWeather(Weather w)
