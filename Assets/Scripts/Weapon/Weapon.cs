@@ -181,7 +181,8 @@ public class Weapon : MonoBehaviour
                         bullet.trailWidth = 0f;
                         foreach (var rr in bulletObj.GetComponentsInChildren<Renderer>()) rr.enabled = false;
                         break;
-                    case SpecialWeaponKind.RPG: bullet.trailColor = new Color(1f, 0.55f, 0.2f); bullet.trailWidth = 0.12f; break;
+                    case SpecialWeaponKind.RPG: bullet.trailColor = new Color(1f, 0.55f, 0.2f); bullet.trailWidth = 0.12f;
+                        bullet.explodeSound = SpecialWeaponAudio.RpgImpactClip(weaponData); break; // (2026-11-22) 착탄 = RPG 폭발음
                     case SpecialWeaponKind.Laser: bullet.trailColor = new Color(0f, 0.93f, 1f); bullet.trailWidth = 0.08f; break;
                 }
             }

@@ -271,7 +271,8 @@ public class WeaponHandAttacher : MonoBehaviour
     {
         if (rightHandIK == null) return;
         // (이전) 권총만: rightHandIK.weight → pistolHeld ? 1 : 0
-        bool gunHeld = pistolHeld || (gripWeapon != null && gripWeapon.type != WeaponType.Melee);
+        // bool gunHeld = pistolHeld || (gripWeapon != null && gripWeapon.type != WeaponType.Melee); // (이전)
+        bool gunHeld = pistolHeld || (gripWeapon != null && (gripWeapon.type != WeaponType.Melee || gripWeapon.specialKind == SpecialWeaponKind.Chainsaw)); // (2026-11-22) 전기톱 양손
         rightHandIK.weight = Mathf.MoveTowards(rightHandIK.weight, gunHeld && pistolCenterGrip ? 1f : 0f, Time.deltaTime * 8f);
         // lowReady01 = Mathf.MoveTowards(lowReady01, gunHeld && gripLowReady ? 1f : 0f, Time.deltaTime * 5f); // (이전) 0.2초
         float blendSpeed = 1f / Mathf.Max(0.01f, poseBlendTime);

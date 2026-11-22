@@ -52,9 +52,26 @@ public class AmmoHUD : MonoBehaviour
             TextAlignmentOptions.Center, new Vector2(-1f, -31.5f), new Vector2(200f, 26f));
     }
 
+    PlayerController player; // (2026-11-22) 전기톱 배터리 표시용
+
     void Update()
     {
         if (loadedText == null) return;
+
+        // (2026-11-22) 전기톱: 탄 대신 배터리 % (누르는 동안 닳음)
+        if (player == null) player = FindFirstObjectByType<PlayerController>();
+        var saw = player != null ? player.HeldChainsaw : null;
+        if (saw != null && saw.weaponData != null)
+        {
+            float pct = saw.weaponData.fuelCapacity > 0f ? saw.Fuel / saw.weaponData.fuelCapacity * 100f : 0f;
+            loadedText.text = $"{Mathf.CeilToInt(pct)}%";
+            loadedText.color = pct > 0f ? loadedColor : loadedEmptyColor;
+            reserveText.text = "배터리";
+            nameText.text = "전기톱";
+            icon.enabled = false; // 총알 아이콘 숨김
+            return;
+        }
+        icon.enabled = true;
 
         Weapon weapon = AmmoUI.Instance != null ? AmmoUI.Instance.targetRangedWeapon : null;
         if (weapon == null || !weapon.gameObject.activeInHierarchy || weapon.weaponData == null)

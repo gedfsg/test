@@ -123,13 +123,48 @@ public class MeleeWeapon : MonoBehaviour
     [Tooltip("근접 공격에 맞은 좀비가 젖혀지는 세기 (총알 대비 배율)")]
     public float meleeFlinchScale = 1.5f;
 
-    private void FanAttack()
+    // ── (2026-11-22) 전기톱: 누르는 동안 계속 갈아냄 ──
+    [Header("전기톱 (2026-11-22) - 누르는 동안 지속 피해")]
+    [Tooltip("지속 피해 간격 (초). 초당 피해 = damage / attackRate (기존 휘두르기와 같은 DPS)")]
+    public float chainsawTick = 0.1f;
+    [Tooltip("전기톱에 갈리는 좀비가 떨리는 세기")]
+    public float chainsawFlinchScale = 0.35f;
+    float chainsawNextTick, chainsawNextNoise, chainsawNextHitSound, chainsawNextWarn;
+
+    /// <summary>전기톱 한 프레임 (PlayerController가 공격 버튼을 누르는 동안 매 프레임). 배터리가 있으면 소모하고 true</summary>
+    public bool ChainsawCut(float dt)
+    {
+        if (!UsesFuel) return false;
+        if (fuel <= 0f)
+        {
+            if (Time.time >= chainsawNextWarn) { chainsawNextWarn = Time.time + 1.5f; PickupFeedbackUI.Instance?.ShowWarning("전기톱 배터리 방전!"); }
+            return false;
+        }
+        fuel = Mathf.Max(0f, fuel - weaponData.fuelPerSecond * dt); // 누르는 동안만 닳음 (120 / 초당 2 = 60초)
+        SpawnProtection.Cancel();
+        if (Time.time >= chainsawNextNoise) { chainsawNextNoise = Time.time + 0.5f; NoiseSystem.Emit(transform.position, weaponData.GetNoiseRadius()); }
+        if (Time.time >= chainsawNextTick)
+        {
+            chainsawNextTick = Time.time + chainsawTick;
+            float dps = weaponData.damage / Mathf.Max(0.05f, weaponData.attackRate);
+            bool sound = Time.time >= chainsawNextHitSound;
+            if (FanAttack(dps * chainsawTick, chainsawFlinchScale, sound) && sound) chainsawNextHitSound = Time.time + 0.35f;
+        }
+        return true;
+    }
+
+    // private void FanAttack() // (이전) 도끼 한 번 휘두르기 전용
+    private void FanAttack() => FanAttack(weaponData != null ? weaponData.damage : 50f, meleeFlinchScale, true);
+
+    /// <summary>부채꼴 판정 (damage, 젖혀짐 세기, 타격음 여부). 맞은 게 있으면 true</summary>
+    private bool FanAttack(float damageOverride, float flinchScale, bool hitSound)
     {
         Transform owner = attackPoint != null ? attackPoint.root : transform.root;
         Vector3 origin = owner.position;
         Vector3 forward = owner.forward; forward.y = 0f; forward.Normalize();
         float range = (weaponData != null && weaponData.effectiveRange > 0f) ? weaponData.effectiveRange : fanRange;
-        float currentDamage = (weaponData != null) ? weaponData.damage : 50f;
+        // float currentDamage = (weaponData != null) ? weaponData.damage : 50f; // (이전)
+        float currentDamage = damageOverride;
 
         var done = new System.Collections.Generic.HashSet<Object>();
         var flinched = new System.Collections.Generic.HashSet<ZombieController>();
@@ -161,15 +196,16 @@ public class MeleeWeapon : MonoBehaviour
             }
             // 휘두른 방향(나 → 좀비)으로 상체가 크게 젖혀진다
             if (zombie != null && flinched.Add(zombie))
-                ZombieBodyMotion.Flinch(zombie.gameObject, toCenter, zombie.transform.position + Vector3.up * 1.3f, meleeFlinchScale);
+                ZombieBodyMotion.Flinch(zombie.gameObject, toCenter, zombie.transform.position + Vector3.up * 1.3f, flinchScale); // (이전) meleeFlinchScale
 
             if (obstacle != null && done.Add(obstacle)) obstacle.TakeDamage(currentDamage);
         }
 
         // 뭔가 맞았으면 도끼 타격음 한 번 (여러 마리 맞아도 한 번, 살 맞는 소리는 각자 Health가 냄)
-        if (done.Count > 0 && AudioManager.Library != null)
+        if (hitSound && done.Count > 0 && AudioManager.Library != null)
             AudioManager.PlaySFX(SoundLibrary.Pick(AudioManager.Library.hitMelee), origin + forward * 1.5f + Vector3.up,
                                  AudioManager.Vol.Impact, AudioManager.Channel.SFX, 25f);
+        return done.Count > 0;
     }
 
     // 중심축을 180도 회전시켜 트레일 렌더러의 궤적을 생성하는 코루틴임.

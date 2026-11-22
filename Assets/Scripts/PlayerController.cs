@@ -42,6 +42,11 @@ public class PlayerController : MonoBehaviour
     public bool IsDead => isDead;
     /// <summary>도끼 휘두르는 중 (내려찍기 몸통 비틀기 = 공격 동작이라 상체 조준 IK를 끔)</summary>
     public bool IsMeleeSwinging => meleeHeld && Time.time < meleeSwingUntil;
+    // (2026-11-22) 전기톱: 도끼처럼 휘두르지 않고 양손으로 들고(총 자세) 공격 버튼을 누르는 동안 계속 갈아냄 (배터리가 떨어질 때까지)
+    public bool ChainsawHeld => meleeHeld && meleeWeapon != null && meleeWeapon.weaponData != null && meleeWeapon.weaponData.specialKind == SpecialWeaponKind.Chainsaw;
+    public bool IsChainsawCutting => ChainsawHeld && Time.time < chainsawCutUntil;
+    public MeleeWeapon HeldChainsaw => ChainsawHeld ? meleeWeapon : null;
+    private float chainsawCutUntil;
     private bool isRolling;
     private float rollEndTime = -99f;
     private Vector3 rollVelocity;
@@ -405,7 +410,8 @@ public class PlayerController : MonoBehaviour
     // 애니메이션 적용 뒤: 도끼 들었을 때 상체(어깨)를 조준 방향으로 비틀어 줌 (총은 상체 레이어 조준 자세가 담당)
     void LateUpdate()
     {
-        if (!meleeHeld || isDead || meleeTorsoAimWeight <= 0f || !EnsureAnimRefs()) { meleeTorsoTwist = 0f; return; }
+        // if (!meleeHeld || isDead || meleeTorsoAimWeight <= 0f || !EnsureAnimRefs()) { meleeTorsoTwist = 0f; return; } // (이전)
+        if (!meleeHeld || ChainsawHeld || isDead || meleeTorsoAimWeight <= 0f || !EnsureAnimRefs()) { meleeTorsoTwist = 0f; return; } // (2026-11-22) 전기톱은 총처럼 상체 레이어가 조준
         Transform ls = animator.GetBoneTransform(HumanBodyBones.LeftUpperArm), rs = animator.GetBoneTransform(HumanBodyBones.RightUpperArm);
         if (ls == null || rs == null) return;
 
@@ -646,6 +652,11 @@ public class PlayerController : MonoBehaviour
             if (auto && isFireButtonPressed) rangedWeapon.TryFire();
             else if (!auto && firePressed) rangedWeapon.TryFireSingle();
         }
+        else if (currentMode == WeaponMode.Melee && ChainsawHeld)
+        {
+            // (2026-11-22) 전기톱: 누르는 동안 매 프레임 갈아냄 (휘두르기 애니메이션·쿨타임 없음, 배터리 소모)
+            if (isFireButtonPressed && meleeWeapon.ChainsawCut(Time.deltaTime)) chainsawCutUntil = Time.time + 0.12f;
+        }
         else if (currentMode == WeaponMode.Melee && meleeWeapon != null && isFireButtonPressed)
         {
             // if (meleeWeapon.TryAttack() && animator != null)   // (이전) 스테미나 없이 무한 휘두르기
@@ -810,7 +821,8 @@ public class PlayerController : MonoBehaviour
     private void ApplyMeleePose(bool melee)
     {
         meleeHeld = melee;
-        if (EnsureAnimRefs() && melee) animator.SetInteger(WeaponPoseHash, 0);
+        // if (EnsureAnimRefs() && melee) animator.SetInteger(WeaponPoseHash, 0); // (이전) 근접 = 도끼 자세
+        if (EnsureAnimRefs() && melee) animator.SetInteger(WeaponPoseHash, ChainsawHeld ? 2 : 0); // (2026-11-22) 전기톱 = 소총처럼 양손 자세
         RefreshIKAndAim();
     }
 
@@ -823,17 +835,21 @@ public class PlayerController : MonoBehaviour
         EnsureAnimRefs();
         bool reloading = Time.time < reloadUntil;
         bool throwableHeld = HoldingThrowable; // 투척물을 쥐고 있으면 총 그립 IK/조준 끔 (총은 숨김)
-        bool ikOff = meleeHeld || isDead || reloading || isRolling || throwableHeld || Time.time < ikBlockUntil;
+        // (2026-11-22) 전기톱은 총처럼 양손(왼손 IK)·상체 레이어·조준 → 아래 규칙에서 "도끼"는 axeHeld (전기톱 제외)
+        bool twoHandMelee = ChainsawHeld;
+        bool axeHeld = meleeHeld && !twoHandMelee;
+        // bool ikOff = meleeHeld || isDead || reloading || isRolling || throwableHeld || Time.time < ikBlockUntil; // (이전)
+        bool ikOff = axeHeld || isDead || reloading || isRolling || throwableHeld || Time.time < ikBlockUntil;
         if (handIKRig != null) handIKRig.weight = ikOff ? 0f : 1f;
 
         // 상체 레이어: 총 = 항상 켬(권총/소총 자세), 도끼 = 평소 끔(맨손처럼 자연스럽게) + 상체 동작 중에만 켬, 사망 = 끔
         // 구르기: 전신 동작이라 상체 레이어를 바로 끔 (안 끄면 다리만 구르고 상체는 총 자세)
-        float target = isDead || isRolling ? 0f : (!meleeHeld || Time.time < upperActionUntil) ? 1f : 0f;
+        float target = isDead || isRolling ? 0f : (!axeHeld || Time.time < upperActionUntil) ? 1f : 0f; // (이전) !meleeHeld
         upperWeight = Mathf.MoveTowards(upperWeight, target, Time.deltaTime * (isRolling ? 20f : target > upperWeight ? 12f : 4f)); // 켤 땐 빠르게, 끌 땐 부드럽게
         if (animator != null && upperBodyLayer >= 0) animator.SetLayerWeight(upperBodyLayer, upperWeight);
 
         // 도끼 손 회전: 들고 다닐 때(carry) ↔ 휘두를 때(rotationOffset)를 상체 레이어 가중치에 맞춰 부드럽게 전환
-        if (meleeHeld && !isRolling && meleeWeapon != null && meleeWeapon.weaponData != null && weaponHandAttacher != null) // 구르는 중엔 도끼가 등/숨김 상태라 손 자세 갱신 안 함
+        if (axeHeld && !isRolling && meleeWeapon != null && meleeWeapon.weaponData != null && weaponHandAttacher != null) // (2026-11-22 meleeHeld → axeHeld) 구르는 중엔 도끼가 등/숨김 상태라 손 자세 갱신 안 함
         {
             var wd = meleeWeapon.weaponData;
             Quaternion swing = Quaternion.Euler(wd.rotationOffset);
@@ -860,20 +876,24 @@ public class PlayerController : MonoBehaviour
             }
         }
         if (weaponHandAttacher == null) weaponHandAttacher = FindAnyObjectByType<WeaponHandAttacher>();
-        if (weaponHandAttacher != null) weaponHandAttacher.aimAtTarget = !(meleeHeld || isDead || reloading || isRolling || throwableHeld);
+        if (weaponHandAttacher != null) weaponHandAttacher.aimAtTarget = !(axeHeld || isDead || reloading || isRolling || throwableHeld); // (이전) meleeHeld
         // 권총 양손 그립 (가슴 중앙): 권총을 들고 있을 때만. IK가 꺼지는 상황(재장전/전환/사망/구르기)은 Rig weight 0으로 같이 꺼짐
         if (weaponHandAttacher != null)
         {
             weaponHandAttacher.pistolHeld = !meleeHeld && !throwableHeld && currentMode == WeaponMode.Ranged && rangedWeapon != null && rangedWeapon.weaponData != null && rangedWeapon.weaponData.type == WeaponType.Pistol;
             // 2026-11-12: 모든 총 양손 그립 (권총 가슴 중앙 / AR·샷건 어깨 견착) + 달릴 때 Low Ready
             bool gunHeld = !meleeHeld && !throwableHeld && currentMode == WeaponMode.Ranged && rangedWeapon != null && rangedWeapon.weaponData != null;
-            weaponHandAttacher.gripWeapon = gunHeld ? rangedWeapon.weaponData : null;
+            // weaponHandAttacher.gripWeapon = gunHeld ? rangedWeapon.weaponData : null; // (이전)
+            // (2026-11-22) 전기톱도 총과 같은 양손 그립 (앞 손잡이 = LeftHandPoint)
+            if (twoHandMelee && !throwableHeld) { gunHeld = true; weaponHandAttacher.gripWeapon = meleeWeapon.weaponData; }
+            else weaponHandAttacher.gripWeapon = gunHeld ? rangedWeapon.weaponData : null;
             float planarSpeed = rb != null ? new Vector2(rb.linearVelocity.x, rb.linearVelocity.z).magnitude : 0f;
             weaponHandAttacher.gripLowReady = gunHeld && locomotion != null && locomotion.IsSprinting && planarSpeed > 2f && !isFireButtonPressed
                 && Time.time - lastFirePressTime > SprintAimHoldTime; // (2026-11-21) 쏜 직후엔 커서 방향 유지
             // (2026-11-18) 우클릭 조준(AimZoom 홀드) 또는 발사 중 → 눈높이 견착. UpperBodyAimIK도 이 값으로 가슴·머리 가중치를 올림
             IsGunHeld = gunHeld;
-            IsGunAiming = gunHeld && (MuzzleLight.IsAiming || isFireButtonPressed) && !weaponHandAttacher.gripLowReady;
+            // IsGunAiming = gunHeld && (MuzzleLight.IsAiming || isFireButtonPressed) && !weaponHandAttacher.gripLowReady; // (이전)
+            IsGunAiming = gunHeld && !twoHandMelee && (MuzzleLight.IsAiming || isFireButtonPressed) && !weaponHandAttacher.gripLowReady; // 전기톱은 허리 높이 그대로 (눈높이로 안 올림)
             IsGunSprinting = weaponHandAttacher.gripLowReady;
             weaponHandAttacher.gripAiming = IsGunAiming;
         }
@@ -929,6 +949,7 @@ public class PlayerController : MonoBehaviour
             // 핫바 1,2에 근접 무기가 있을 수 있음 → 근접 모드로 전환 + 손에 도끼 모델
             EquipWeapon(WeaponMode.Melee);
             if (meleeWeapon != null) meleeWeapon.ChangeWeaponData(newData);
+            ApplyMeleePose(true); // (2026-11-22) 무기 데이터가 바뀐 뒤 다시 → 전기톱이면 양손 자세
             if (weaponHandAttacher != null && newData.weaponPrefab != null)
                 weaponHandAttacher.SwapVisual(newData.weaponPrefab, newData.positionOffset + newData.gripOffset, newData.rotationOffset); // (2026-11-20) + 무기별 그립 보정
         }

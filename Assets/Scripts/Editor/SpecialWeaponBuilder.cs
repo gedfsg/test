@@ -72,8 +72,11 @@ public static class SpecialWeaponBuilder
                                  d.damage = 60f; d.attackRate = 1f / 3f; d.effectiveRange = 2f; d.maxAmmo = 0; d.autoFire = false;
                                  d.fuelCapacity = 120f; d.fuelPerSecond = 2f; d.noiseRadius = 70f; d.staminaCost = 0f;
                                  // 손 자세는 도끼와 같은 방식 (rigidGrip). 상점 연동 때 실제로 들어보고 조정 필요
-                                 d.positionOffset = Vector3.zero; d.rotationOffset = new Vector3(-90f, 0f, 0f);
-                                 d.swingPositionOffset = new Vector3(0.035f, -0.06f, -0.09f); d.rigidGrip = true; } },
+                                 // d.positionOffset = Vector3.zero; d.rotationOffset = new Vector3(-90f, 0f, 0f); // (이전) 도끼처럼 한 손 휘두르기
+                                 // d.swingPositionOffset = new Vector3(0.035f, -0.06f, -0.09f); d.rigidGrip = true;
+                                 // (2026-11-22) 양손으로 들고(총과 같은 그립, 왼손 = 위 손잡이) 누르는 동안 계속 갈아냄 (PlayerController.ChainsawHeld)
+                                 d.positionOffset = new Vector3(0.01f, 0.06f, -0.2f); d.rotationOffset = new Vector3(30f, 170f, 0f);
+                                 d.swingPositionOffset = Vector3.zero; d.rigidGrip = false; } },
         new Cfg { model = "Assets/Weapon Assets/Special Weapons/low-poly_rpg-7.glb", display = "RPG-7", file = "RPG", special = true,
                   fwd = Vector3.left, up = Vector3.up, length = 1.20f, gripT = 0.45f, leftT = 0.62f,
                   stats = d => { d.type = WeaponType.Ranged; d.specialKind = SpecialWeaponKind.RPG;
