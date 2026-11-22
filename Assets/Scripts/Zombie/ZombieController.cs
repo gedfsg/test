@@ -167,6 +167,7 @@ public class ZombieController : MonoBehaviour
         if (profile != null) profile.ApplyTo(this);
 
         SetupAgent();
+        if (GetComponent<ZombieGroundSnap>() == null) gameObject.AddComponent<ZombieGroundSnap>(); // (2026-11-22) NavMesh가 바닥보다 낮은 곳에서 발이 빠지지 않게
         SetupCollider();
         SetupRigidbody();
         SetupAnimator();
