@@ -21,25 +21,25 @@ MonoBehaviour:
   maxStackSize: 1
   weaponPrefab: {fileID: 8270249728931584228, guid: 2bfde2550dcd48e408fd978f8862b934, type: 3}
   type: 5
-  damage: 1
+  damage: 2.5
   attackRate: 0.05
   maxAmmo: 100
   reloadTime: 2.5
   bulletSpeed: 25
-  recoil: 6
-  effectiveRange: 10
+  recoil: 0
+  effectiveRange: 13
   handGripOffset: {x: 0, y: 0, z: 0}
   gripOffset: {x: 0, y: 0, z: 0}
   foreGripOffset: {x: 0.00000001224262, y: -0.00000008004013, z: -0.29391176}
-  pelletCount: 8
-  spreadAngle: 15
+  pelletCount: 3
+  spreadAngle: 12
   penetrating: 0
-  penetrationCount: 0
+  penetrationCount: 2
   specialKind: 1
   splashDamage: 0
   splashRadius: 0
   knockback: 0
-  burnDps: 10
+  burnDps: 15
   burnDuration: 5
   spinUpTime: 0
   fuelCapacity: 0

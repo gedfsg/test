@@ -27,7 +27,7 @@ MonoBehaviour:
   reloadTime: 0
   bulletSpeed: 0
   recoil: 0
-  effectiveRange: 2
+  effectiveRange: 3.2
   handGripOffset: {x: 0, y: 0, z: 0}
   gripOffset: {x: 0, y: 0, z: 0}
   foreGripOffset: {x: 0, y: 0, z: 0}

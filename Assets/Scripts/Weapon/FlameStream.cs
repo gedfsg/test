@@ -18,9 +18,10 @@ public class FlameStream : MonoBehaviour
 
     [Header("불길")]
     // (1차 Play 확인) 18~24m/s · 0.38~0.5초 · 6° · 5개 → 가늘고 듬성듬성, 화면 밖으로 날아감 → 느리고 굵고 많이
-    public Vector2 speed = new Vector2(13f, 17f);
-    public Vector2 lifetime = new Vector2(0.55f, 0.7f);
-    public float spreadAngle = 9f;
+    // (2026-11-22 2차) 사거리 10 → 13m, 부채꼴 ±12°에 맞춰 더 멀리·넓게 (이전 13~17m/s · 0.55~0.7초 · 9°)
+    public Vector2 speed = new Vector2(16f, 21f);
+    public Vector2 lifetime = new Vector2(0.65f, 0.8f);
+    public float spreadAngle = 13f;
     public int flamesPerShot = 10;
     public int corePerShot = 2;
     public int smokePerShot = 1;

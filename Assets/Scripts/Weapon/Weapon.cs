@@ -137,13 +137,23 @@ public class Weapon : MonoBehaviour
             FlameStream.Emit(firePoint.position, baseDirection, body != null ? body.linearVelocity : Vector3.zero);
         }
 
-        if (wType == WeaponType.Shotgun)
+        // if (wType == WeaponType.Shotgun) // (이전) 산탄총만 여러 발
+        // (2026-11-22) 화염방사기도 한 번에 pelletCount발을 spreadAngle 부채꼴로 → 불길 범위가 넓게 맞음
+        bool flame = weaponData != null && weaponData.specialKind == SpecialWeaponKind.Flamethrower;
+        if (wType == WeaponType.Shotgun || flame)
         {
             int pellets = (weaponData != null) ? weaponData.pelletCount : 8;
             float spread = (weaponData != null) ? weaponData.spreadAngle : 15f;
 
             for (int i = 0; i < pellets; i++)
-                SpawnBullet(ApplySpread(baseDirection, spread));
+            {
+                // SpawnBullet(ApplySpread(baseDirection, spread)); // (이전) 위아래로도 퍼짐
+                if (!flame) { SpawnBullet(ApplySpread(baseDirection, spread)); continue; }
+                // (2026-11-22) 화염: 좌우로만 부채꼴(위아래 ±2°) + 판정 탄은 가슴 높이(발 + 1.2m)에서
+                //  쏠 때 총구가 어깨 높이(발 + 1.8m)로 올라가 좀비 판정(0~1.8m) 위로 지나가며 거의 안 맞았음 (Play 실측)
+                Vector3 d = Quaternion.Euler(Random.Range(-2f, 2f), Random.Range(-spread, spread), 0f) * baseDirection;
+                SpawnBullet(d, FlameHitOrigin());
+            }
         }
         else
         {
@@ -152,10 +162,23 @@ public class Weapon : MonoBehaviour
         }
     }
 
-    void SpawnBullet(Vector3 direction)
+    // void SpawnBullet(Vector3 direction) // (이전) 항상 총구에서
+    void SpawnBullet(Vector3 direction) => SpawnBullet(direction, firePoint.position);
+
+    /// <summary>(2026-11-22) 화염 판정 탄 시작점: 총구 수평 위치, 높이는 사수 발 + 1.2m (총구가 더 낮으면 총구)</summary>
+    Vector3 FlameHitOrigin()
+    {
+        Vector3 o = firePoint.position;
+        var body = GetComponentInParent<Rigidbody>();
+        float feet = body != null ? body.position.y : transform.root.position.y;
+        o.y = Mathf.Min(o.y, feet + 1.2f);
+        return o;
+    }
+
+    void SpawnBullet(Vector3 direction, Vector3 origin)
     {
         Quaternion rotation = Quaternion.LookRotation(direction);
-        GameObject bulletObj = Instantiate(bulletPrefab, firePoint.position, rotation);
+        GameObject bulletObj = Instantiate(bulletPrefab, origin, rotation);
         Bullet bullet = bulletObj.GetComponent<Bullet>();
 
         if (bullet != null)

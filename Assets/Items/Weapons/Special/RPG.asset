@@ -23,7 +23,7 @@ MonoBehaviour:
   type: 5
   damage: 300
   attackRate: 1
-  maxAmmo: 1
+  maxAmmo: 10
   reloadTime: 3
   bulletSpeed: 45
   recoil: 0

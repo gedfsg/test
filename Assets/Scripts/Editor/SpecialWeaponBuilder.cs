@@ -62,14 +62,18 @@ public static class SpecialWeaponBuilder
                   recolor = new[] { ("TT_checker", new Color(0.33f, 0.36f, 0.22f), 0.3f) }, // 올리브색 (원본은 UV 체커 텍스처가 빠진 흰색)
                   stats = d => { d.type = WeaponType.Ranged; d.specialKind = SpecialWeaponKind.Flamethrower;
                                  // 데미지 20/초: 0.05초마다 1 (연료 100 = 탄 100, 초당 20 소모 → 5초)
-                                 d.damage = 1f; d.attackRate = 0.05f; d.maxAmmo = 100; d.reloadTime = 2.5f; d.autoFire = true;
-                                 d.effectiveRange = 10f; d.bulletSpeed = 25f; d.recoil = 6f;
-                                 d.burnDps = 10f; d.burnDuration = 5f; d.noiseRadius = 80f;
+                                 // d.damage = 1f; ... d.effectiveRange = 10f; d.recoil = 6f; d.burnDps = 10f; // (이전) 약하고 좁았음
+                                 // (2026-11-22) 더 세고 넓게: 0.05초마다 불꽃 탄 3발(±12°) × 2.5 (정면 최대 150/초), 사거리 13m, 2마리 관통, 화상 15/초
+                                 d.damage = 2.5f; d.attackRate = 0.05f; d.maxAmmo = 100; d.reloadTime = 2.5f; d.autoFire = true;
+                                 d.pelletCount = 3; d.spreadAngle = 12f; d.penetrationCount = 2;
+                                 d.effectiveRange = 13f; d.bulletSpeed = 25f; d.recoil = 0f;
+                                 d.burnDps = 15f; d.burnDuration = 5f; d.noiseRadius = 80f;
                                  d.lightColor = new Color32(0xFF, 0x55, 0x00, 0xFF); d.lightIntensity = 2.0f; } },
         new Cfg { model = "Assets/Weapon Assets/Special Weapons/chainsaw_KrivoRukiy.fbx", display = "전기톱", file = "Chainsaw", special = true, melee = true,
                   fwd = Vector3.back, up = Vector3.up, length = 1.0f, gripT = 0.12f, leftT = 0.30f,
                   stats = d => { d.type = WeaponType.Melee; d.specialKind = SpecialWeaponKind.Chainsaw;
-                                 d.damage = 60f; d.attackRate = 1f / 3f; d.effectiveRange = 2f; d.maxAmmo = 0; d.autoFire = false;
+                                 // d.effectiveRange = 2f; // (이전)
+                                 d.damage = 60f; d.attackRate = 1f / 3f; d.effectiveRange = 3.2f; d.maxAmmo = 0; d.autoFire = false; // (2026-11-22) 사거리 2 → 3.2m
                                  d.fuelCapacity = 120f; d.fuelPerSecond = 2f; d.noiseRadius = 70f; d.staminaCost = 0f;
                                  // 손 자세는 도끼와 같은 방식 (rigidGrip). 상점 연동 때 실제로 들어보고 조정 필요
                                  // d.positionOffset = Vector3.zero; d.rotationOffset = new Vector3(-90f, 0f, 0f); // (이전) 도끼처럼 한 손 휘두르기
@@ -81,7 +85,8 @@ public static class SpecialWeaponBuilder
                   fwd = Vector3.left, up = Vector3.up, length = 1.20f, gripT = 0.45f, leftT = 0.62f,
                   stats = d => { d.type = WeaponType.Ranged; d.specialKind = SpecialWeaponKind.RPG;
                                  d.damage = 300f; d.splashDamage = 150f; d.splashRadius = 8f; d.knockback = 6f;
-                                 d.maxAmmo = 1; d.reloadTime = 3f; d.attackRate = 1f; d.autoFire = false;
+                                 // d.maxAmmo = 1; // (이전) 한 발 쏘고 3초 재장전
+                                 d.maxAmmo = 10; d.reloadTime = 3f; d.attackRate = 1f; d.autoFire = false; // (2026-11-22) 탄창 10발
                                  d.effectiveRange = 70f; d.bulletSpeed = 45f; d.recoil = 0f; d.noiseRadius = 90f;
                                  d.lightColor = new Color32(0xFF, 0x88, 0x00, 0xFF); } },
         new Cfg { model = "Assets/Weapon Assets/Special Weapons/M134 Minigun.fbx", display = "미니건", file = "Minigun", special = true,
