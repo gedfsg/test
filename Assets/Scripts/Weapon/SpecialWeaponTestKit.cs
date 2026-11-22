@@ -8,6 +8,7 @@ using UnityEngine.SceneManagement;
 ///  - 핫바 1번 화염방사기 / 2번 미니건 / 4번 전기톱 (원래 있던 건 가방으로)
 ///  - 가방: RPG, 레이저 (탄 가득) → 인벤토리(I)에서 핫바 1·2번으로 끌어다 바꿔 들기
 ///  - 특수 탄약(공용, Ranged) 200발
+///  - 수류탄 3개(핫바 3번 투척 칸) + 화염병 3개(가방 → 3번 칸으로 끌어다 바꾸기) (2026-11-22 추가)
 /// 게임 씬이 열릴 때마다 플레이어에 자동으로 붙음.
 /// </summary>
 public class SpecialWeaponTestKit : MonoBehaviour
@@ -55,12 +56,34 @@ public class SpecialWeaponTestKit : MonoBehaviour
             if (w != null && inv != null && !inv.AddItemWithAmmo(w, 1, w.maxAmmo)) Debug.LogWarning("[TestKit] 가방이 가득 차서 못 넣음: " + w.itemName);
         }
         if (AmmoInventory.Instance != null) AmmoInventory.Instance.AddAmmo(WeaponType.Ranged, 200);
+        // 투척물: 3번 칸이 비어 있으면 먼저 온 것(수류탄)이 3번 칸, 나머지는 가방 (InventoryManager.AddItem 규칙)
+        foreach (var n in new[] { "Grenade", "Molotov" })
+        {
+            var t = FindLootItem(n) as ThrowableData;
+            if (t == null) { Debug.LogWarning("[TestKit] 투척물 못 찾음: " + n); continue; }
+            if (inv != null) inv.AddItem(t, 3);
+        }
         hb.SelectSlot(0);
 
         var ui = FindFirstObjectByType<InventoryUI>(FindObjectsInactive.Include);
         if (ui != null && ui.isInventoryOpen) ui.UpdateUI();
-        PickupFeedbackUI.Instance?.Show("테스트: 특수 무기 5종 지급 (RPG·레이저는 가방)");
+        PickupFeedbackUI.Instance?.Show("테스트: 특수 무기 5종 + 수류탄·화염병 3개씩 지급");
         Debug.Log("[TestKit] 특수 무기 5종 지급");
+    }
+
+    /// <summary>루팅 테이블(Resources/LootDatabase)에서 에셋 이름으로 아이템 찾기 (투척물 에셋은 Resources 밖이라)</summary>
+    static ItemData FindLootItem(string assetName)
+    {
+        var db = LootDatabase.Instance;
+        if (db == null) return null;
+        var tables = new System.Collections.Generic.List<LootTable> { db.crateWood, db.crateMetal, db.crateMilitary, db.crateMilitaryGuaranteed };
+        foreach (var r in db.buildingRules) tables.Add(r.table);
+        foreach (var t in tables)
+        {
+            if (t == null) continue;
+            foreach (var e in t.entries) if (e.item != null && e.item.name == assetName) return e.item;
+        }
+        return null;
     }
 
     /// <summary>핫바 index 칸에 무기 (원래 있던 건 가방으로)</summary>
