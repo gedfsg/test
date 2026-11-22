@@ -69,6 +69,14 @@ public class WeatherManager : MonoBehaviour
     [Tooltip("안개 때 비네트 세기 (평상시 0.38 = Atmosphere_Profile 값). 가장자리를 더 어둡게")]
     [Range(0f, 1f)] public float fogVignetteIntensity = 0.5f;
 
+    [Header("안개 - 캐릭터 주변 원형으로 걷힘 (2026-11-22)")]
+    [Tooltip("캐릭터 중심 이 반경(m) 안은 안개 없음 - 피드백 '안개 맵에서 캐릭터가 안 보임'")]
+    public float fogClearRadius = 6f;
+    [Tooltip("맑은 원 가장자리에서 안개가 짙어지는 폭(m)")]
+    public float fogClearFeather = 7f;
+    [Tooltip("원 바깥 화면 안개(오버레이) 최대 진하기")]
+    [Range(0f, 1f)] public float fogOverlayAlpha = 0.6f;
+
     [Header("안개 - 바닥 안개 파티클 (플레이어 따라다님)")]
     public bool groundFog = true;
     [Tooltip("동시에 떠 있는 개수 (크게 + 적게 → 성능 부담 적음)")]
@@ -440,10 +448,17 @@ public class WeatherManager : MonoBehaviour
                 // ExponentialSquared는 시작 거리가 없고 "카메라로부터의 거리"라서 카메라가 멀어질수록 플레이어도 묻힘
                 // → 기본 줌(40m)에서 정확히 fogDensity, 줌아웃하면 (40+가시거리)/(카메라거리+가시거리) 비율로 낮춤
                 // float density = fogDensity * fogVisibility / (camDist + fogVisibility); // (이전) 기본 줌에서 0.012
-                float density = fogDensity * (DefaultCamDist + fogVisibility) / (camDist + fogVisibility);
+                // float density = fogDensity * (DefaultCamDist + fogVisibility) / (camDist + fogVisibility); // (이전) 카메라 거리 기준 Exp² → 캐릭터(카메라에서 40m)도 절반쯤 묻힘
+                // RenderSettings.fog = true;
+                // RenderSettings.fogMode = FogMode.ExponentialSquared;
+                // RenderSettings.fogDensity = Mathf.Lerp(0f, density, fogAmount);
+                // (2026-11-22) 캐릭터 중심 원형으로 걷힘: 거리 안개는 "캐릭터 + 맑은 원" 너머부터 시작하는 Linear,
+                //  원 바깥 화면은 캐릭터 중심 구멍이 뚫린 화면 오버레이(UpdateFogOverlay)가 안개를 깔아줌
+                float clearEnd = camDist + fogClearRadius + fogClearFeather;
                 RenderSettings.fog = true;
-                RenderSettings.fogMode = FogMode.ExponentialSquared;
-                RenderSettings.fogDensity = Mathf.Lerp(0f, density, fogAmount);
+                RenderSettings.fogMode = FogMode.Linear;
+                RenderSettings.fogStartDistance = Mathf.Lerp(clearEnd + 500f, clearEnd, fogAmount);
+                RenderSettings.fogEndDistance = Mathf.Lerp(clearEnd + 1000f, clearEnd + fogVisibility, fogAmount);
                 RenderSettings.fogColor = col;
             }
             if (cam != null)
@@ -474,7 +489,9 @@ public class WeatherManager : MonoBehaviour
                 }
                 else if (!on && groundFogPs.isPlaying) groundFogPs.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
                 SetGroundFogTint(Color.Lerp(fogNightColor, Color.white, day01), fogAmount);
+                if (on && anchor != null) ClearGroundFogAround(anchor.Value); // (2026-11-22) 캐릭터 주변 파티클 투명하게
             }
+            UpdateFogOverlay(cam, anchor, col, indoors ? 0f : fogAmount); // (2026-11-22) 원 바깥 화면 안개
         }
         else if (fogApplied)
         {
@@ -486,7 +503,95 @@ public class WeatherManager : MonoBehaviour
             if (dnc != null) dnc.controlFog = dncFogWasOn;
             if (cam != null) { cam.farClipPlane = baseFar; cam.backgroundColor = baseBackground; }
             if (dnc != null && dnc.flashlight != null && baseFlashlightRange >= 0f) dnc.flashlight.range = baseFlashlightRange;
+            UpdateFogOverlay(cam, anchor, Color.clear, 0f); // (2026-11-22) 오버레이 끔
         }
+    }
+
+    // ── (2026-11-22) 캐릭터 중심 원형 안개 걷힘 ──
+    ParticleSystem.Particle[] fogParticles;
+
+    /// <summary>바닥 안개 파티클 중 캐릭터 맑은 원(반경 fogClearRadius + 페더) 안에 걸친 것을 투명하게 (파티클 25개 정도라 매 프레임 가벼움)</summary>
+    void ClearGroundFogAround(Vector3 center)
+    {
+        int max = groundFogPs.main.maxParticles;
+        if (fogParticles == null || fogParticles.Length < max) fogParticles = new ParticleSystem.Particle[max];
+        int n = groundFogPs.GetParticles(fogParticles);
+        for (int i = 0; i < n; i++)
+        {
+            var pt = fogParticles[i];
+            Vector3 d = pt.position - center; d.y = 0f;
+            float edge = d.magnitude - pt.startSize * 0.4f; // 파티클 가장자리 기준 (크기 3~8m)
+            float k = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(fogClearRadius, fogClearRadius + fogClearFeather, edge));
+            float baseA = Mathf.Lerp(groundFogAlpha.x, groundFogAlpha.y, (pt.randomSeed % 997u) / 996f); // 생성 때 알파 범위 안 고정값
+            Color32 c = pt.startColor;
+            c.a = (byte)Mathf.RoundToInt(255f * baseA * k);
+            pt.startColor = c;
+            fogParticles[i] = pt;
+        }
+        groundFogPs.SetParticles(fogParticles, n);
+    }
+
+    Canvas fogCanvas;
+    UnityEngine.UI.RawImage fogOverlay;
+    float fogOverlayRatio = -1f;
+
+    /// <summary>
+    /// 원 바깥 화면 안개: 화면 전체 RawImage(HUD보다 아래, 월드 위)에 "가운데가 뚫린 원" 텍스처를 캐릭터 화면 위치에 맞춰 깜.
+    /// 텍스처 바깥은 Clamp라 안개색 그대로. 탑뷰 원근 때문에 월드 원이 화면에서 타원이 되므로 가로·세로 반경을 따로 투영
+    /// </summary>
+    void UpdateFogOverlay(Camera cam, Vector3? center, Color col, float amount)
+    {
+        bool show = amount > 0.001f && cam != null && center != null && fogOverlayAlpha > 0f;
+        if (!show) { if (fogCanvas != null && fogCanvas.enabled) fogCanvas.enabled = false; return; }
+        float ratio = fogClearRadius / Mathf.Max(0.01f, fogClearRadius + fogClearFeather);
+        if (fogCanvas == null)
+        {
+            var go = new GameObject("FogOverlayCanvas");
+            go.transform.SetParent(transform, false);
+            fogCanvas = go.AddComponent<Canvas>();
+            fogCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            fogCanvas.sortingOrder = -30; // HUD(0)·상시 피(-10)보다 아래 = 월드 바로 위
+            var img = new GameObject("FogOverlay", typeof(RectTransform));
+            img.transform.SetParent(go.transform, false);
+            var rt = (RectTransform)img.transform;
+            rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one; rt.offsetMin = rt.offsetMax = Vector2.zero;
+            fogOverlay = img.AddComponent<UnityEngine.UI.RawImage>();
+            fogOverlay.raycastTarget = false;
+        }
+        if (!Mathf.Approximately(ratio, fogOverlayRatio)) { fogOverlayRatio = ratio; fogOverlay.texture = HoleTexture(ratio); }
+        if (!fogCanvas.enabled) fogCanvas.enabled = true;
+
+        Vector3 c = center.Value + Vector3.up * 1f;
+        float outer = fogClearRadius + fogClearFeather;
+        Vector3 right = cam.transform.right; right.y = 0f; right = right.sqrMagnitude > 1e-4f ? right.normalized : Vector3.right;
+        Vector3 fwd = Vector3.Cross(right, Vector3.up); // 화면 위쪽 방향(수평)
+        Vector3 s0 = cam.WorldToScreenPoint(c);
+        float rx = Mathf.Max(1f, (cam.WorldToScreenPoint(c + right * outer) - s0).magnitude);
+        float ry = Mathf.Max(1f, (cam.WorldToScreenPoint(c - fwd * outer) - s0).magnitude);
+        // 화면 점 (sx, sy) → 텍스처 uv: 0.5 + (sx - 캐릭터) / (2r)
+        fogOverlay.uvRect = new Rect(0.5f - s0.x / (2f * rx), 0.5f - s0.y / (2f * ry), Screen.width / (2f * rx), Screen.height / (2f * ry));
+        col.a = fogOverlayAlpha * amount;
+        fogOverlay.color = col;
+    }
+
+    /// <summary>가운데 투명(반경 ratio까지) → 가장자리(반경 1) 불투명 원 텍스처. Clamp라 바깥은 불투명</summary>
+    static Texture2D HoleTexture(float ratio)
+    {
+        const int N = 256;
+        var tex = new Texture2D(N, N, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear, name = "FogHole" };
+        var px = new Color32[N * N];
+        for (int y = 0; y < N; y++)
+            for (int x = 0; x < N; x++)
+            {
+                float dx = (x + 0.5f) / N * 2f - 1f, dy = (y + 0.5f) / N * 2f - 1f;
+                float r = Mathf.Sqrt(dx * dx + dy * dy);
+                float a = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(ratio, 1f, r));
+                if (x == 0 || y == 0 || x == N - 1 || y == N - 1) a = 1f; // Clamp 가장자리 = 완전 안개
+                px[y * N + x] = new Color32(255, 255, 255, (byte)Mathf.RoundToInt(a * 255f));
+            }
+        tex.SetPixels32(px);
+        tex.Apply();
+        return tex;
     }
 
     const float DefaultCamDist = 40f; // CameraZoom 기본 거리 - 안개 밀도 기준
