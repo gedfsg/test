@@ -1,6 +1,8 @@
 using UnityEngine;
 
 /// <summary>
+/// (2026-11-21) 기본 = 북쪽 고정(northUp): 지도는 항상 북쪽이 위, 가운데 화살표만 캐릭터가 보는 방향으로 회전.
+///   northUp을 끄면 아래 예전 방식 (rotateWithMainCamera · markerFollowsPlayerHeading 설정대로)
 /// 미니맵 카메라를 플레이어 위치로 따라오게 하고, 메인 카메라(Q/E 회전)와 같은 방향으로 지도를 돌림.
 ///  - 지도: 화면 위쪽 = 메인 카메라가 보는 방향 (화면에서 W로 가는 방향과 미니맵 위쪽이 항상 일치)
 ///  - 플레이어 마커(삼각형): 가운데 위쪽 고정 (markerFollowsPlayerHeading을 켜면 캐릭터가 보는 방향으로 회전)
@@ -19,6 +21,11 @@ public class MinimapController : MonoBehaviour
 
     [Tooltip("켜면 마커가 캐릭터가 보는 방향으로 회전. 끄면 항상 위쪽(카메라 방향)을 가리킴")]
     public bool markerFollowsPlayerHeading = false;
+
+    [Header("북쪽 고정 (2026-11-21)")]
+    [Tooltip("켜면 지도는 항상 북쪽이 위로 고정되고, 가운데 화살표가 캐릭터가 보는 방향으로 돈다.\n" +
+             "켜져 있는 동안 아래 rotateWithMainCamera와 위 markerFollowsPlayerHeading은 무시됨")]
+    public bool northUp = true;
 
     [Header("카메라 회전 동기화")]
     [Tooltip("메인 카메라의 좌우 회전(Q/E)을 따라 지도를 돌림. 끄면 항상 북쪽이 위")]
@@ -48,7 +55,7 @@ public class MinimapController : MonoBehaviour
         // 메인 카메라가 수평으로 보는 방향의 각도 (0 = 북쪽 +Z, 90 = 동쪽 +X)
         float camYaw = 0f;
         Camera main = Camera.main;
-        if (rotateWithMainCamera && main != null)
+        if (rotateWithMainCamera && !northUp && main != null)
         {
             Vector3 f = main.transform.forward;
             f.y = 0f;
@@ -60,7 +67,7 @@ public class MinimapController : MonoBehaviour
 
         if (playerMarker != null)
         {
-            float z = markerFollowsPlayerHeading ? -(target.eulerAngles.y - camYaw) : 0f;
+            float z = (markerFollowsPlayerHeading || northUp) ? -(target.eulerAngles.y - camYaw) : 0f;
             playerMarker.localEulerAngles = new Vector3(0f, 0f, z);
         }
 

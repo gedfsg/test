@@ -773,7 +773,9 @@ public class ZombieController : MonoBehaviour
         if (targetOverride == null) ZombieVoiceManager.Play(this, ZombieVoiceManager.State.Attack);   // 공격: 즉시 비명
 
         Health playerHealth = t.GetComponent<Health>();
-        if (playerHealth != null) playerHealth.TakeDamage(attackDamage * ZombieRules.DamageMultiplier);   // 7일 이후 난이도
+        // if (playerHealth != null) playerHealth.TakeDamage(attackDamage * ZombieRules.DamageMultiplier);   // (이전)
+        // (2026-11-21) 좀비 공격으로 표시해서 맞음 → 이때만 회복템·음식 사용이 끊김
+        if (playerHealth != null) playerHealth.TakeZombieHit(attackDamage * ZombieRules.DamageMultiplier);   // 7일 이후 난이도
     }
 
     bool HasParam(int hash)

@@ -6,7 +6,7 @@ using UnityEngine.UI;
 /// 회복템 사용 딜레이 (2026-11-16). 플레이어에 붙음 (PlayerController.Awake가 자동 부착).
 ///  - ConsumableData.useTime 동안 진행 바(화면 중앙 하단, 주황) + "회복 중..." 표시, 끝나면 효과 적용 + 1개 차감
 ///  - 사용 중: 이동 가능, 공격 불가 (PlayerController.HandleFire가 IsUsing 확인)
-///  - 맞으면(Health.onHurt) 취소: 아이템 안 줄어듦, "회복 중단" 토스트, 소리 멈춤. 죽어도 취소
+///  - 좀비에게 맞으면(Health.onHurt + IsZombieHit, 2026-11-21) 취소: 아이템 안 줄어듦, "회복 중단" 토스트, 소리 멈춤. 죽어도 취소
 ///  - 소리: ConsumableData.useSound를 SFX 믹서 그룹으로 (설정 메뉴 효과음 볼륨 적용)
 /// 핫바(3~5키·클릭)와 인벤토리 "사용" 모두 여기를 거침.
 /// </summary>
@@ -95,7 +95,9 @@ public class ConsumableUseController : MonoBehaviour
         done?.Invoke();
     }
 
-    void OnHurt() => Cancel("회복 중단");
+    // void OnHurt() => Cancel("회복 중단"); // (이전) 어떤 피해든 취소 → 갈증 피해로 물을 못 마시는 문제
+    // (2026-11-21) 좀비에게 맞았을 때만 취소. 갈증·배고픔·불길·폭발 피해로는 끊기지 않음
+    void OnHurt() { if (health != null && health.IsZombieHit) Cancel("회복 중단"); }
     void OnDied() => Cancel(null);
 
     /// <summary>사용 취소 (아이템 소비 X). message가 있으면 경고 토스트</summary>

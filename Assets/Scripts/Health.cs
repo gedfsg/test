@@ -81,6 +81,20 @@ public class Health : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// (2026-11-21) 지금 처리 중인 피해가 좀비 공격인지. onHurt 리스너(회복템 사용 취소 등)가 읽음.
+    /// 갈증·배고픔·불길 같은 피해로는 먹고 마시기가 끊기지 않게 하려고 구분함
+    /// </summary>
+    public bool IsZombieHit { get; private set; }
+
+    /// <summary>좀비 공격 피해 (ZombieController가 호출). 나머지는 TakeDamage와 같음</summary>
+    public void TakeZombieHit(float amount)
+    {
+        IsZombieHit = true;
+        try { TakeDamage(amount); }
+        finally { IsZombieHit = false; }
+    }
+
     public void TakeDamage(float amount, bool isCritical = false)
     {
         if (isInvincible) return; // 무적 (구르기): 피해/데미지 숫자/피격 반응 전부 없음
