@@ -53,6 +53,13 @@ public class CrosshairUI : MonoBehaviour
     [Tooltip("무기를 들고 있지 않을 때의 색.")]
     public Color noWeaponColor = new Color(0.6f, 0.6f, 0.6f, 0.6f);
 
+    [Header("회색 조준선 테두리 (2026-11-22) - 피드백 '도끼 들고 있을 때 회색 커서가 잘 안 보임'")]
+    [Tooltip("총이 아닐 때(도끼·맨손 = noWeaponColor 회색) 조준선에 두르는 테두리 색")]
+    public Color noWeaponOutlineColor = new Color(0.9f, 0.12f, 0.12f, 1f);
+    [Tooltip("테두리 두께 (px)")]
+    public float noWeaponOutlineWidth = 2f;
+    private Outline noWeaponOutline;
+
     [Tooltip("켜면 구간이 바뀔 때마다 콘솔에 거리/구간을 출력 (디버그용).")]
     public bool debugLog = false;
 
@@ -86,6 +93,15 @@ public class CrosshairUI : MonoBehaviour
 
         targetColor = noWeaponColor;
         if (crosshairGraphic != null) crosshairGraphic.color = targetColor;
+
+        // (2026-11-22) 회색 조준선용 빨간 테두리 (UI Outline: 같은 모양을 상하좌우로 밀어 빨갛게 한 번 더 그림). 총을 들면 끔
+        if (crosshairGraphic != null)
+        {
+            noWeaponOutline = crosshairGraphic.gameObject.AddComponent<Outline>();
+            noWeaponOutline.effectColor = noWeaponOutlineColor;
+            noWeaponOutline.effectDistance = new Vector2(noWeaponOutlineWidth, -noWeaponOutlineWidth);
+            noWeaponOutline.useGraphicAlpha = false; // 회색은 반투명(0.6)이어도 테두리는 진하게
+        }
 
         inventoryUI = FindFirstObjectByType<InventoryUI>(FindObjectsInactive.Include);
     }
@@ -187,6 +203,7 @@ public class CrosshairUI : MonoBehaviour
         if (crosshairGraphic == null) return;
 
         targetColor = EvaluateColor();
+        if (noWeaponOutline != null) { var w = GetActiveWeapon(); noWeaponOutline.enabled = w == null || w.weaponData == null; } // 회색 조준선일 때만
 
         crosshairGraphic.color = colorLerpSpeed > 0f
             ? Color.Lerp(crosshairGraphic.color, targetColor, colorLerpSpeed * Time.deltaTime)
