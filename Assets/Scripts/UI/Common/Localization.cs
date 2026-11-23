@@ -76,6 +76,9 @@ public static class Localization
         { "마우스 민감도", "Mouse Sensitivity" },
         { "카메라 회전", "Camera Rotation" },
         { "화면 흔들림", "Screen Shake" },
+        { "튜토리얼", "Tutorial" },                   // (2026-11-23) 설정 > 게임플레이 (SettingsPanel이 런타임에 추가)
+        { "튜토리얼 다시 보기", "Replay Tutorial" },
+        { "다시 보기", "Replay" },
         { "그래픽", "Graphics" },
         { "해상도", "Resolution" },
         { "화면 모드", "Display Mode" },

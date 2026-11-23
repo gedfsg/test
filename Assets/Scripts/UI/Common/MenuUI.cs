@@ -21,8 +21,11 @@ public static class MenuUI
     public static bool DeathShown;
     /// <summary>탈출 헬기 컷신 중 (HelicopterCutscene) - 조작·일시정지·인벤토리 막음</summary>
     public static bool CutsceneActive;
+    /// <summary>(2026-11-23) 튜토리얼 말풍선이 떠 있음 (TutorialManager) - 조작·일시정지 막음, Esc는 말풍선 스킵</summary>
+    public static bool TutorialOpen;
     /// <summary>게임 조작을 막는 메뉴가 떠 있음 (커서를 화살표로 - CrosshairUI)</summary>
-    public static bool BlockingOpen => PauseOpen || DeathShown || CutsceneActive;
+    // public static bool BlockingOpen => PauseOpen || DeathShown || CutsceneActive; // (이전)
+    public static bool BlockingOpen => PauseOpen || DeathShown || CutsceneActive || TutorialOpen;
     /// <summary>인벤토리 창이 열려 있음 (InventoryUI가 알려줌)</summary>
     public static bool InventoryOpen;
     /// <summary>플레이어 조작(이동·사격·핫바·손전등·카메라)을 막아야 하는지: 메뉴 또는 인벤토리가 열림</summary>
@@ -40,7 +43,7 @@ public static class MenuUI
         SceneFader.Load(scene, () =>
         {
             Time.timeScale = 1f;
-            PauseOpen = DeathShown = InventoryOpen = CutsceneActive = false;
+            PauseOpen = DeathShown = InventoryOpen = CutsceneActive = TutorialOpen = false;
         });
     }
 
@@ -63,7 +66,7 @@ public static class MenuUI
 
     static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        PauseOpen = DeathShown = InventoryOpen = CutsceneActive = false;
+        PauseOpen = DeathShown = InventoryOpen = CutsceneActive = TutorialOpen = false;
         if (!WorldDecor.IsGameScene) return; // 학습장(더미 Player 태그)·메인 메뉴 제외
         var player = GameObject.FindWithTag("Player");
         if (player == null || player.GetComponent<Health>() == null) return;

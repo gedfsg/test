@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 44e6a3181781c51478091150a9cc1695, type: 3}
+  m_Name: 23_night
+  m_EditorClassIdentifier: Assembly-CSharp::TutorialStep
+  stepId: night
+  dialogueText: "\uACE7 \uBC24\uC774\uC5D0\uC694 \u2014 \uC880\uBE44\uAC00 \uB9CE\uC544\uC9C0\uACE0
+    \uB354 \uBA40\uB9AC\uC11C \uC54C\uC544\uCC44\uC694\n<color=#FFD700><b>T</b></color>\uB85C
+    \uC190\uC804\uB4F1\uC744 \uCF1C\uC138\uC694"
+  dialogueTextEn: "Night is coming \u2014 more zombies, and they notice you from
+    farther away\nPress <color=#FFD700><b>T</b></color> for the flashlight"
+  discoveryType: 22
+  targetTag: 
+  spotlightRadius: 4.5
+  order: 23

@@ -75,6 +75,8 @@ public class SettingsPanel : MonoBehaviour
         if (defaultsButton != null) defaultsButton.onClick.AddListener(RestoreDefaults);
         if (applyButton != null) applyButton.onClick.AddListener(ApplyNow);
 
+        AddTutorialRows(); // (2026-11-23) 게임플레이 카드에 튜토리얼 ON/OFF + 다시 보기 (언어 등록 전에 만들어야 번역됨)
+
         // 언어: 패널 글자 등록 + 적용으로 언어가 바뀌면 드롭다운 목록도 다시 채움
         Localization.Register(gameObject);
         Localization.Changed += OnLanguageChanged;
@@ -120,6 +122,107 @@ public class SettingsPanel : MonoBehaviour
         var sm = SettingsManager.Instance;
         working = sm != null ? sm.Current.Clone() : SettingsManager.Defaults();
         Fill();
+        SetToggle(tutorialToggle, TutorialManager.Enabled);
+    }
+
+    // ── 튜토리얼 (2026-11-23) ────────────────────────
+    // 프리팹(MenuUIBuilder)을 다시 빌드하지 않고 런타임에 게임플레이 카드를 3줄 → 5줄로 다시 배치하고 2줄을 추가.
+    // 값은 저장하지 않음 (세션 기준 - TutorialManager): 누르는 즉시 반영, "적용"과 무관
+    Toggle tutorialToggle;
+
+    void AddTutorialRows()
+    {
+        var gp = transform.Find("Content/Gameplay") as RectTransform;
+        if (gp == null || screenShake == null || defaultsButton == null) return;
+
+        // 기존 3줄(중심 102/179/256)과 구분선(140/217)을 사운드 카드와 같은 5줄 간격(87/133/179/226/272)으로 올림
+        foreach (RectTransform c in gp)
+        {
+            float top = -c.anchoredPosition.y;
+            if (top < 70f) continue; // 헤더 (제목·아이콘·윗선)
+            float shift;
+            if (c.name == "Line") shift = top < 180f ? 30f : 61f;   // 140→110, 217→156
+            else shift = top < 125f ? 15f : top < 205f ? 46f : 77f;  // 102→87, 179→133, 256→179
+            c.anchoredPosition += new Vector2(0f, shift);
+        }
+        Transform label = null, line = null, switchLabel = null;
+        foreach (Transform c in gp)
+        {
+            if (c.name == "Label" && label == null) label = c;
+            if (c.name == "Line" && -((RectTransform)c).anchoredPosition.y > 70f) line = c;
+            if (c.name == "SwitchLabel") switchLabel = c;
+        }
+        if (label == null || line == null || switchLabel == null) return;
+
+        // 구분선 2개 (202, 249)
+        foreach (float y in new[] { 202f, 249f }) SetTop(Instantiate(line, gp), y);
+
+        // 4줄: 튜토리얼 ON/OFF (화면 흔들림 스위치 복제)
+        SetText(SetTop(Instantiate(label, gp), 226f - 17.6f), "튜토리얼");
+        var sw = SetTop(Instantiate(screenShake.transform, gp), 226f - 14f);
+        var swLabel = SetTop(Instantiate(switchLabel, gp), 226f - 14.4f);
+        var swComp = sw.GetComponent<UIToggleSwitch>();
+        if (swComp != null) swComp.stateLabel = swLabel.GetComponent<TextMeshProUGUI>(); // 복제본은 원래 라벨을 가리키므로 새 라벨로
+        tutorialToggle = sw.GetComponent<Toggle>();
+        tutorialToggle.onValueChanged.RemoveAllListeners();
+        tutorialToggle.onValueChanged.AddListener(v =>
+        {
+            TutorialManager.Enabled = v;
+            if (swComp != null) swComp.Refresh();
+        });
+
+        // 5줄: 튜토리얼 다시 보기 (기본값 복원 버튼 복제, 작게)
+        SetText(SetTop(Instantiate(label, gp), 272f - 17.6f), "튜토리얼 다시 보기");
+        var btn = Instantiate(defaultsButton.transform, gp) as RectTransform;
+        btn.name = "TutorialReplayButton";
+        btn.anchorMin = btn.anchorMax = btn.pivot = new Vector2(0f, 1f);
+        btn.sizeDelta = new Vector2(150f, 34f);
+        SetTop(btn, 272f - 17f).anchoredPosition = new Vector2(570f, btn.anchoredPosition.y);
+        var ub = btn.GetComponent<UIButton>();
+        if (ub != null && ub.label != null)
+        {
+            SetText(ub.label.transform, "다시 보기");
+            ub.label.enableAutoSizing = false;
+            ub.label.fontSize = 18f;
+            ub.label.alignment = TextAlignmentOptions.Center;
+            var lr = ub.label.rectTransform; // 버튼 전체에 맞춰 가운데
+            lr.anchorMin = Vector2.zero; lr.anchorMax = Vector2.one; lr.pivot = new Vector2(0.5f, 0.5f);
+            lr.offsetMin = lr.offsetMax = Vector2.zero;
+            ub.label.margin = Vector4.zero;
+        }
+        var b = btn.GetComponent<Button>();
+        b.onClick.RemoveAllListeners();
+        b.onClick.AddListener(() =>
+        {
+            TutorialManager.ResetSeen();
+            SetToggle(tutorialToggle, TutorialManager.Enabled);
+            if (ub != null && ub.label != null) StartCoroutine(FlashLabel(ub.label, "다시 보기"));
+        });
+    }
+
+    static RectTransform SetTop(Transform t, float top)
+    {
+        var rt = (RectTransform)t;
+        rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, -top);
+        return rt;
+    }
+
+    static void SetText(Transform t, string s)
+    {
+        var tmp = t.GetComponent<TextMeshProUGUI>();
+        if (tmp == null) return;
+        var lt = tmp.GetComponent<LocalizedText>();
+        // 복제 원본 글자를 기억하고 있으므로 지움 → Register가 새로 붙임 (Destroy는 프레임 끝이라 바로 뒤 Register가 옛 글자로 되돌림)
+        if (lt != null) DestroyImmediate(lt);
+        tmp.text = s;
+    }
+
+    // 눌렀다는 표시: "초기화됨" 1초
+    System.Collections.IEnumerator FlashLabel(TextMeshProUGUI label, string original)
+    {
+        label.text = Localization.IsEnglish ? "Reset!" : "초기화됨";
+        yield return new WaitForSecondsRealtime(1f);
+        label.text = Localization.T(original);
     }
 
     public void Close()

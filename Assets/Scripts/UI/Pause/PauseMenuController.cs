@@ -51,6 +51,7 @@ public class PauseMenuController : MonoBehaviour
         if (kb == null || !kb.escapeKey.wasPressedThisFrame) return;
         if (MenuUI.DeathShown) return; // 사망 후엔 생존 종료 화면만
         if (MenuUI.CutsceneActive) return; // 탈출 컷신 중엔 일시정지 안 됨
+        if (MenuUI.TutorialOpen) return;   // (2026-11-23) 튜토리얼 말풍선 중 Esc = 말풍선 스킵 (TutorialManager)
         if (!IsOpen && ShopUI.IsOpen) { ShopUI.Close(); return; } // 상점 창이 열려 있으면 Esc는 상점 닫기
 
         if (!IsOpen) Open();

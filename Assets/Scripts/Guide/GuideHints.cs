@@ -39,8 +39,13 @@ public class GuideHints : MonoBehaviour
 
     static void OnSceneLoaded(Scene s, LoadSceneMode m) => TryCreate();
 
+    /// <summary>(2026-11-23) 화면 위쪽 안내 블록 끔 → 튜토리얼 스포트라이트(TutorialManager)로 대체.
+    /// 문구는 TutorialStepBuilder로 옮겨 원문 그대로 씀. 다시 켜려면 true로</summary>
+    public static bool UseTopHintBlock = false;
+
     static void TryCreate()
     {
+        if (!UseTopHintBlock) return;
         if (FindFirstObjectByType<PlayerController>() == null) return;
         if (FindFirstObjectByType<ZombieSpawner>(FindObjectsInactive.Include) == null) return;   // 게임 씬에서만
         if (FindFirstObjectByType<GuideHints>() != null) return;
