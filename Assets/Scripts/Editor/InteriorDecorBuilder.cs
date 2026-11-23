@@ -1224,6 +1224,7 @@ public static class InteriorDecorBuilder
     {
         if (EnsureSchoolEnterable() == null) return;
         SchoolOneFloor.Apply();      // 이미 했으면 건너뜀
+        SchoolOneFloor.CutPassages(); // (2026-11-24) 교실 칸막이마다 옆 통로 (이미 있으면 건너뜀)
         OpenClassroomDoors();
         Run("School", "Buildings/Enterable_School", 16.4f, 0f, c =>
         {
@@ -1236,6 +1237,9 @@ public static class InteriorDecorBuilder
             };
             int i = 0;
             foreach (var r in rooms) { c.Door(r.door, zBack); Classroom(c, r.x0, r.x1, r.door, zBack, zFront, i++); }
+            // 옆 통로 양쪽 1.5m는 비워 둠 (검사가 가구를 밀어냄)
+            foreach (var w in SchoolOneFloor.PartitionWalls)
+                c.Door((w.x0 + w.x1) * 0.5f, (SchoolOneFloor.PassageZ0 + SchoolOneFloor.PassageZ1) * 0.5f);
 
             // D 보건실 (옛 계단실 - 복도 쪽이 뚫려 있어 문 대신 가운데를 비워 둠)
             c.Door(-278.8f, zBack);
@@ -1269,6 +1273,33 @@ public static class InteriorDecorBuilder
             c.P("Hallway", "blood", -283.0f, 134.5f, 60f);
             c.Light("Lights", -298f, 134.5f, 2.8f);
             c.Light("Lights", -270f, 134.5f, 2.8f);
+
+            // (2026-11-24) 양 끝 큰 방 (옆 통로로 연결, 8 x 26m): 서쪽 = 창고, 동쪽 = 도서실
+            // 서쪽 창고 x -316.1~-308.0, z 140.2~166.7
+            c.PW("Storage", "locker", -315.4f, 142.0f, 90f, "W");
+            c.PW("Storage", "locker", -315.4f, 143.2f, 90f, "W");
+            c.PW("Storage", "bookcaseClosed", -315.4f, 150.0f, 90f, "W");
+            c.PW("Storage", "bookcaseClosed", -315.4f, 152.5f, 90f, "W");
+            c.P("Storage", "kBoxClosed", -313.0f, 157.0f, 15f);
+            c.P("Storage", "kBoxClosed", -311.8f, 157.6f, -20f);
+            c.P("Storage", "kBoxOpen", -312.4f, 159.4f, 40f);
+            c.PW("Storage", "kBoxClosed", -309.0f, 165.5f, 0f, "NE");
+            c.PW("Storage", "kBoxClosed", -315.0f, 165.5f, 10f, "NW");
+            c.P("Storage", "trashcan", -309.0f, 141.0f, 0f);
+            c.P("Storage", "blood", -312.0f, 153.0f, 80f);
+            c.Light("Lights", -312f, 146f); c.Light("Lights", -312f, 160f);
+            // 동쪽 도서실 x -249.7~-241.8, z 140.1~166.7
+            foreach (var z in new[] { 149.0f, 152.5f, 156.0f, 159.5f })
+                c.PW("Library", "bookcaseWide", -242.6f, z, 270f, "E");
+            c.P("Library", "table", -246.5f, 151.5f, 0f);
+            c.P("Library", "chair", -246.5f, 150.6f, 0f);
+            c.P("Library", "chair", -246.5f, 152.4f, 180f, new Vector3(0, 0, 90));
+            c.P("Library", "table", -246.5f, 158.0f, 0f);
+            c.P("Library", "chair", -246.5f, 157.1f, 0f);
+            c.P("Library", "books", -247.8f, 154.6f, 30f);
+            c.P("Library", "books", -244.2f, 162.5f, -50f);
+            c.PW("Library", "plant", -248.8f, 165.8f, 0f, "NW");
+            c.Light("Lights", -246f, 146f); c.Light("Lights", -246f, 160f);
         });
     }
 

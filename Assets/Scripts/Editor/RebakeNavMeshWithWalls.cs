@@ -159,6 +159,8 @@ public static class RebakeNavMeshWithWalls
         int linked = 0, failed = 0;
         foreach (var bi in Object.FindObjectsByType<BuildingInterior>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
         {
+            // (2026-11-24) 수동 문 건물(학교)은 벽 콜라이더가 없어 부모의 다른 건물 문을 잘못 집음 + 트리거 중심이 막힌 뒤쪽 홀이라 "끊김" 오판 → 건너뜀
+            if (bi.useManualDoor) continue;
             var wall = bi.GetComponentInChildren<BuildingWallCollider>();
             if (wall == null && bi.transform.parent != null) wall = bi.transform.parent.GetComponentInChildren<BuildingWallCollider>();
             if (wall == null || !wall.hasDoor) continue;

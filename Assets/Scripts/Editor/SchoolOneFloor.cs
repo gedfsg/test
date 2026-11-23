@@ -140,6 +140,187 @@ public static class SchoolOneFloor
         log?.Add("계단 구멍 덮개 RoofPatch_StairWell 추가");
     }
 
+    // ── (2026-11-24) 교실 옆 통로 ──────────────────────
+    // 교실 줄(z 140.2~150.4)의 칸막이 벽(레이 실측 x 면 쌍). 사용자: "교실이 세로로 길고 양옆으로 못 간다" → 칸막이마다 통로 구멍
+    public static readonly (float x0, float x1)[] PartitionWalls =
+    {
+        (-299.6f, -299.1f), (-291.2f, -290.6f), (-282.7f, -282.2f), (-275.4f, -274.9f), (-267.0f, -266.5f), (-258.6f, -258.1f),
+        (-308.0f, -307.5f), (-250.2f, -249.7f),   // 양 끝 큰 방(서쪽 x -316.1~-308.0, 동쪽 -249.7~-241.8, z 140~166.7) - 원래 문이 닫혀 못 들어가던 방
+    };
+    // 실내 판정 트리거: 교실 줄 x -316~-250, z 140~151 → 양 끝 방 전체가 들어가게 x -316.6~-241.4, z 140~167
+    static readonly Bounds SchoolTrigger = new Bounds(new Vector3(-279f, 18.8f, 153.5f), new Vector3(75.2f, 5f, 27f));
+    public const float PassageZ0 = 144.3f, PassageZ1 = 146.7f;   // 통로 폭 2.4m (책상 줄 사이, 벽에서 책상까지 약 1.2m 비어 있음)
+    const float PassageY0 = 16.6f, PassageY1 = 20.5f;            // 바닥 윗면 16.5 바로 위부터 (16.3이면 바닥 메시까지 뚫림) ~ 높이 4m
+
+    [MenuItem("Tools/Interior/School Side Passages (교실 옆 통로)")]
+    public static void CutPassages()
+    {
+        if (EditorApplication.isPlaying) { Debug.LogWarning("[School1F] Play 모드에서는 실행 불가"); return; }
+        var school = GameObject.Find(SchoolPath);
+        if (school == null) return;
+        if (school.transform.Find("_SchoolPassages") != null) { Debug.Log("[School1F] 통로가 이미 있음 - 건너뜀"); return; }
+        var model = school.transform.Find("scene (2)");
+        Directory.CreateDirectory(MeshDir);
+
+        // 트리거를 양 끝 방까지 넓힘 (안 넓히면 끝 방에 들어가도 지붕이 안 걷힘)
+        var bc = school.GetComponent<BoxCollider>();
+        if (bc != null)
+        {
+            Undo.RecordObject(bc, "School Passages");
+            bc.center = school.transform.InverseTransformPoint(SchoolTrigger.center);
+            bc.size = SchoolTrigger.size;
+        }
+
+        var boxes = new List<Bounds>();
+        foreach (var w in PartitionWalls)
+        {
+            var b = new Bounds();
+            b.SetMinMax(new Vector3(w.x0 - 0.15f, PassageY0, PassageZ0), new Vector3(w.x1 + 0.15f, PassageY1, PassageZ1));
+            boxes.Add(b);
+        }
+
+        var log = new List<string>();
+        Material wallMat = null;
+        foreach (var r in model.GetComponentsInChildren<MeshRenderer>(true))
+        {
+            if (!r.gameObject.activeInHierarchy) continue;
+            bool hit = false;
+            foreach (var bx in boxes) if (r.bounds.Intersects(bx)) { hit = true; break; }
+            if (!hit) continue;
+            var mf = r.GetComponent<MeshFilter>();
+            var src = mf.sharedMesh;
+            var cutMesh = CutBoxes(src, r.transform, boxes, src.name + "_Passages");
+            if (cutMesh == src) continue; // 실제로 걸린 면 없음
+            if (wallMat == null && r.name.Contains("FrontColor")) wallMat = r.sharedMaterial;
+            Undo.RecordObject(mf, "School Passages");
+            mf.sharedMesh = cutMesh;
+            var mc = r.GetComponent<MeshCollider>();
+            if (mc != null && mc.sharedMesh != null)
+            {
+                Undo.RecordObject(mc, "School Passages");
+                mc.sharedMesh = mc.sharedMesh == src ? cutMesh : CutBoxes(mc.sharedMesh, r.transform, boxes, mc.sharedMesh.name + "_Passages");
+            }
+            log.Add($"{r.name}: {src.vertexCount} → {cutMesh.vertexCount}정점");
+        }
+
+        // 구멍 옆면·윗면 마감 (벽 속이 비어 보이지 않게, 충돌 없음)
+        var mark = new GameObject("_SchoolPassages");
+        Undo.RegisterCreatedObjectUndo(mark, "School Passages");
+        mark.transform.SetParent(school.transform, false);
+        foreach (var w in PartitionWalls)
+        {
+            float t = w.x1 - w.x0, cx = (w.x0 + w.x1) * 0.5f, h = PassageY1 - 16.5f;
+            Plate(mark.transform, wallMat, new Vector3(cx, 16.5f + h * 0.5f, PassageZ0), new Vector3(t, h, 0.04f));
+            Plate(mark.transform, wallMat, new Vector3(cx, 16.5f + h * 0.5f, PassageZ1), new Vector3(t, h, 0.04f));
+            Plate(mark.transform, wallMat, new Vector3(cx, PassageY1, (PassageZ0 + PassageZ1) * 0.5f), new Vector3(t, 0.04f, PassageZ1 - PassageZ0));
+        }
+        AssetDatabase.SaveAssets();
+        EditorSceneManager.MarkSceneDirty(school.scene);
+        Debug.Log($"[School1F] 교실 옆 통로 {PartitionWalls.Length}곳\n" + string.Join("\n", log) + "\n→ 학교 가구 다시 배치 + NavMesh 다시 굽기 필요");
+    }
+
+    static void Plate(Transform parent, Material mat, Vector3 pos, Vector3 size)
+    {
+        var p = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        Object.DestroyImmediate(p.GetComponent<Collider>());
+        p.name = "PassageTrim";
+        p.transform.SetParent(parent, true);
+        p.transform.position = pos;
+        p.transform.localScale = size;
+        if (mat != null) p.GetComponent<MeshRenderer>().sharedMaterial = mat;
+    }
+
+    /// <summary>상자들(월드) 안에 드는 면을 정확히 잘라냄: 삼각형을 상자 면 6개로 차례로 나눠 바깥 조각은 남기고 안쪽 조각만 버림</summary>
+    static Mesh CutBoxes(Mesh src, Transform tf, List<Bounds> boxes, string name)
+    {
+        string path = $"{MeshDir}/{name}.asset";
+        var verts = src.vertices; var norms = src.normals; var uvs = src.uv; var tans = src.tangents; var cols = src.colors;
+        bool hasN = norms.Length == verts.Length, hasUV = uvs.Length == verts.Length, hasT = tans.Length == verts.Length, hasC = cols.Length == verts.Length;
+        var l2w = tf.localToWorldMatrix;
+        var w2l = tf.worldToLocalMatrix;
+        V Get(int i) => new V { p = verts[i], n = hasN ? norms[i] : Vector3.up, uv = hasUV ? uvs[i] : Vector2.zero, t = hasT ? tans[i] : Vector4.zero, c = hasC ? cols[i] : Color.white };
+        V Lerp(V a, V b, float k) => new V { p = Vector3.Lerp(a.p, b.p, k), n = Vector3.Lerp(a.n, b.n, k).normalized, uv = Vector2.Lerp(a.uv, b.uv, k), t = Vector4.Lerp(a.t, b.t, k), c = Color.Lerp(a.c, b.c, k) };
+
+        // 다각형을 월드 축 평면(axis, value)으로 나눔: below = 좌표 ≤ value
+        void Split(List<V> poly, int axis, float value, List<V> below, List<V> above)
+        {
+            for (int k = 0; k < poly.Count; k++)
+            {
+                var a = poly[k]; var b = poly[(k + 1) % poly.Count];
+                float da = l2w.MultiplyPoint3x4(a.p)[axis] - value, db = l2w.MultiplyPoint3x4(b.p)[axis] - value;
+                if (da <= 0) below.Add(a); else above.Add(a);
+                if ((da <= 0) != (db <= 0)) { var m = Lerp(a, b, da / (da - db)); below.Add(m); above.Add(m); }
+            }
+        }
+
+        var outV = new List<V>();
+        var subTris = new List<List<int>>();
+        bool touched = false;
+        void Emit(List<V> poly, List<int> list)
+        {
+            if (poly.Count < 3) return;
+            int bi = outV.Count; outV.AddRange(poly);
+            for (int k = 1; k + 1 < poly.Count; k++) { list.Add(bi); list.Add(bi + k); list.Add(bi + k + 1); }
+        }
+
+        for (int s = 0; s < src.subMeshCount; s++)
+        {
+            var tris = src.GetTriangles(s);
+            var list = new List<int>();
+            for (int i = 0; i < tris.Length; i += 3)
+            {
+                var pieces = new List<List<V>> { new List<V> { Get(tris[i]), Get(tris[i + 1]), Get(tris[i + 2]) } };
+                foreach (var box in boxes)
+                {
+                    var next = new List<List<V>>();
+                    foreach (var poly in pieces)
+                    {
+                        var wb = new Bounds(l2w.MultiplyPoint3x4(poly[0].p), Vector3.zero);
+                        foreach (var v in poly) wb.Encapsulate(l2w.MultiplyPoint3x4(v.p));
+                        if (!wb.Intersects(box)) { next.Add(poly); continue; }
+                        touched = true;
+                        // 상자 면 6개로 차례로 잘라 바깥 조각은 남기고, 계속 안쪽 조각을 다음 면으로
+                        var inside = poly;
+                        for (int axis = 0; axis < 3 && inside.Count >= 3; axis++)
+                        {
+                            var lo = new List<V>(); var hi = new List<V>();
+                            Split(inside, axis, box.min[axis], lo, hi);
+                            if (lo.Count >= 3) next.Add(lo);
+                            inside = hi;
+                            if (inside.Count < 3) break;
+                            lo = new List<V>(); hi = new List<V>();
+                            Split(inside, axis, box.max[axis], lo, hi);
+                            if (hi.Count >= 3) next.Add(hi);
+                            inside = lo;
+                        }
+                        // inside(상자 안 조각)는 버림
+                    }
+                    pieces = next;
+                }
+                foreach (var poly in pieces) Emit(poly, list);
+            }
+            subTris.Add(list);
+        }
+        if (!touched) return src;   // 상자에 걸린 면 없음 → 원본 그대로 (에셋 안 만듦)
+
+        var mesh = new Mesh { name = name };
+        if (outV.Count > 65000) mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+        var pArr = new Vector3[outV.Count]; var nArr = new Vector3[outV.Count]; var uArr = new Vector2[outV.Count]; var tArr = new Vector4[outV.Count]; var cArr = new Color[outV.Count];
+        for (int i = 0; i < outV.Count; i++) { pArr[i] = outV[i].p; nArr[i] = outV[i].n; uArr[i] = outV[i].uv; tArr[i] = outV[i].t; cArr[i] = outV[i].c; }
+        mesh.vertices = pArr;
+        if (hasN) mesh.normals = nArr;
+        if (hasUV) mesh.uv = uArr;
+        if (hasT) mesh.tangents = tArr;
+        if (hasC) mesh.colors = cArr;
+        mesh.subMeshCount = subTris.Count;
+        for (int s = 0; s < subTris.Count; s++) mesh.SetTriangles(subTris[s], s);
+        mesh.RecalculateBounds();
+        var existing = AssetDatabase.LoadAssetAtPath<Mesh>(path);
+        if (existing != null) { EditorUtility.CopySerialized(mesh, existing); return existing; }
+        AssetDatabase.CreateAsset(mesh, path);
+        return mesh;
+    }
+
     static bool InParent(Transform t, string namePart)
     {
         for (; t != null; t = t.parent) if (t.name.StartsWith(namePart)) return true;
