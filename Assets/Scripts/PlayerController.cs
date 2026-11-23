@@ -725,6 +725,10 @@ public class PlayerController : MonoBehaviour
     {
         if (consumable == null || isDead) return false;
         if (consumableUser == null) consumableUser = gameObject.AddComponent<ConsumableUseController>();
+        // (2026-11-24) 사용 중에 아이템을 다시 쓰려 하면(같은 키·가방 "사용") = 취소. 아이템은 줄지 않음
+        if (consumableUser.IsUsing) { consumableUser.Cancel("사용 취소"); return false; }
+        // (2026-11-24) 체력·포만감·수분이 이미 가득이면 못 먹음 (회복할 게 없는 아이템 낭비 방지)
+        if (!IsConsumableUseful(consumable, out string fullMsg)) { PickupFeedbackUI.Instance?.ShowWarning(fullMsg); return false; }
         bool started = consumableUser.Begin(consumable, () => { UseConsumable(consumable); consumeOne?.Invoke(); });
         if (started && consumable.useTime > 0f)
         {
@@ -734,6 +738,51 @@ public class PlayerController : MonoBehaviour
             UpperAction(consumable.useTime);
         }
         return started;
+    }
+
+    /// <summary>
+    /// (2026-11-24) 지금 먹으면 의미가 있는지. 이 아이템이 채워 주는 것(체력·수분·포만감·스태미나) 중 하나라도 덜 찼으면 true.
+    /// 버프(이동·공격속도)가 있는 아이템은 늘 true. 아무것도 안 채워 주는 아이템도 true (막을 이유 없음)
+    /// </summary>
+    bool IsConsumableUseful(ConsumableData c, out string fullMessage)
+    {
+        fullMessage = "";
+        if (c.buffType != BuffType.None && c.buffType != BuffType.StaminaRegen) return true;
+        var health = GetComponent<Health>();
+        var needs = GetComponent<SurvivalNeeds>();
+        if (needs == null) needs = FindFirstObjectByType<SurvivalNeeds>();
+        const float Full = 0.999f;
+
+        bool restoresAny = false;
+        string first = null;
+        bool heals = c.healAmount > 0f || c.healPerSecond > 0f;
+        if (heals && health != null && health.GetMaxHealth() > 0f)
+        {
+            restoresAny = true;
+            if (health.GetCurrentHealth() / health.GetMaxHealth() < Full) return true;
+            first ??= "체력이 이미 가득 차 있어요";
+        }
+        if (c.waterAmount > 0f && needs != null)
+        {
+            restoresAny = true;
+            if (needs.WaterNormalized < Full) return true;
+            first ??= "지금은 목마르지 않아요";
+        }
+        if (c.foodAmount > 0f && needs != null)
+        {
+            restoresAny = true;
+            if (needs.FoodNormalized < Full) return true;
+            first ??= "지금은 배가 불러요";
+        }
+        if ((c.staminaAmount > 0f || c.buffType == BuffType.StaminaRegen) && locomotion != null)
+        {
+            restoresAny = true;
+            if (locomotion.GetStaminaNormalized() < Full) return true;
+            first ??= "기력이 이미 가득 차 있어요";
+        }
+        if (!restoresAny) return true;
+        fullMessage = first;
+        return false;
     }
 
     // 맞아서 취소 → 왼손 IK 바로 복구 (상체는 피격 동작이 이어받음)

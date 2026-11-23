@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Sniper Ammo
   m_EditorClassIdentifier: Assembly-CSharp::AmmoData
   itemName: Sniper Ammo
-  icon: {fileID: 0}
+  icon: {fileID: 21300000, guid: 2e3c24f1a1bd7b847bb31b693f756767, type: 3}
   itemType: 4
   rarity: 0
   worldModel: {fileID: 5984373841539416811, guid: 37a9de04d1f90f441b535ca03dee3079, type: 3}

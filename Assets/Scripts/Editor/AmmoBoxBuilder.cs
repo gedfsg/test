@@ -84,6 +84,34 @@ public static class AmmoBoxBuilder
         Debug.Log($"[AmmoBox] 프리팹 {Boxes.Length}개, AmmoData 연결 {linked}개\n" + string.Join("\n", log));
     }
 
+    /// <summary>
+    /// (2026-11-24) 탄약 아이템 아이콘 연결. 4종 모두 icon이 비어 있어서 가방·핫바·상점 칸에 그림이 안 보였음
+    /// → 탄약 HUD와 같은 탄 그림(Resources/HUD/Sprites)을 씀: 권총 BulletP / AR BulletAR / 샷건 ShellSG / 저격 BulletSR
+    /// </summary>
+    [MenuItem("Tools/Items/Assign Ammo Icons")]
+    public static void AssignAmmoIcons()
+    {
+        var icons = new Dictionary<WeaponType, string>
+        {
+            { WeaponType.Pistol, "BulletP" }, { WeaponType.AR, "BulletAR" },
+            { WeaponType.Shotgun, "ShellSG" }, { WeaponType.Sniper, "BulletSR" },
+            { WeaponType.SMG, "BulletP" },   // SMG탄 에셋은 아직 없음 (생기면 권총탄 그림)
+        };
+        var log = new List<string>();
+        foreach (var guid in AssetDatabase.FindAssets("t:AmmoData"))
+        {
+            var ad = AssetDatabase.LoadAssetAtPath<AmmoData>(AssetDatabase.GUIDToAssetPath(guid));
+            if (ad == null || !icons.TryGetValue(ad.weaponType, out var name)) continue;
+            var sprite = AssetDatabase.LoadAssetAtPath<Sprite>($"Assets/Resources/HUD/Sprites/{name}.png");
+            if (sprite == null) { log.Add($"{ad.itemName}: {name} 스프라이트 없음"); continue; }
+            ad.icon = sprite;
+            EditorUtility.SetDirty(ad);
+            log.Add($"{ad.itemName}({ad.weaponType}) ← {name}");
+        }
+        AssetDatabase.SaveAssets();
+        Debug.Log("[AmmoIcons] " + string.Join(" / ", log));
+    }
+
     static void EnsureFolder(string parent, string name)
     {
         if (!AssetDatabase.IsValidFolder(parent + "/" + name)) AssetDatabase.CreateFolder(parent, name);

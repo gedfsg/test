@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: AR Ammo
   m_EditorClassIdentifier: Assembly-CSharp::AmmoData
   itemName: AR Ammo
-  icon: {fileID: 0}
+  icon: {fileID: 21300000, guid: 904195361d86a40448343111f89a35bc, type: 3}
   itemType: 4
   rarity: 0
   worldModel: {fileID: 1639493877501625975, guid: d6a38f308abf6ea4c831170286d8c90b, type: 3}

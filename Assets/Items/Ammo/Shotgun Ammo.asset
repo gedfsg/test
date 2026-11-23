@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Shotgun Ammo
   m_EditorClassIdentifier: Assembly-CSharp::AmmoData
   itemName: Ammo
-  icon: {fileID: 0}
+  icon: {fileID: 21300000, guid: 7380d13672e9fc44294737b49b9d39f7, type: 3}
   itemType: 4
   rarity: 0
   worldModel: {fileID: 3236433098605278296, guid: 6d7371ce09a66fc4490837a55be027ef, type: 3}

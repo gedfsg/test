@@ -153,7 +153,8 @@ public class ConsumableUseController : MonoBehaviour
         labelGo.transform.SetParent(bg.transform, false);
         var label = labelGo.AddComponent<TextMeshProUGUI>();
         if (HudStyle.SemiBold != null) label.font = HudStyle.SemiBold;
-        label.text = "회복 중...";
+        // label.text = "회복 중..."; // (이전)
+        label.text = "사용 중... (다시 누르면 취소)"; // (2026-11-24) 같은 키·가방 "사용"을 다시 누르면 취소 (PlayerController.BeginConsumable)
         label.fontSize = 22f;
         label.color = HudStyle.Text;
         label.alignment = TextAlignmentOptions.Bottom;
