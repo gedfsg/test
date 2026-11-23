@@ -69,7 +69,7 @@ public class PickupItem : MonoBehaviour
         Font ttf = Resources.Load<Font>("H2HDRM");
 #if UNITY_EDITOR
         if (ttf == null)
-            ttf = UnityEditor.AssetDatabase.LoadAssetAtPath<Font>("Assets/Fonts/H2HDRM.TTF");
+            ttf = UnityEditor.AssetDatabase.LoadAssetAtPath<Font>("Assets/Resources/H2HDRM.TTF");
 #endif
 
         if (ttf == null)

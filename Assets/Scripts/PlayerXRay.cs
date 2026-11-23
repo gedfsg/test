@@ -41,7 +41,7 @@ public class PlayerXRay : MonoBehaviour
 
         if (xrayShader == null || stencilShader == null)
         {
-            Debug.LogError("[PlayerXRay] 셰이더 못 찾음. Assets/Shaders/ 폴더의 PlayerXRay.shader & PlayerStencilWriter.shader 확인");
+            Debug.LogError("[PlayerXRay] 셰이더 못 찾음. Assets/Resources/Shaders/ 폴더의 PlayerXRay.shader & PlayerStencilWriter.shader 확인");
             enabled = false;
             return;
         }
