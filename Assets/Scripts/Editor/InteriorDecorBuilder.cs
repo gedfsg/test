@@ -1212,8 +1212,103 @@ public static class InteriorDecorBuilder
         EditorUtility.SetDirty(b);
     }
 
+    // ── (2026-11-24) 학교 1층 다시 꾸미기 (사용자 요청: "1층을 교실처럼 제대로") ──
+    // 먼저 SchoolOneFloor로 2층·계단을 없애고 지붕을 1층 위로 내림. 방 실측(레이 스캔, 1층 바닥 16.5):
+    //   교실 줄 z 140.2~150.4 / 앞 복도 z 128.7~140.2
+    //   A -307.5~-299.6 (문 -305.5) · B -299.1~-291.2 (문 -297.5) · C -290.6~-282.7 (문 -288.5)
+    //   D -282.2~-275.4 (옛 계단실, 복도 쪽이 뚫려 있음) · E -274.9~-267.0 (문 -269.5)
+    //   F -266.5~-258.6 (문 -260.5) · G -258.1~-250.2 (문 -252.5)
+    // A·B·C·E·G = 교실 (학생 책상 3x3 + 교탁 + 칠판 + 뒤쪽 사물함), D = 보건실, F = 교무실, 복도 = 사물함·소품
     [MenuItem("Tools/Interior/Build 5. School (학교)")]
     public static void BuildSchool()
+    {
+        if (EnsureSchoolEnterable() == null) return;
+        SchoolOneFloor.Apply();      // 이미 했으면 건너뜀
+        OpenClassroomDoors();
+        Run("School", "Buildings/Enterable_School", 16.4f, 0f, c =>
+        {
+            const float zFront = 150.4f, zBack = 140.2f;
+            // 교실 5칸 (x 왼쪽 벽, 오른쪽 벽, 문 x)
+            var rooms = new (float x0, float x1, float door)[]
+            {
+                (-307.5f, -299.6f, -305.5f), (-299.1f, -291.2f, -297.5f), (-290.6f, -282.7f, -288.5f),
+                (-274.9f, -267.0f, -269.5f), (-258.1f, -250.2f, -252.5f),
+            };
+            int i = 0;
+            foreach (var r in rooms) { c.Door(r.door, zBack); Classroom(c, r.x0, r.x1, r.door, zBack, zFront, i++); }
+
+            // D 보건실 (옛 계단실 - 복도 쪽이 뚫려 있어 문 대신 가운데를 비워 둠)
+            c.Door(-278.8f, zBack);
+            c.PW("Nurse", "bedSingle", -281.0f, 148.6f, 180f, "NW");
+            c.PW("Nurse", "bedSingle", -276.6f, 148.6f, 180f, "NE");
+            c.PW("Nurse", "medCart", -276.4f, 145.2f, 270f, "E");
+            c.PW("Nurse", "waterCooler", -281.4f, 145.0f, 90f, "W");
+            c.P("Nurse", "blood", -278.8f, 146.0f, 35f);
+            c.Light("Lights", -278.8f, 146.0f);
+
+            // F 교무실
+            c.Door(-260.5f, zBack);
+            c.P("Staffroom", "pcDesk", -264.3f, 145.2f, 180f);
+            c.P("Staffroom", "officeDesk", -261.6f, 144.6f, 0f);
+            c.P("Staffroom", "retroChair", -261.6f, 143.5f, 0f);
+            c.P("Staffroom", "officeDesk", -263.0f, 148.8f, 180f);
+            c.P("Staffroom", "retroChair", -263.0f, 149.9f, 180f);
+            c.PW("Staffroom", "officeDrawer", -259.2f, 147.5f, 270f, "E");
+            c.PW("Staffroom", "waterCooler", -259.2f, 150.0f, 225f, "NE");
+            c.P("Staffroom", "books", -262.0f, 146.6f, 70f);
+            c.Light("Lights", -262.5f, 146.5f);
+
+            // 복도: 교실 문 사이 벽(북쪽)에 사물함, 쓰레기통, 떨어진 책·상자, 핏자국
+            foreach (var x in new[] { -302.0f, -294.0f, -285.5f, -272.0f, -256.0f })
+                c.PW("Hallway", "locker", x, 139.0f, 180f, "N");
+            c.P("Hallway", "trashcan", -300.0f, 138.9f, 0f, default, 1f, null, "N");
+            c.P("Hallway", "trashcan", -265.0f, 138.9f, 0f, default, 1f, null, "N");
+            c.P("Hallway", "books", -288.0f, 134.0f, 120f);
+            c.P("Hallway", "books", -275.5f, 132.5f, 10f);
+            c.P("Hallway", "kBoxClosed", -248.5f, 137.0f, 30f);
+            c.P("Hallway", "blood", -283.0f, 134.5f, 60f);
+            c.Light("Lights", -298f, 134.5f, 2.8f);
+            c.Light("Lights", -270f, 134.5f, 2.8f);
+        });
+    }
+
+    /// <summary>
+    /// (2026-11-24) 교실 한 칸: 앞(북쪽 벽) 칠판 + 교탁(학생 쪽을 봄) / 학생 책상 3열 x 3줄 + 의자(칠판을 봄) /
+    /// 뒤(남쪽 벽, 문 반대편)에 사물함 2개 / 구석에 쓰레기통·화분. 버려진 느낌으로 교실마다 조금씩 다르게(넘어진 의자·떨어진 책)
+    /// </summary>
+    static void Classroom(Ctx c, float x0, float x1, float doorX, float zBack, float zFront, int variant)
+    {
+        float cx = (x0 + x1) * 0.5f;
+        // 앞쪽: 칠판(창문 높이를 피해 1m에서 벽 찾기) + 교탁
+        c.OnWall("Classroom", "blackboard", cx, zFront - 2f, "N", 1f, 0.9f, new Vector3(1.8f, 0.5f, 1f), 1.0f);
+        c.P("Classroom", "officeDesk", cx, zFront - 1.3f, 180f);
+        // 학생 책상 3x3 (열 간격 2.2m, 줄 간격 1.9m) - 의자는 책상 남쪽, 북쪽 칠판을 봄
+        var xs = new[] { cx - 2.2f, cx, cx + 2.2f };
+        var zs = new[] { zFront - 3.6f, zFront - 5.5f, zFront - 7.4f };
+        for (int r = 0; r < zs.Length; r++)
+            for (int k = 0; k < xs.Length; k++)
+            {
+                c.P("Classroom", "desk", xs[k], zs[r], 0f, default, 1f, new Vector3(0.6f, 1f, 0.6f));
+                bool fallen = (r * 3 + k + variant) % 7 == 3;            // 교실마다 한두 개 넘어진 의자
+                if (fallen) c.P("Classroom", "chair", xs[k] + 0.3f, zs[r] - 0.8f, 60f + variant * 25f, new Vector3(0, 0, 90));
+                else c.P("Classroom", "chair", xs[k], zs[r] - 0.55f, 0f);
+            }
+        // 뒤쪽(남쪽 벽): 문이 있는 쪽을 피해서 사물함 2개
+        bool doorWest = doorX < cx;
+        float lx = doorWest ? x1 - 1.0f : x0 + 1.0f;
+        float step = doorWest ? -1.1f : 1.1f;
+        c.PW("Classroom", "locker", lx, zBack + 0.6f, 0f, "S");
+        c.PW("Classroom", "locker", lx + step, zBack + 0.6f, 0f, "S");
+        // 구석 소품
+        c.PW("Classroom", "trashcan", doorWest ? x1 - 0.5f : x0 + 0.5f, zFront - 0.6f, 0f, doorWest ? "NE" : "NW");
+        c.PW("Classroom", "plant", doorWest ? x0 + 0.5f : x1 - 0.5f, zFront - 0.6f, 0f, doorWest ? "NW" : "NE");
+        c.P("Classroom", "books", cx + (variant % 2 == 0 ? 1.1f : -1.1f), zFront - 6.5f, 25f + variant * 40f);
+        if (variant % 2 == 1) c.P("Classroom", "blood", cx - 0.8f, zFront - 4.6f, variant * 50f);
+        c.Light("Lights", cx, (zFront + zBack) * 0.5f);
+    }
+
+    // (이전, 2026-11-20) 2층이 있던 학교 꾸미기 - 2026-11-24 위 BuildSchool로 교체 (메뉴에서 뺌, 참고용으로 남김)
+    public static void BuildSchool_Old20261120()
     {
         if (EnsureSchoolEnterable() == null) return;
         OpenClassroomDoors();
