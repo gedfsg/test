@@ -81,7 +81,10 @@ public class TutorialManager : MonoBehaviour
     const float CheckInterval = 0.25f;
     const float GapAfterClose = 1.0f;     // 말풍선이 닫히고 다음 것까지 최소 간격 (실제 시간)
     const float MinShowTime = 0.35f;      // 뜨자마자 누르던 키로 바로 닫히지 않게
-    const float ZombieNear = 14f, ItemNear = 4.5f, TraderNear = 30f, EntranceNear = 7f, BuildingNear = 20f;
+    const float ZombieNear = 14f, ItemNear = 4.5f, TraderNear = 30f, BuildingNear = 20f;
+    const float BuildingSeen = 18f;       // (2026-11-24) 건물 안내: 입구가 이 거리 안 + 화면 안이면 (시야가 가로 약 17m라 사실상 "보이면")
+    // (2026-11-24) 건물 종류별·주유소 자동 안내 끔 (건물 안내는 처음 보이는 건물 하나만). DiscoveryTrigger 손 배치는 그대로 동작
+    public static bool AutoBuildingTriggers = false;
     const float FeatherMeters = 0.5f;
     const float LowHealthHp = 30f, NeedLow = 30f;
 
@@ -107,6 +110,7 @@ public class TutorialManager : MonoBehaviour
     TutorialStep candStep;
     TutorialOverlay.SpotFn candSpot;
     Object candTarget;
+    string candText;                      // 문구를 바꿔 넣는 단계 (건물 이름 등). null이면 에셋 문구
 
     void Awake()
     {
@@ -155,6 +159,8 @@ public class TutorialManager : MonoBehaviour
         // 1) 말풍선이 떠 있음: SPACE/Enter = 계속, Esc = 스킵
         if (current != null)
         {
+            // (2026-11-24) 어떤 경로로든 상점 창이 열리면 말풍선은 바로 닫음 (겹치지 않게)
+            if (ShopUI.IsOpen) { Close(); return; }
             shownFor += dt;
             if (kb != null && shownFor >= MinShowTime && !overlay.IsAnimating &&
                 (kb.spaceKey.wasPressedThisFrame || kb.enterKey.wasPressedThisFrame || kb.escapeKey.wasPressedThisFrame))
@@ -184,7 +190,7 @@ public class TutorialManager : MonoBehaviour
         if (checkTimer > 0f) return;
         checkTimer = CheckInterval;
 
-        if (FindCandidate()) Open(candStep, candSpot, candTarget);
+        if (FindCandidate()) Open(candStep, candSpot, candTarget, candText);
     }
 
     void FindRefs()
@@ -201,7 +207,7 @@ public class TutorialManager : MonoBehaviour
     }
 
     // ── 열기 / 닫기 ───────────────────────────────
-    void Open(TutorialStep step, TutorialOverlay.SpotFn spot, Object target)
+    void Open(TutorialStep step, TutorialOverlay.SpotFn spot, Object target, string textOverride = null)
     {
         seen.Add(Key(step.stepId));
         current = step;
@@ -212,7 +218,7 @@ public class TutorialManager : MonoBehaviour
         Time.timeScale = 0f;
         MenuUI.RefreshGameplayInput();
         UIAudio.Play(UIAudio.Sound.PanelOpen);
-        overlay.Show(step.Text, spot);
+        overlay.Show(textOverride ?? step.Text, spot);
     }
 
     void Close()
@@ -244,7 +250,54 @@ public class TutorialManager : MonoBehaviour
 
     void Set(TutorialStep step, TutorialOverlay.SpotFn spot, Object target)
     {
-        candStep = step; candSpot = spot; candTarget = target;
+        candStep = step; candSpot = spot; candTarget = target; candText = null;
+    }
+
+    // ── 건물 안내 문구 (2026-11-24) ──────────────────
+    /// <summary>건물 이름 (입구 표시 라벨과 같은 이름: 경찰서·병원·마트·교회·학교·창고·민가·상점·식당·사무실·주유소…)</summary>
+    static string BuildingName(BuildingInterior b)
+    {
+        if (b == null) return "건물";
+        if (MissionPlaces.TryGetByBuilding(b, out var place)) return place.label;     // 미션 장소로 바뀐 건물 (주유소·카페·서점·발전소)
+        if (!string.IsNullOrEmpty(b.markerLabel)) return b.markerLabel;               // 자동 꾸민 테마 (상점·식당·사무실·창고·학교…)
+        return MissionManager.BuildingLabel(LootDatabase.Classify(b));
+    }
+
+    static string InsideText(string name, bool en) => name switch
+    {
+        "경찰서" => en ? "Inside, you may find guns, ammo and key cards for missions." : "안에는 총과 탄약, 미션에 필요한 열쇠 카드가 있을 수 있어요.",
+        "병원" => en ? "Inside, there are lots of healing supplies like bandages and medkits." : "안에는 붕대나 구급상자 같은 회복 물품이 많아요.",
+        "마트" => en ? "Inside, there's plenty of food and water." : "안에는 음식과 물이 많아요.",
+        "창고" => en ? "Inside, you may find supply crates." : "안에는 보급품 상자가 있을 수 있어요.",
+        "학교" => en ? "You can find useful things all around the classrooms." : "교실 곳곳에서 쓸 만한 물건을 찾을 수 있어요.",
+        "민가" => en ? "Inside, you may find food, water and everyday supplies." : "안에는 음식과 물, 생활용품이 있을 수 있어요.",
+        "식당" => en ? "Inside, you may find food and drinks." : "안에는 음식과 마실 것이 있을 수 있어요.",
+        _ => en ? "Inside, you can find crates and items." : "안에 들어가면 상자와 아이템을 찾을 수 있어요.",
+    };
+
+    static string EnglishName(string ko) => ko switch
+    {
+        "경찰서" => "police station", "병원" => "hospital", "마트" => "mart", "교회" => "church", "학교" => "school",
+        "창고" => "warehouse", "민가" => "house", "상점" => "shop", "식당" => "restaurant", "사무실" => "office",
+        "주유소" => "gas station", "카페" => "cafe", "서점" => "bookstore", "발전소" => "power plant", "야영지" => "campsite",
+        _ => "building",
+    };
+
+    /// <summary>받침 있으면 "이", 없으면 "가" (경찰서가 / 병원이)</summary>
+    static string WithSubject(string word)
+    {
+        if (string.IsNullOrEmpty(word)) return word;
+        char last = word[word.Length - 1];
+        bool batchim = last >= 0xAC00 && last <= 0xD7A3 && (last - 0xAC00) % 28 != 0;
+        return word + (batchim ? "이" : "가");
+    }
+
+    static string BuildingText(TutorialStep st, BuildingInterior b)
+    {
+        string name = BuildingName(b);
+        bool en = Localization.IsEnglish;
+        return st.Text.Replace("{building}", en ? EnglishName(name) : WithSubject(name))
+                      .Replace("{inside}", InsideText(name, en));
     }
 
     /// <summary>목록 순서대로 조건을 보고 처음 맞는 것 하나</summary>
@@ -274,11 +327,18 @@ public class TutorialManager : MonoBehaviour
         // 좀비를 본 다음: 조준 자세
         if (Seen(DiscoveryType.Zombie) && Want(DiscoveryType.Aim, out st)) { Set(st, PlayerSpot(st), null); return true; }
 
-        // 건물 입구 (아무 건물이나 7m) / 건물 종류·주유소 (DiscoveryTrigger)
+        // 손으로 붙인 DiscoveryTrigger
         if (ScanTriggers(pos)) return true;
+        // (이전) 아무 건물 입구 7m + 경찰서·병원 등 종류별로 각각 안내
+        // (2026-11-24) 건물 안내는 한 번만: 화면에 처음 보이는 건물 입구 하나를 비추고 "○○ 보이죠? 들어가면 ~가 있어요"
         if (Want(DiscoveryType.BuildingEntrance, out st))
             foreach (var e in entrances)
-                if (e.building != lastTarget && FlatDist(pos, e.focus) < EntranceNear && OnScreen(e.focus)) { Set(st, WorldSpot(e.focus, st.spotlightRadius), e.building); return true; }
+                if (FlatDist(pos, e.focus) < BuildingSeen && OnScreen(e.focus))
+                {
+                    Set(st, WorldSpot(e.focus, st.spotlightRadius), e.building);
+                    candText = BuildingText(st, e.building as BuildingInterior);
+                    return true;
+                }
 
         // 미션 핀 · 상인 (미니맵을 비춤)
         var mm = MissionManager.Instance;
@@ -384,10 +444,12 @@ public class TutorialManager : MonoBehaviour
             else focus.y = refY;
             entrances.Add((focus, b));
 
+            if (!AutoBuildingTriggers) continue;
             string id = BuildingStepId(b);
             if (id == null) continue;
             AddTrigger(b.gameObject, id, BuildingNear, focus);
         }
+        if (!AutoBuildingTriggers) return;
         // 주유소: 거리 장식 주유기 (Street_Decor/GasStation, low_poly_gas_station) + 미션 장소로 정해진 주유소 건물
         foreach (var name in new[] { "GasStation", "low_poly_gas_station" })
         {

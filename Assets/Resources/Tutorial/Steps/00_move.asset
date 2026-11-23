@@ -13,11 +13,16 @@ MonoBehaviour:
   m_Name: 00_move
   m_EditorClassIdentifier: Assembly-CSharp::TutorialStep
   stepId: move
-  dialogueText: "<color=#FFD700><b>WASD</b></color> \uC774\uB3D9\n<color=#FFD700><b>Shift</b></color>
-    \uB2EC\uB9AC\uAE30 \xB7 <color=#FFD700><b>Space</b></color> \uAD6C\uB974\uAE30
-    (\uAD6C\uB974\uB294 \uB3D9\uC548 \uBB34\uC801)"
-  dialogueTextEn: "<color=#FFD700><b>WASD</b></color> move\n<color=#FFD700><b>Shift</b></color>
-    sprint \xB7 <color=#FFD700><b>Space</b></color> roll (invincible while rolling)"
+  dialogueText: "<color=#FFD700><b>WASD</b></color>\uB85C \uAC78\uC5B4 \uB2E4\uB2D0
+    \uC218 \uC788\uC5B4\uC694.\n<color=#FFD700><b>Shift</b></color>\uB97C \uB204\uB974\uACE0
+    \uC788\uC73C\uBA74 \uB2EC\uB9AC\uACE0, <color=#FFD700><b>Space</b></color>\uB97C
+    \uB204\uB974\uBA74 \uAD6C\uB974\uBA74\uC11C \uD53C\uD560 \uC218 \uC788\uC5B4\uC694.
+    \uAD6C\uB974\uB294 \uB3D9\uC548\uC5D0\uB294 \uACF5\uACA9\uC744 \uBC1B\uC9C0 \uC54A\uC544\uC694."
+  dialogueTextEn: 'Use <color=#FFD700><b>WASD</b></color> to walk around.
+
+    Hold
+    <color=#FFD700><b>Shift</b></color> to sprint, and press <color=#FFD700><b>Space</b></color>
+    to roll away. You can''t be hit while rolling.'
   discoveryType: 0
   targetTag: 
   spotlightRadius: 2

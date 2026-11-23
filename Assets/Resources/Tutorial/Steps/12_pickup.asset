@@ -13,12 +13,16 @@ MonoBehaviour:
   m_Name: 12_pickup
   m_EditorClassIdentifier: Assembly-CSharp::TutorialStep
   stepId: pickup
-  dialogueText: "<color=#FFD700><b>F</b></color> \uC90D\uAE30 \xB7 <color=#FFD700><b>I</b></color>
-    \uB610\uB294 <color=#FFD700><b>Tab</b></color> \uAC00\uBC29 \uC5F4\uAE30\n\uAC00\uBC29\uC5D0\uC11C
-    \uC544\uC774\uD15C\uC744 \uC6B0\uD074\uB9AD\uD558\uBA74 \uC0AC\uC6A9\xB7\uC81C\uC791"
-  dialogueTextEn: "<color=#FFD700><b>F</b></color> pick up \xB7 <color=#FFD700><b>I</b></color>
-    / <color=#FFD700><b>Tab</b></color> open bag\nRight-click an item in the bag
-    to use or craft"
+  dialogueText: "\uBC14\uB2E5\uC5D0 \uB5A8\uC5B4\uC9C4 \uBB3C\uAC74\uC740 \uAC00\uAE4C\uC774
+    \uAC00\uC11C <color=#FFD700><b>F</b></color>\uB85C \uC8FC\uC6B8 \uC218 \uC788\uC5B4\uC694.\n<color=#FFD700><b>I</b></color>\uB098
+    <color=#FFD700><b>Tab</b></color>\uC73C\uB85C \uAC00\uBC29\uC744 \uC5F4\uACE0,
+    \uC544\uC774\uD15C\uC744 \uC6B0\uD074\uB9AD\uD558\uBA74 \uC0AC\uC6A9\uD558\uAC70\uB098
+    \uB2E4\uB978 \uBB3C\uAC74\uC744 \uB9CC\uB4E4 \uC218 \uC788\uC5B4\uC694."
+  dialogueTextEn: 'Walk up to items on the ground and press <color=#FFD700><b>F</b></color>
+    to pick them up.
+
+    Open your bag with <color=#FFD700><b>I</b></color> or <color=#FFD700><b>Tab</b></color>,
+    and right-click an item to use it or craft.'
   discoveryType: 7
   targetTag: 
   spotlightRadius: 2

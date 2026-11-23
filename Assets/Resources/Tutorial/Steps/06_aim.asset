@@ -14,8 +14,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TutorialStep
   stepId: aim
   dialogueText: "<color=#FFD700><b>\uC6B0\uD074\uB9AD</b></color>\uC744 \uB204\uB974\uACE0
-    \uC788\uC73C\uBA74 \uC870\uC900 \uC790\uC138"
-  dialogueTextEn: Hold <color=#FFD700><b>Right click</b></color> to aim
+    \uC788\uC73C\uBA74 \uCD1D\uC744 \uACA8\uB204\uB294 \uC790\uC138\uAC00 \uB418\uACE0,
+    \uD654\uBA74\uC774 \uC55E\uC73C\uB85C \uAC00\uAE4C\uC774 \uB2F9\uACA8\uC838\uC694.\n\uBA40\uB9AC
+    \uC788\uB294 \uC880\uBE44\uB97C \uB178\uB9B4 \uB54C \uC368 \uBCF4\uC138\uC694."
+  dialogueTextEn: 'Hold <color=#FFD700><b>Right click</b></color> to raise your gun
+    and pull the view in closer.
+
+    Try it when aiming at zombies far away.'
   discoveryType: 4
   targetTag: 
   spotlightRadius: 2

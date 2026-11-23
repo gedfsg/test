@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 44e6a3181781c51478091150a9cc1695, type: 3}
+  m_Name: 18_fog
+  m_EditorClassIdentifier: Assembly-CSharp::TutorialStep
+  stepId: fog
+  dialogueText: "\uC548\uAC1C\uAC00 \uB07C\uC5C8\uC5B4\uC694. \uC880\uBE44\uAC00
+    \uBA40\uB9AC \uC788\uB294 \uB098\uB97C \uC798 \uBCF4\uC9C0 \uBABB\uD574\uC694.\n\uB300\uC2E0
+    \uB098\uB3C4 \uBA40\uB9AC \uBCF4\uAE30 \uC5B4\uB824\uC6B0\uB2C8 \uAC11\uC790\uAE30
+    \uB098\uD0C0\uB098\uB294 \uC880\uBE44\uB97C \uC870\uC2EC\uD558\uC138\uC694."
+  dialogueTextEn: 'Fog rolled in. Zombies can''t see you from far away.
+
+    But
+    you can''t see far either, so watch out for zombies appearing suddenly.'
+  discoveryType: 24
+  targetTag: 
+  spotlightRadius: 4.5
+  order: 18

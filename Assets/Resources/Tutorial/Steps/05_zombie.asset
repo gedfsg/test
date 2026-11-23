@@ -13,13 +13,14 @@ MonoBehaviour:
   m_Name: 05_zombie
   m_EditorClassIdentifier: Assembly-CSharp::TutorialStep
   stepId: zombie
-  dialogueText: "\uC880\uBE44\uAC00 \uB2E4\uAC00\uC640\uC694! \uAC70\uB9AC\uB97C
-    \uB450\uACE0 \uC3D8\uC138\uC694\n\uCD1D\uC18C\uB9AC\uB294 \uB2E4\uB978 \uC880\uBE44\uB3C4
-    \uBD88\uB7EC\uC694"
-  dialogueTextEn: 'A zombie is coming! Keep your distance and shoot
+  dialogueText: "\uC880\uBE44\uAC00 \uB2E4\uAC00\uC624\uACE0 \uC788\uC5B4\uC694!
+    \uBC14\uC9DD \uBD99\uAE30 \uC804\uC5D0 \uAC70\uB9AC\uB97C \uB450\uACE0 \uC3D8\uB294
+    \uAC8C \uC548\uC804\uD574\uC694.\n\uCD1D\uC18C\uB9AC\uB97C \uB4E4\uC73C\uBA74
+    \uC8FC\uBCC0 \uC880\uBE44\uB4E4\uB3C4 \uBAB0\uB824\uC624\uB2C8 \uC870\uC2EC\uD558\uC138\uC694."
+  dialogueTextEn: 'A zombie is coming! It''s safer to keep your distance and shoot
+    before it gets close.
 
-    Gunshots
-    attract other zombies too'
+    Gunshots draw in nearby zombies too, so be careful.'
   discoveryType: 6
   targetTag: 
   spotlightRadius: 2

@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 44e6a3181781c51478091150a9cc1695, type: 3}
+  m_Name: 22_final_day
+  m_EditorClassIdentifier: Assembly-CSharp::TutorialStep
+  stepId: final_day
+  dialogueText: "\uB4DC\uB514\uC5B4 \uB9C8\uC9C0\uB9C9 \uB0A0\uC774\uC5D0\uC694!
+    \uC9C4\uD589\uB960\uC744 100%\uAE4C\uC9C0 \uCC44\uC6B0\uBA74 \uD5EC\uB9AC\uCF65\uD130\uB85C
+    \uD0C8\uCD9C\uD560 \uC218 \uC788\uC5B4\uC694.\n100%\uAC00 \uB418\uBA74 \uBBF8\uB2C8\uB9F5\uC5D0
+    \uD5EC\uB9AC\uD328\uB4DC\uAC00 \uD45C\uC2DC\uB418\uB2C8, \uADF8\uACF3\uC73C\uB85C
+    \uAC00\uC138\uC694."
+  dialogueTextEn: 'It''s the last day! Fill your progress to 100% to escape by helicopter.
+
+    At
+    100%, the helipad shows up on the minimap. Head there.'
+  discoveryType: 27
+  targetTag: 
+  spotlightRadius: 4.5
+  order: 22

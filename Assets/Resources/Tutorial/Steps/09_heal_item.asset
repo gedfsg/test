@@ -13,9 +13,16 @@ MonoBehaviour:
   m_Name: 09_heal_item
   m_EditorClassIdentifier: Assembly-CSharp::TutorialStep
   stepId: heal_item
-  dialogueText: "\uD68C\uBCF5\uD15C\uC774\uB2E4. \uD56B\uBC14\uC5D0 \uB4F1\uB85D\uD574\uC11C
-    \uC4F0\uC790"
-  dialogueTextEn: A healing item. Put it on the hotbar to use it
+  dialogueText: "\uD68C\uBCF5 \uC544\uC774\uD15C\uC774\uC5D0\uC694. <color=#FFD700><b>F</b></color>\uB85C
+    \uC8FC\uC6CC \uB450\uBA74 \uCCB4\uB825\uC774 \uB5A8\uC5B4\uC84C\uC744 \uB54C
+    \uC4F8 \uC218 \uC788\uC5B4\uC694.\n\uD56B\uBC14 \uCE78\uC5D0 \uB123\uC5B4 \uB450\uBA74
+    \uC22B\uC790\uD0A4\uB85C \uBC14\uB85C \uC4F8 \uC218 \uC788\uACE0, \uCCB4\uB825\uC774
+    \uAC00\uB4DD \uCC3C\uC744 \uB54C\uB294 \uC4F8 \uC218 \uC5C6\uC5B4\uC694."
+  dialogueTextEn: 'A healing item. Pick it up with <color=#FFD700><b>F</b></color>
+    and use it when your health drops.
+
+    Put it on the hotbar to use it with a
+    number key. It can''t be used at full health.'
   discoveryType: 9
   targetTag: 
   spotlightRadius: 2

@@ -13,9 +13,15 @@ MonoBehaviour:
   m_Name: 10_ammo_item
   m_EditorClassIdentifier: Assembly-CSharp::TutorialStep
   stepId: ammo_item
-  dialogueText: "\uD0C4\uC57D\uC774\uB2E4. \uD0C4\uC57D \uC885\uB958\uC5D0 \uB9DE\uAC8C
-    \uC790\uB3D9 \uC7A5\uC804"
-  dialogueTextEn: Ammo. It's loaded automatically by ammo type
+  dialogueText: "\uD0C4\uC57D\uC774\uC5D0\uC694! <color=#FFD700><b>F</b></color>\uB85C
+    \uC8FC\uC6B0\uBA74 \uCD1D \uC885\uB958\uC5D0 \uB9DE\uAC8C \uC608\uBE44 \uD0C4\uC57D\uC73C\uB85C
+    \uC790\uB3D9\uC73C\uB85C \uB4E4\uC5B4\uAC00\uC694.\n\uAD8C\uCD1D\uD0C4\uC740
+    \uAD8C\uCD1D\uC5D0, \uC800\uACA9\uD0C4\uC740 \uC800\uACA9\uCD1D\uC5D0 \uC4F0\uC5EC\uC694."
+  dialogueTextEn: 'Ammo! Pick it up with <color=#FFD700><b>F</b></color> and it''s
+    added to the matching gun''s reserve automatically.
+
+    Pistol rounds go to
+    pistols, sniper rounds to sniper rifles.'
   discoveryType: 10
   targetTag: 
   spotlightRadius: 2

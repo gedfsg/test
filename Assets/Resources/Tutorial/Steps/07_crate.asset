@@ -13,13 +13,17 @@ MonoBehaviour:
   m_Name: 07_crate
   m_EditorClassIdentifier: Assembly-CSharp::TutorialStep
   stepId: crate
-  dialogueText: "<color=#FFD700><b>F</b></color>\uB85C \uC0C1\uC790\uB97C \uC5F4\uC5B4
-    \uBCF4\uC138\uC694\n\uC88B\uC740 \uC0C1\uC790\uC77C\uC218\uB85D \uC88B\uC740
-    \uBB3C\uAC74\uC774 \uB098\uC640\uC694"
-  dialogueTextEn: 'Press <color=#FFD700><b>F</b></color> to open the crate
+  dialogueText: "\uC0C1\uC790\uB97C \uBC1C\uACAC\uD588\uC5B4\uC694! \uAC00\uAE4C\uC774
+    \uAC00\uC11C <color=#FFD700><b>F</b></color>\uB97C \uB204\uB974\uBA74 \uC5F4
+    \uC218 \uC788\uC5B4\uC694.\n\uC88B\uC740 \uC0C1\uC790\uC77C\uC218\uB85D \uC88B\uC740
+    \uBB3C\uAC74\uC774 \uB4E4\uC5B4 \uC788\uC5B4\uC694. \uC5F4 \uB54C \uB098\uB294
+    \uC18C\uB9AC\uC5D0 \uC880\uBE44\uAC00 \uC62C \uC218 \uC788\uC73C\uB2C8 \uC8FC\uBCC0\uC744
+    \uC0B4\uD3B4 \uC8FC\uC138\uC694."
+  dialogueTextEn: 'You found a crate! Get close and press <color=#FFD700><b>F</b></color>
+    to open it.
 
-    Better
-    crates hold better loot'
+    Better crates hold better loot. Opening one can attract zombies,
+    so check your surroundings.'
   discoveryType: 5
   targetTag: 
   spotlightRadius: 2

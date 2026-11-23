@@ -13,11 +13,16 @@ MonoBehaviour:
   m_Name: 11_throwable_item
   m_EditorClassIdentifier: Assembly-CSharp::TutorialStep
   stepId: throwable_item
-  dialogueText: "\uD22C\uCC99\uBB3C. <color=#FFD700><b>\uC88C\uD074\uB9AD</b></color>
-    \uAFB9 \uB20C\uB7EC \uC870\uC900, <color=#FFD700><b>R</b></color>\uB85C \uC218\uB958\uD0C4
-    \uD540 \uBF51\uAE30"
-  dialogueTextEn: Throwable. Hold <color=#FFD700><b>Left click</b></color> to aim,
-    <color=#FFD700><b>R</b></color> to pull a grenade pin
+  dialogueText: "\uC218\uB958\uD0C4\uC774\uB098 \uD654\uC5FC\uBCD1 \uAC19\uC740 \uD22C\uCC99
+    \uBB34\uAE30\uC608\uC694.\n\uC190\uC5D0 \uB4E4\uACE0 <color=#FFD700><b>\uC88C\uD074\uB9AD</b></color>\uC744
+    \uAFB9 \uB204\uB974\uBA74 \uB0A0\uC544\uAC08 \uAE38\uC774 \uBCF4\uC774\uACE0,
+    \uC190\uC744 \uB5BC\uBA74 \uB358\uC838\uC694. \uC218\uB958\uD0C4\uC740 <color=#FFD700><b>R</b></color>\uB85C
+    \uD540\uC744 \uBA3C\uC800 \uBF51\uC544 \uB458 \uC218 \uC788\uC5B4\uC694."
+  dialogueTextEn: 'A throwable, like a grenade or molotov.
+
+    Hold <color=#FFD700><b>Left
+    click</b></color> to see the throw arc and release to throw. Press <color=#FFD700><b>R</b></color>
+    to pull a grenade''s pin early.'
   discoveryType: 11
   targetTag: 
   spotlightRadius: 2

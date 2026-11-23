@@ -10,16 +10,17 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 44e6a3181781c51478091150a9cc1695, type: 3}
-  m_Name: 28_money
+  m_Name: 21_money
   m_EditorClassIdentifier: Assembly-CSharp::TutorialStep
   stepId: money
-  dialogueText: "\uC880\uBE44\uB97C \uC7A1\uC73C\uBA74 \uB3C8\uC774 \uC0DD\uACA8\uC694\n\uC0C1\uC778\uC5D0\uAC8C\uC11C
-    \uD0C4\uC57D\xB7\uD68C\uBCF5\uD15C\xB7\uAC15\uD654\uB97C \uC0B4 \uC218 \uC788\uC5B4\uC694"
-  dialogueTextEn: 'Killing zombies earns money
+  dialogueText: "\uC880\uBE44\uB97C \uC7A1\uC73C\uBA74 \uB3C8\uC744 \uBC8C \uC218
+    \uC788\uC5B4\uC694.\n\uBAA8\uC740 \uB3C8\uC73C\uB85C \uC0C1\uC778\uC5D0\uAC8C\uC11C
+    \uD0C4\uC57D\xB7\uD68C\uBCF5\uD15C\xB7\uAC15\uD654\uB97C \uC0B4 \uC218 \uC788\uC5B4\uC694."
+  dialogueTextEn: 'You earn money by killing zombies.
 
-    Buy ammo, healing and upgrades
-    from traders'
+    Spend it at traders on
+    ammo, healing and upgrades.'
   discoveryType: 28
   targetTag: 
   spotlightRadius: 2
-  order: 28
+  order: 21

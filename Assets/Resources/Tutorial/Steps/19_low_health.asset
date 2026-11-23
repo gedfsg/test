@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 44e6a3181781c51478091150a9cc1695, type: 3}
+  m_Name: 19_low_health
+  m_EditorClassIdentifier: Assembly-CSharp::TutorialStep
+  stepId: low_health
+  dialogueText: "\uCCB4\uB825\uC774 \uB9CE\uC774 \uB5A8\uC5B4\uC84C\uC5B4\uC694!
+    \uBD95\uB300\uB098 \uAD6C\uAE09\uC0C1\uC790\uB85C \uD68C\uBCF5\uD560 \uC218 \uC788\uC5B4\uC694.\n\uD68C\uBCF5\uD558\uB294
+    \uB3C4\uC911\uC5D0 \uC880\uBE44\uC5D0\uAC8C \uB9DE\uC73C\uBA74 \uB04A\uAE30\uB2C8\uAE4C,
+    \uC548\uC804\uD55C \uACF3\uC73C\uB85C \uD53C\uD55C \uB2E4\uC74C\uC5D0 \uC4F0\uC138\uC694."
+  dialogueTextEn: 'Your health is low! You can heal with bandages or a medkit.
+
+    A
+    zombie hit interrupts healing, so get somewhere safe first.'
+  discoveryType: 25
+  targetTag: 
+  spotlightRadius: 2
+  order: 19

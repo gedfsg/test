@@ -52,8 +52,12 @@ public class SpawnProtection : MonoBehaviour
         new GameObject("SpawnProtection").AddComponent<SpawnProtection>();
     }
 
+    /// <summary>(2026-11-24) 화면 "안전 10" 글자 숨김 (사용자 요청). 보호 자체(10초간 좀비가 안 덤빔)는 그대로</summary>
+    public static bool ShowCountdown = false;
+
     void Start()
     {
+        if (!ShowCountdown) return;
         var canvasGo = new GameObject("SpawnProtectionUI", typeof(RectTransform));
         canvasGo.transform.SetParent(transform, false);
         var canvas = canvasGo.AddComponent<Canvas>();
@@ -81,6 +85,6 @@ public class SpawnProtection : MonoBehaviour
             Destroy(gameObject);
             return;
         }
-        countdown.text = $"안전 {Mathf.CeilToInt(until - Time.time)}";
+        if (countdown != null) countdown.text = $"안전 {Mathf.CeilToInt(until - Time.time)}";
     }
 }

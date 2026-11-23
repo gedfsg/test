@@ -72,7 +72,8 @@ public class Trader : MonoBehaviour
         if (prompt != null) prompt.SetActive(near && !open && !MenuUI.PauseOpen);
 
         var kb = Keyboard.current;
-        if (near && kb != null && kb.fKey.wasPressedThisFrame && !MenuUI.PauseOpen && !MenuUI.DeathShown && !MenuUI.CutsceneActive)
+        // (2026-11-24) 튜토리얼 말풍선이 떠 있으면 F로 상점을 열지 않음 (말풍선과 상점 창이 겹쳤음)
+        if (near && kb != null && kb.fKey.wasPressedThisFrame && !MenuUI.PauseOpen && !MenuUI.DeathShown && !MenuUI.CutsceneActive && !MenuUI.TutorialOpen)
         {
             Discover();
             ShopUI.Toggle(Stock, transform);

@@ -13,10 +13,15 @@ MonoBehaviour:
   m_Name: 04_no_ammo
   m_EditorClassIdentifier: Assembly-CSharp::TutorialStep
   stepId: no_ammo
-  dialogueText: "\uC774 \uCD1D\uC758 \uC608\uBE44 \uD0C4\uC57D\uC774 \uB5A8\uC5B4\uC84C\uC5B4\uC694\n\uC0C1\uC790\xB7\uC880\uBE44\xB7\uC0C1\uC778\uC5D0\uAC8C\uC11C
-    \uAD6C\uD558\uACE0, \uADF8\uB3D9\uC548\uC740 \uB3C4\uB07C(4)\uB85C"
-  dialogueTextEn: "Out of spare ammo for this gun\nFind more in crates, from zombies
-    or traders \u2014 use the axe (4) meanwhile"
+  dialogueText: "\uC774 \uCD1D\uC5D0 \uB123\uC744 \uC608\uBE44 \uD0C4\uC57D\uC774
+    \uB2E4 \uB5A8\uC5B4\uC84C\uC5B4\uC694.\n\uC0C1\uC790\uB97C \uC5F4\uAC70\uB098,
+    \uC880\uBE44\uB97C \uC7A1\uAC70\uB098, \uC0C1\uC778\uC5D0\uAC8C \uC0AC\uC11C
+    \uAD6C\uD560 \uC218 \uC788\uC5B4\uC694. \uADF8\uB3D9\uC548\uC740 <color=#FFD700><b>4</b></color>\uBC88
+    \uB3C4\uB07C\uB85C \uC2F8\uC6CC \uBCF4\uC138\uC694."
+  dialogueTextEn: 'You''re out of spare ammo for this gun.
+
+    Get more from crates,
+    zombies or traders. Use the axe (<color=#FFD700><b>4</b></color>) in the meantime.'
   discoveryType: 29
   targetTag: 
   spotlightRadius: 0

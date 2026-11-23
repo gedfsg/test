@@ -148,6 +148,10 @@ public class TutorialOverlay : MonoBehaviour
         spot = spotFn;
         RefreshTexts();
         dialogText.text = text;
+        // (2026-11-24) 문구가 길어져서(자세한 설명) 줄 수에 맞춰 말풍선 높이를 늘림 (최소 150)
+        float textH = dialogText.GetPreferredValues(text, dialogText.rectTransform.sizeDelta.x, 0f).y;
+        dialogText.rectTransform.sizeDelta = new Vector2(dialogText.rectTransform.sizeDelta.x, textH + 8f);
+        dialogRt.sizeDelta = new Vector2(dialogRt.sizeDelta.x, Mathf.Max(150f, textH + 78f));
         PlaceDialog();
         IsShowing = true;
         if (anim != null) StopCoroutine(anim);

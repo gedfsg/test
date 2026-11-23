@@ -13,8 +13,14 @@ MonoBehaviour:
   m_Name: 03_reload
   m_EditorClassIdentifier: Assembly-CSharp::TutorialStep
   stepId: reload
-  dialogueText: "<color=#FFD700><b>R</b></color> \uC7AC\uC7A5\uC804"
-  dialogueTextEn: <color=#FFD700><b>R</b></color> reload
+  dialogueText: "\uD0C4\uCC3D\uC774 \uAC70\uC758 \uBE44\uC5C8\uC5B4\uC694! <color=#FFD700><b>R</b></color>\uC744
+    \uB204\uB974\uBA74 \uC7AC\uC7A5\uC804\uD560 \uC218 \uC788\uC5B4\uC694.\n\uC7AC\uC7A5\uC804\uD558\uB294
+    \uB3D9\uC548\uC5D0\uB294 \uC3E0 \uC218 \uC5C6\uC73C\uB2C8, \uC880\uBE44\uC640
+    \uAC70\uB9AC\uB97C \uBC8C\uB9B0 \uB4A4\uC5D0 \uD558\uB294 \uAC8C \uC88B\uC544\uC694."
+  dialogueTextEn: 'Your magazine is almost empty! Press <color=#FFD700><b>R</b></color>
+    to reload.
+
+    You can''t shoot while reloading, so back away from zombies first.'
   discoveryType: 3
   targetTag: 
   spotlightRadius: 0

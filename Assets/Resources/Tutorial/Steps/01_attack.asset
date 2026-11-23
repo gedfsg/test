@@ -13,10 +13,15 @@ MonoBehaviour:
   m_Name: 01_attack
   m_EditorClassIdentifier: Assembly-CSharp::TutorialStep
   stepId: attack
-  dialogueText: "<color=#FFD700><b>\uB9C8\uC6B0\uC2A4</b></color> \uC870\uC900 \xB7
-    <color=#FFD700><b>\uC88C\uD074\uB9AD</b></color> \uACF5\uACA9"
-  dialogueTextEn: "<color=#FFD700><b>Mouse</b></color> aim \xB7 <color=#FFD700><b>Left
-    click</b></color> attack"
+  dialogueText: "<color=#FFD700><b>\uB9C8\uC6B0\uC2A4</b></color>\uB85C \uC870\uC900\uD558\uACE0
+    <color=#FFD700><b>\uC88C\uD074\uB9AD</b></color>\uC73C\uB85C \uACF5\uACA9\uD560
+    \uC218 \uC788\uC5B4\uC694.\n\uCE90\uB9AD\uD130\uB294 \uC5B8\uC81C\uB098 \uB9C8\uC6B0\uC2A4
+    \uCEE4\uC11C\uAC00 \uC788\uB294 \uCABD\uC744 \uBC14\uB77C\uBD10\uC694."
+  dialogueTextEn: 'Aim with the <color=#FFD700><b>mouse</b></color> and attack with
+    <color=#FFD700><b>Left click</b></color>.
+
+    Your character always faces the
+    mouse cursor.'
   discoveryType: 1
   targetTag: 
   spotlightRadius: 2
